@@ -1,86 +1,199 @@
-from fastapi import APIRouter, Body, status
+"""
+auth.py — Endpoints de autenticación contra Keycloak
+=====================================================
+Implementa los flujos OIDC (Resource Owner Password Credentials) para
+login, logout y renovación de tokens delegando al servidor Keycloak.
+"""
 
-# Se comentan las dependencias reales para evitar errores de validación de tokens
-# from app.auth.dependencies import get_current_user, CurrentUser
+from fastapi import APIRouter, Body, HTTPException, Depends, status
+import httpx
+import structlog
+
+from app.config import settings
+from app.auth.dependencies import get_current_user, CurrentUser
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticación y Seguridad"])
 
-# 1. POST /auth/login
+# URLs del endpoint OpenID Connect de Keycloak
+_OIDC_BASE = f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect"
+TOKEN_URL   = f"{_OIDC_BASE}/token"
+LOGOUT_URL  = f"{_OIDC_BASE}/logout"
+
+
 @router.post(
-    "/login", 
-    summary="Valida usuario y contraseña; entrega token de sesión (JWT)",
-    status_code=status.HTTP_200_OK
+    "/login",
+    summary="Valida credenciales contra Keycloak y entrega tokens JWT",
+    status_code=status.HTTP_200_OK,
 )
 async def login(body: dict = Body(...)):
-    # JSON EN DURO - Simula la validación de Keycloak
+    """
+    Flujo ROPC (Resource Owner Password Credentials).
+    El frontend envía email + password; el backend los intercambia por
+    tokens JWT de Keycloak sin exponer el client_secret al navegador.
+    """
+    email    = body.get("email", "").strip()
+    password = body.get("password", "")
+
+    if not email or not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Los campos 'email' y 'password' son requeridos.",
+        )
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            TOKEN_URL,
+            data={
+                "grant_type":    "password",
+                "client_id":     settings.keycloak_client_id,
+                "client_secret": settings.keycloak_client_secret,
+                "username":      email,
+                "password":      password,
+                "scope":         "openid email profile",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10.0,
+        )
+
+    if response.status_code == 401:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales inválidas.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if response.status_code != 200:
+        error_body = response.json()
+        logger.warning("Error al autenticar en Keycloak", status=response.status_code, detail=error_body)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Error del servidor de autenticación: {error_body.get('error_description', 'unknown')}",
+        )
+
+    tokens = response.json()
+
+    logger.info("Login exitoso", email=email)
+
     return {
         "status": "success",
         "message": "Autenticación exitosa",
         "data": {
-            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMDEifQ.simulado",
-            "refresh_token": "def502002f2324709f1a.simulado",
-            "token_type": "Bearer",
-            "expires_in": 3600,
-            "user": {
-                "auth_id": "b3e1c2d3-4f5g-6h7i-8j9k-0l1m2n3o4p5q",
-                "email": body.get("email", "admin@wellq.co"),
-                "role": "wellq-super-admin"
-            }
-        }
+            "access_token":  tokens["access_token"],
+            "refresh_token": tokens.get("refresh_token"),
+            "token_type":    "Bearer",
+            "expires_in":    tokens.get("expires_in", 300),
+        },
     }
 
-# 2. POST /auth/logout
+
 @router.post(
     "/logout",
-    summary="Registrar cierre de sesión",
-    description="Simula el cierre de sesión exitoso.",
-    status_code=status.HTTP_200_OK
+    summary="Revoca la sesión en Keycloak",
+    status_code=status.HTTP_200_OK,
 )
-async def logout():
-    # JSON EN DURO - Respuesta de éxito para que el frontend limpie su estado
+async def logout(body: dict = Body(default={})):
+    """
+    Revoca el refresh_token en Keycloak para invalidar la sesión en el servidor.
+    El frontend debe además limpiar sus tokens locales.
+    """
+    refresh_token = body.get("refresh_token")
+
+    if refresh_token:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                LOGOUT_URL,
+                data={
+                    "client_id":     settings.keycloak_client_id,
+                    "client_secret": settings.keycloak_client_secret,
+                    "refresh_token": refresh_token,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=10.0,
+            )
+        if response.status_code not in (200, 204):
+            logger.warning("No se pudo revocar el token en Keycloak", status=response.status_code)
+
     return {
         "status": "success",
-        "message": "Sesión cerrada correctamente en el servidor simulado.",
-        "action": "clear_local_storage"
+        "message": "Sesión cerrada correctamente.",
+        "action": "clear_local_storage",
     }
 
-# 3. POST /auth/refresh
+
 @router.post(
-    "/refresh", 
-    summary="Renueva el token de sesión expirado automáticamente",
-    status_code=status.HTTP_200_OK
+    "/refresh",
+    summary="Renueva el access_token usando el refresh_token",
+    status_code=status.HTTP_200_OK,
 )
 async def refresh_token(body: dict = Body(...)):
-    # JSON EN DURO - Simula la rotación del token
+    """
+    Intercambia un refresh_token válido por un nuevo par de tokens.
+    """
+    token = body.get("refresh_token", "").strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El campo 'refresh_token' es requerido.",
+        )
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            TOKEN_URL,
+            data={
+                "grant_type":    "refresh_token",
+                "client_id":     settings.keycloak_client_id,
+                "client_secret": settings.keycloak_client_secret,
+                "refresh_token": token,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10.0,
+        )
+
+    if response.status_code == 400:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token inválido o expirado. Vuelva a iniciar sesión.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Error al renovar la sesión en el servidor de autenticación.",
+        )
+
+    tokens = response.json()
+
     return {
         "status": "success",
-        "message": "Token de sesión renovado",
+        "message": "Token renovado correctamente.",
         "data": {
-            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.NEW_TOKEN_GENERATED.simulado",
-            "token_type": "Bearer",
-            "expires_in": 3600
-        }
+            "access_token":  tokens["access_token"],
+            "refresh_token": tokens.get("refresh_token"),
+            "token_type":    "Bearer",
+            "expires_in":    tokens.get("expires_in", 300),
+        },
     }
 
-# Endpoint Adicional /me (Mapeado a la colección de MongoDB)
+
 @router.get(
     "/me",
-    summary="Obtener perfil del usuario autenticado",
-    description="Retorna JSON en duro del perfil administrativo actual.",
+    summary="Perfil del usuario autenticado extraído del token JWT",
+    status_code=status.HTTP_200_OK,
 )
-async def get_me():
-    # JSON EN DURO - Estructura basada en la colección 'usuarios' del modelo
-    # Simulamos el perfil del desarrollador/administrador principal
+async def get_me(current_user: CurrentUser = Depends(get_current_user)):
+    """
+    Endpoint protegido: retorna los datos del usuario a partir del token Bearer.
+    No hace una llamada adicional a Keycloak; los datos vienen directamente
+    de los claims del JWT ya validado.
+    """
     return {
-        "_id": "605c72e21234567890user01",
-        "auth_id": "b3e1c2d3-4f5g-6h7i-8j9k-0l1m2n3o4p5q", # UUID de Keycloak
-        "email": "admin@wellq.co",
-        "full_name": "Admin WellQ Master",
-        "role": "wellq-super-admin",
-        "clinic_id": None, # Null porque es Super Admin global, no pertenece a una sola clínica
-        "state": "active",
-        "preferences": {
-            "language": "es",
-            "dark_mode": True
-        }
+        "auth_id":   current_user.sub,
+        "email":     current_user.email,
+        "full_name": current_user.name,
+        "roles":     current_user.roles,
+        "state":     "active",
     }

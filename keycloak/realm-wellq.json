@@ -1,0 +1,108 @@
+{
+  "realm": "wellq",
+  "enabled": true,
+  "displayName": "WellQ Admin",
+  "displayNameHtml": "<b>WellQ</b> Admin",
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "refreshTokenMaxReuse": 0,
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "wellq-admin",
+        "description": "Acceso completo al panel de administración WellQ",
+        "composite": false
+      },
+      {
+        "name": "wellq-super-admin",
+        "description": "Privilegios máximos: impersonación, gestión de realms, acciones destructivas",
+        "composite": false
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "wellq-admin-backend",
+      "name": "WellQ Admin Backend",
+      "description": "Cliente confidencial para el API backend de WellQ Admin",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "wellq-super-secret-key",
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocol": "openid-connect",
+      "attributes": {
+        "access.token.lifespan": "300",
+        "client.session.idle.timeout": "1800"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "wellq-admin-frontend",
+      "name": "WellQ Admin Frontend",
+      "description": "Cliente público para el SPA React de WellQ Admin (sin secret)",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3000"
+      ],
+      "protocol": "openid-connect"
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@wellq.com",
+      "email": "admin@wellq.com",
+      "firstName": "Admin",
+      "lastName": "WellQ",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": [
+        "wellq-admin",
+        "wellq-super-admin"
+      ]
+    }
+  ]
+}
