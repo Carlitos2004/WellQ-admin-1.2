@@ -22,3 +22,8 @@ cd frontend (Entra a la carpeta visual).
 npm run dev (Enciende la interfaz). 
 
 Verás un link azul: http://localhost:5173/. Haz Ctrl + Clic en él.
+
+
+git add .
+git commit -m "Explica brevemente qué cambiaste"
+git push
