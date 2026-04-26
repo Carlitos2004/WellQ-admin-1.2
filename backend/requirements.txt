@@ -4,30 +4,30 @@
 # Instalar con: pip install -r requirements.txt
 
 # --- Framework principal ---
-fastapi==0.111.0            # Framework web asíncrono para construir la API REST
-uvicorn[standard]==0.29.0   # Servidor ASGI de producción para FastAPI
+fastapi>=0.115.0            # Framework web asíncrono para construir la API REST
+uvicorn[standard]>=0.30.0   # Servidor ASGI de producción para FastAPI
 
 # --- Validación y configuración ---
-pydantic==2.7.1             # Validación de datos y modelos (integrado en FastAPI)
-pydantic-settings==2.2.1    # Gestión de variables de entorno con Pydantic v2
-python-dotenv==1.0.1        # Carga el archivo .env en variables de entorno
+pydantic>=2.11.0            # Validación de datos y modelos (integrado en FastAPI)
+pydantic-settings>=2.7.0    # Gestión de variables de entorno con Pydantic v2
+python-dotenv>=1.0.1        # Carga el archivo .env en variables de entorno
 
 # --- Autenticación: Keycloak ---
-python-keycloak==3.9.1      # Cliente para validar tokens JWT de Keycloak y consultar su Admin API
-PyJWT==2.8.0                # Decodificación y validación manual de tokens JWT
-cryptography==42.0.7        # Manejo de claves RSA para verificar firmas de tokens
+python-keycloak>=4.0.0      # Cliente para validar tokens JWT de Keycloak y consultar su Admin API
+PyJWT>=2.9.0                # Decodificación y validación manual de tokens JWT
+cryptography>=43.0.0        # Manejo de claves RSA para verificar firmas de tokens
 
 # --- Base de datos: Google Firestore ---
-firebase-admin==6.5.0       # SDK oficial de Firebase Admin (incluye Firestore, Auth, etc.)
+firebase-admin>=6.5.0       # SDK oficial de Firebase Admin (incluye Firestore, Auth, etc.)
 
 # --- Base de datos: MongoDB (async con Motor) ---
-motor==3.4.0                # Driver asíncrono para MongoDB (basado en PyMongo)
-pymongo==4.7.2              # Dependencia base de Motor; también se usa para tipos y helpers
+motor>=3.5.0                # Driver asíncrono para MongoDB (basado en PyMongo)
+pymongo>=4.8.0              # Dependencia base de Motor; también se usa para tipos y helpers
 
 # --- Utilidades HTTP y fecha/hora ---
-httpx==0.27.0               # Cliente HTTP asíncrono (usado para consultar el JWKS de Keycloak)
-python-dateutil==2.9.0      # Parseo flexible de fechas
+httpx>=0.27.0               # Cliente HTTP asíncrono (usado para consultar el JWKS de Keycloak)
+python-dateutil>=2.9.0      # Parseo flexible de fechas
 
 # --- Logging estructurado ---
-structlog==24.1.0            # Logs en formato JSON estructurado, ideal para producción
+structlog>=24.1.0            # Logs en formato JSON estructurado, ideal para producción
 

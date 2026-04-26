@@ -2,13 +2,21 @@
 backend/venv/
 backend/__pycache__/
 *.pyc
-.env
+backend/.env
+backend/serviceAccountKey.json
 
 # Node (Frontend)
 frontend/node_modules/
 frontend/dist/
-.DS_Store
+frontend/.env
 
-# IDEs
+# Keycloak (no exportar secrets de producción)
+# keycloak/realm-wellq.json se sí versiona (sólo contiene config de DEV)
+
+# IDEs / OS
 .vscode/
 .idea/
+.DS_Store
+
+# Claude Code
+.claude/
