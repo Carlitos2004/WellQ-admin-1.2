@@ -6,8 +6,6 @@ cd backend     (Entra a la carpeta del motor).
 .\venv\Scripts\activate   (Activa la "caja" de Python. Verás el (venv) al inicio). 
 uvicorn app.main:app --reload --port 8000       (Enciende el motor)
 
-No cierres esta terminal. Debe decir Application startup complete.
-
 
 
 
