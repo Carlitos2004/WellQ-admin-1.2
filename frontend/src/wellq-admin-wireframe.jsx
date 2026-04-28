@@ -515,7 +515,7 @@ const ChurnHeatmap = ({ apiRegions }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PLATFORM OPS VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-const PlatformOpsView = ({ apiCosts, apiLatency, apiPose }) => (
+const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers, apiProcesses }) => (
   <div className="space-y-6">
     <div className="grid grid-cols-3 gap-6">
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
@@ -595,20 +595,28 @@ const PlatformOpsView = ({ apiCosts, apiLatency, apiPose }) => (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <h3 className="font-semibold text-slate-900 mb-4">Infrastructure Status</h3>
         <div className="space-y-3">
-          {[
-            { name: 'Esperando base de datos', status: 'idle' },
-          ].map((s, i) => (
-            <div key={i} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-              <div className="flex items-center gap-3">
-                <Server size={16} className="text-slate-400" />
-                <span className="text-sm text-slate-900">{s.name}</span>
+
+          {(apiServers && apiServers.length > 0 ? apiServers : [
+            { name: 'Esperando base de datos', status: 'idle' }
+          ]).map((s, i) => (
+          <div key={i} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+            <div className="flex items-center gap-3">
+              <Server size={16} className="text-slate-400" />
+              <span className="text-sm text-slate-900">{s.name}</span>
               </div>
-              <span className={`flex items-center gap-1.5 text-xs font-medium text-slate-500`}>
-                <span className={`w-2 h-2 rounded-full bg-slate-300`} />
-                Esperando...
-              </span>
-            </div>
-          ))}
+              <span className={`flex items-center gap-1.5 text-xs font-medium ${
+                s.status === 'healthy' ? 'text-emerald-600' :
+                s.status === 'warning' ? 'text-amber-600' : 'text-slate-500'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    s.status === 'healthy' ? 'bg-emerald-500' :
+                    s.status === 'warning' ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'
+                    }`} />
+                    {s.status ?? 'Esperando...'}
+                    </span>
+                    </div>
+                  ))}
+          
         </div>
       </div>
 
@@ -1359,10 +1367,10 @@ export default function WellQAdminConsole() {
   }, [activeView]);
 
   useEffect(() => {
-    if (activeView !== 'financials') return;
+      if (activeView !== 'financials' && activeView !== 'overview') return;
     Promise.allSettled([
-      apiFetch('/financials/mrr/breakdown'),        
-      apiFetch('/financials/churn-risk/by-region'), 
+      apiFetch('/api/financials/mrr/breakdown'),
+      apiFetch('/api/financials/churn-risk/by-region'), 
     ]).then(([mrr, churn]) => {
       if (mrr.status   === 'fulfilled') setMrrData(mrr.value.data);
       if (churn.status === 'fulfilled') setChurnRegions(churn.value.data ?? []);
@@ -1370,7 +1378,7 @@ export default function WellQAdminConsole() {
   }, [activeView]);
 
   useEffect(() => {
-    if (activeView !== 'platform') return;
+    if (activeView !== 'platform' && activeView !== 'overview') return;
     Promise.allSettled([
       apiFetch('/api/infrastructure/servers'),                
       apiFetch('/api/infrastructure/processes'),              
@@ -1537,6 +1545,7 @@ export default function WellQAdminConsole() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
+              {activeView !== 'settings' && (
               <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
                 {['24H', '7D', '30D', 'QTD', 'YTD'].map(range => (
                   <button key={range} onClick={() => setDateRange(range)}
@@ -1545,6 +1554,7 @@ export default function WellQAdminConsole() {
                     }`}>{range}</button>
                 ))}
               </div>
+              )}
               <div className="relative">
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input type="text" placeholder="Search clinics, invoices..."
@@ -1742,7 +1752,7 @@ export default function WellQAdminConsole() {
           )}
 
           {activeView === 'platform' && (
-            <PlatformOpsView apiCosts={apiCosts} apiLatency={apiLatency} apiPose={apiPose} />
+            <PlatformOpsView apiCosts={apiCosts} apiLatency={apiLatency} apiPose={apiPose} apiServers={apiServers} apiProcesses={apiProcesses} />
           )}
 
           {activeView === 'financials' && (

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 router = APIRouter(
-    prefix="/financials",
+    prefix="/api/financials",
     tags=["Financials"]
 )
 

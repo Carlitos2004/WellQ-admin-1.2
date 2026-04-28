@@ -29,25 +29,34 @@ async def list_clinics(
                 "tier": "enterprise",
                 "status": "active",
                 "contact": {
-                    "phone": "+56911111111",
-                    "email": "contacto@clinicasanjose.com"
+                "phone": "+56911111111",
+                "email": "contacto@clinicasanjose.com"
                 },
-                "patient_count": 1500
-            },
-            {
+                "patient_count": 1500,
+                "patientsUsed": 1500,
+                "patientsLimit": 5000,
+                "healthScore": 87,
+                "lastLogin": "2026-04-25T14:30:00Z"
+                },
+                {
                 "_id": "605c72e21234567890abcdee",
                 "clinic_id": "CL-002",
                 "name": "Centro Médico Integral",
                 "tier": "pro",
                 "status": "active",
                 "contact": {
-                    "phone": "+56922222222",
-                    "email": "hola@centromedico.com"
+                "phone": "+56922222222",
+                "email": "hola@centromedico.com"
                 },
-                "patient_count": 340
-            }
-        ]
-    }
+                "patient_count": 340,
+                "patientsUsed": 340,
+                "patientsLimit": 500,
+                "healthScore": 62,
+                "lastLogin": "2026-04-23T09:15:00Z"
+                }   
+
+            ]
+        }
 
 # 15. POST /clinics
 @router.post(
