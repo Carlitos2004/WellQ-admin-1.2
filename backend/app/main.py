@@ -20,9 +20,10 @@ from app.db.mongodb import init_mongodb, close_mongodb
 
 # ÚNICA importación de routers, ordenada y con el apodo correcto
 from app.routers import (
-    auth, dashboard, clinics, platform, financials, 
-    alerts, search, infrastructure, analytics, users, 
-    notifications, jobs, settings as settings_router
+    auth, dashboard, clinics, platform, financials,
+    alerts, search, infrastructure, analytics, users,
+    notifications, jobs, settings as settings_router,
+    features, plans, clinic_plans,
 )
 
 # ── Configurar logging estructurado con structlog ──────────────────────────────
@@ -58,10 +59,10 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ───────────────────────────────────────────────────────────────
     logger.info("Cerrando WellQ Admin API...")
-    
+
     # También comentamos el cierre porque nunca la abrimos
     # await close_mongodb()  # Cierra el pool de Motor
-    
+
     logger.info("Conexiones cerradas. API detenida.")
 
 
@@ -92,6 +93,8 @@ app.add_middleware(
 
 # ── Registro de Routers ────────────────────────────────────────────────────────
 # Cada router agrupa los endpoints de un dominio funcional.
+
+# — Módulos existentes —
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(clinics.router)
@@ -105,6 +108,11 @@ app.include_router(infrastructure.router)
 app.include_router(analytics.router)
 app.include_router(users.router)
 app.include_router(settings_router.router)
+
+# — Módulo de Planes y Pricing 
+app.include_router(features.router)      # GET/POST/PUT/DELETE /api/features
+app.include_router(plans.router)         # GET/POST/PUT /api/plans + archive/restore/duplicate
+app.include_router(clinic_plans.router)  # GET/PUT /api/clinics/{id}/plan + history/schedule/usage
 
 # ── Health check público ───────────────────────────────────────────────────────
 @app.get("/health", tags=["Sistema"], summary="Health check de la API")
