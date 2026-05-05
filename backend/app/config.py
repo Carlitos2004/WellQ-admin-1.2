@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     Los tipos y valores por defecto sirven como documentación y validación.
     """
 
+
+    # ── Neon PostgreSQL ────────────────────────────────────────────────────────────
+    database_url: str = "postgresql://neondb_owner:npg_KVwAEk57bXLS@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"   # postgresql+asyncpg://
+    
+
     # ── Configuración general ──────────────────────────────────────────────────
     app_env: str = "development"       # Entorno de ejecución
     app_port: int = 8000               # Puerto del servidor

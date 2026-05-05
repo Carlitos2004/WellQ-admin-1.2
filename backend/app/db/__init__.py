@@ -1,8 +1,8 @@
-# Exportaciones del paquete db para acceso conveniente
-from app.db.firestore import get_db, init_firestore, Collections
-from app.db.mongodb import get_mongo_db, init_mongodb, close_mongodb, MongoCollections
+from app.db.neon import init_neon, close_neon, create_db_tables, get_db
 
 __all__ = [
-    "get_db", "init_firestore", "Collections",
-    "get_mongo_db", "init_mongodb", "close_mongodb", "MongoCollections",
+    "get_db",
+    "init_neon",
+    "close_neon",
+    "create_db_tables",
 ]
