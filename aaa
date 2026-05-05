@@ -3,11 +3,10 @@ python -m venv venv
 Escribe los comandos en este orden:
 
 cd backend     (Entra a la carpeta del motor).
-.\venv\Scripts\activate   (Activa la "caja" de Python. Verás el (venv) al inicio). 
-uvicorn app.main:app --reload --port 8000       (Enciende el motor)
+.\venv\Scripts\activate   (Activa la "caja" de Python. Verás el (venv) al inicio). (Enciende el motor)
+uvicorn app.main:app --reload --port 8000
 
-
-
+python seed.py
 
 
 npm install

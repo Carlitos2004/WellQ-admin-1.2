@@ -10,9 +10,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
 import logging
+import app.models  # registra todos los modelos SQLModel
 
 from app.config import settings
 from app.db.neon import init_neon, close_neon, create_db_tables
+
 
 from app.routers import (
     auth, dashboard, clinics, platform, financials,

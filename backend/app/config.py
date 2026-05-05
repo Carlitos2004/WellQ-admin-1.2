@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
 
     # ── Neon PostgreSQL ────────────────────────────────────────────────────────────
-    database_url: str = "postgresql://neondb_owner:npg_KVwAEk57bXLS@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"   # postgresql+asyncpg://
+    database_url: str = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
     
 
     # ── Configuración general ──────────────────────────────────────────────────
