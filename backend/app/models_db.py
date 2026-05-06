@@ -1,158 +1,153 @@
 """
-models.py — Modelos SQLModel para WellQ Admin Console
-======================================================
-Ejecutar UNA VEZ para crear las tablas en Neon:
-    python -c "from models import create_all_tables; import asyncio; asyncio.run(create_all_tables())"
-
-O simplemente arrancar el backend (main.py ya llama a create_db_tables()).
+models_db.py — Modelos SQLModel para WellQ Admin Console
+=========================================================
+Tablas en Neon (PostgreSQL). El backend las crea automáticamente al arrancar.
+Para poblar con datos mock: python seed.py
 """
 
-from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, JSON, Text
-from typing import Optional, List
-from datetime import datetime, date
+from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, Text
+from typing import Optional
+from datetime import datetime
 
 
 # ── 1. CLINICS ─────────────────────────────────────────────────────────────────
 class Clinic(SQLModel, table=True):
     __tablename__ = "clinics"
 
-    id: Optional[int]         = Field(default=None, primary_key=True)
-    clinic_id: str            = Field(unique=True, index=True)          # "CL-001"
-    name: str                 = Field(index=True)
-    tier: str                 = Field(default="smb")                    # trial | smb | enterprise
-    status: str               = Field(default="active")                 # active | warning | critical | churned
-    patients_used: int        = Field(default=0)
-    patients_limit: int       = Field(default=500)
-    health_score: int         = Field(default=100)
+    id: Optional[int]              = Field(default=None, primary_key=True)
+    clinic_id: str                 = Field(unique=True, index=True)
+    name: str                      = Field(index=True)
+    tier: str                      = Field(default="smb")          # trial | smb | enterprise
+    status: str                    = Field(default="active")       # active | warning | critical | churned
+    patients_used: int             = Field(default=0)
+    patients_limit: int            = Field(default=500)
+    health_score: int              = Field(default=100)
     last_login: Optional[datetime] = Field(default=None)
-    mrr: float                = Field(default=0.0)
-    location: Optional[str]   = Field(default=None)
-
+    mrr: float                     = Field(default=0.0)
+    location: Optional[str]        = Field(default=None)
     # Contacto
-    contact_name: Optional[str]  = Field(default=None)
-    contact_email: Optional[str] = Field(default=None)
-    contact_phone: Optional[str] = Field(default=None)
-
+    contact_name: Optional[str]    = Field(default=None)
+    contact_email: Optional[str]   = Field(default=None)
+    contact_phone: Optional[str]   = Field(default=None)
     # Billing
-    company_name: Optional[str]   = Field(default=None)
-    tax_id: Optional[str]         = Field(default=None)
-    billing_email: Optional[str]  = Field(default=None)
-    address: Optional[str]        = Field(default=None)
-
+    company_name: Optional[str]    = Field(default=None)
+    tax_id: Optional[str]          = Field(default=None)
+    billing_email: Optional[str]   = Field(default=None)
+    address: Optional[str]         = Field(default=None)
     # Metadata
-    internal_notes: Optional[str] = Field(default=None, sa_column=Column(Text))
-    created_at: datetime          = Field(default_factory=datetime.utcnow)
-    updated_at: datetime          = Field(default_factory=datetime.utcnow)
+    internal_notes: Optional[str]  = Field(default=None, sa_column=Column(Text))
+    created_at: datetime           = Field(default_factory=datetime.utcnow)
+    updated_at: datetime           = Field(default_factory=datetime.utcnow)
 
 
 # ── 2. FEATURES ────────────────────────────────────────────────────────────────
 class Feature(SQLModel, table=True):
     __tablename__ = "features"
 
-    id: Optional[int]          = Field(default=None, primary_key=True)
-    feature_id: str            = Field(unique=True, index=True)         # "feat-patients"
-    name: str                  = Field(unique=True)
-    category: str              = Field(index=True)
-    unit: str                  = Field()                                # "patients", "GB", etc.
-    unit_type: str             = Field()                                # "number" | "toggle" | "select"
-    options: Optional[str]     = Field(default=None)                    # JSON array como string
-    default_limit: str         = Field(default="0")                     # guardado como string, flexible
-    description: str           = Field(sa_column=Column(Text))
-    icon: Optional[str]        = Field(default=None)
-    status: str                = Field(default="active")                # "active" | "archived"
-    created_at: datetime       = Field(default_factory=datetime.utcnow)
-    updated_at: datetime       = Field(default_factory=datetime.utcnow)
-    archived_at: Optional[datetime] = Field(default=None)
+    id: Optional[int]                   = Field(default=None, primary_key=True)
+    feature_id: str                     = Field(unique=True, index=True)
+    name: str                           = Field(unique=True)
+    category: str                       = Field(index=True)
+    unit: str                           = Field()
+    unit_type: str                      = Field()                  # "number" | "toggle" | "select"
+    options: Optional[str]              = Field(default=None)      # JSON array como string
+    default_limit: str                  = Field(default="0")
+    description: str                    = Field(sa_column=Column(Text))
+    icon: Optional[str]                 = Field(default=None)
+    status: str                         = Field(default="active")  # "active" | "archived"
+    created_at: datetime                = Field(default_factory=datetime.utcnow)
+    updated_at: datetime                = Field(default_factory=datetime.utcnow)
+    archived_at: Optional[datetime]     = Field(default=None)
 
 
 # ── 3. PLANS ───────────────────────────────────────────────────────────────────
 class Plan(SQLModel, table=True):
     __tablename__ = "plans"
 
-    id: Optional[int]         = Field(default=None, primary_key=True)
-    plan_id: str              = Field(unique=True, index=True)          # "plan-smb"
-    name: str                 = Field(unique=True)
-    description: Optional[str] = Field(default=None, sa_column=Column(Text))
-    tag_color: str            = Field(default="slate")                  # "purple" | "blue" | "indigo" | "slate"
-    status: str               = Field(default="active")                 # "draft" | "active" | "archived"
-    setup_price: float        = Field(default=0.0)
-    monthly_price: float      = Field(default=0.0)
-    currency: str             = Field(default="USD")
-    effective_date: str       = Field(default="")                       # "2026-01-01"
-    active_clinics: int       = Field(default=0)                        # métrica calculada
-    arr: float                = Field(default=0.0)                      # métrica calculada
-    created_by_email: str     = Field(default="admin@wellq.co")
-    created_by_name: str      = Field(default="Admin WellQ")
-    updated_by_email: str     = Field(default="admin@wellq.co")
-    updated_by_name: str      = Field(default="Admin WellQ")
-    created_at: datetime      = Field(default_factory=datetime.utcnow)
-    updated_at: datetime      = Field(default_factory=datetime.utcnow)
+    id: Optional[int]               = Field(default=None, primary_key=True)
+    plan_id: str                    = Field(unique=True, index=True)
+    name: str                       = Field(unique=True)
+    description: Optional[str]      = Field(default=None, sa_column=Column(Text))
+    tag_color: str                  = Field(default="slate")
+    status: str                     = Field(default="active")      # "draft" | "active" | "archived"
+    setup_price: float              = Field(default=0.0)
+    monthly_price: float            = Field(default=0.0)
+    currency: str                   = Field(default="USD")
+    effective_date: str             = Field(default="")
+    active_clinics: int             = Field(default=0)
+    arr: float                      = Field(default=0.0)
+    created_by_email: str           = Field(default="admin@wellq.co")
+    created_by_name: str            = Field(default="Admin WellQ")
+    updated_by_email: str           = Field(default="admin@wellq.co")
+    updated_by_name: str            = Field(default="Admin WellQ")
+    created_at: datetime            = Field(default_factory=datetime.utcnow)
+    updated_at: datetime            = Field(default_factory=datetime.utcnow)
     archived_at: Optional[datetime] = Field(default=None)
 
 
-# ── 4. PLAN_FEATURES (tabla pivot Plan ↔ Feature) ──────────────────────────────
+# ── 4. PLAN_FEATURES ───────────────────────────────────────────────────────────
 class PlanFeature(SQLModel, table=True):
     __tablename__ = "plan_features"
 
-    id: Optional[int]    = Field(default=None, primary_key=True)
-    plan_id: str         = Field(index=True)                            # FK lógico → plans.plan_id
-    feature_id: str      = Field(index=True)                            # FK lógico → features.feature_id
-    limit_value: str     = Field(default="0")                           # guardado como string (flexible)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    plan_id: str      = Field(index=True)
+    feature_id: str   = Field(index=True)
+    limit_value: str  = Field(default="0")
 
 
-# ── 5. CLINIC_PLANS (asignaciones + historial) ─────────────────────────────────
+# ── 5. CLINIC_PLANS ────────────────────────────────────────────────────────────
 class ClinicPlan(SQLModel, table=True):
     __tablename__ = "clinic_plans"
 
-    id: Optional[int]         = Field(default=None, primary_key=True)
-    assignment_id: str        = Field(unique=True, index=True)          # "asgn-001"
-    clinic_id: str            = Field(index=True)                       # FK lógico → clinics.clinic_id
-    plan_id: str              = Field(index=True)                       # FK lógico → plans.plan_id
-    plan_snapshot: str        = Field(sa_column=Column(Text))           # JSON completo del plan al momento de asignar
-    effective_from: datetime  = Field()
-    effective_to: Optional[datetime] = Field(default=None)
-    assigned_by_id: str       = Field(default="usr-001")
-    assigned_by_email: str    = Field(default="admin@wellq.co")
-    assigned_by_name: str     = Field(default="Admin WellQ")
-    reason: Optional[str]     = Field(default=None)
-    notify_clinic: bool       = Field(default=False)
-    created_at: datetime      = Field(default_factory=datetime.utcnow)
+    id: Optional[int]               = Field(default=None, primary_key=True)
+    assignment_id: str              = Field(unique=True, index=True)
+    clinic_id: str                  = Field(index=True)
+    plan_id: str                    = Field(index=True)
+    plan_snapshot: str              = Field(sa_column=Column(Text))
+    effective_from: datetime        = Field()
+    effective_to: Optional[datetime]= Field(default=None)
+    assigned_by_id: str             = Field(default="usr-001")
+    assigned_by_email: str          = Field(default="admin@wellq.co")
+    assigned_by_name: str           = Field(default="Admin WellQ")
+    reason: Optional[str]           = Field(default=None)
+    notify_clinic: bool             = Field(default=False)
+    created_at: datetime            = Field(default_factory=datetime.utcnow)
 
 
 # ── 6. SCHEDULED_CHANGES ───────────────────────────────────────────────────────
 class ScheduledChange(SQLModel, table=True):
     __tablename__ = "scheduled_changes"
 
-    id: Optional[int]         = Field(default=None, primary_key=True)
-    schedule_id: str          = Field(unique=True, index=True)          # "sched-001"
-    clinic_id: str            = Field(index=True)
-    plan_id: str              = Field(index=True)
-    effective_from: datetime  = Field()
-    status: str               = Field(default="scheduled")             # "scheduled" | "executed" | "cancelled"
-    scheduled_by_id: str      = Field(default="usr-001")
-    scheduled_by_email: str   = Field(default="admin@wellq.co")
-    scheduled_by_name: str    = Field(default="Admin WellQ")
-    notify_clinic: bool       = Field(default=False)
+    id: Optional[int]               = Field(default=None, primary_key=True)
+    schedule_id: str                = Field(unique=True, index=True)
+    clinic_id: str                  = Field(index=True)
+    plan_id: str                    = Field(index=True)
+    effective_from: datetime        = Field()
+    status: str                     = Field(default="scheduled")   # "scheduled" | "executed" | "cancelled"
+    scheduled_by_id: str            = Field(default="usr-001")
+    scheduled_by_email: str         = Field(default="admin@wellq.co")
+    scheduled_by_name: str          = Field(default="Admin WellQ")
+    notify_clinic: bool             = Field(default=False)
     executed_at: Optional[datetime] = Field(default=None)
-    created_at: datetime      = Field(default_factory=datetime.utcnow)
+    created_at: datetime            = Field(default_factory=datetime.utcnow)
 
 
 # ── 7. ALERTS ──────────────────────────────────────────────────────────────────
 class Alert(SQLModel, table=True):
     __tablename__ = "alerts"
 
-    id: Optional[int]         = Field(default=None, primary_key=True)
-    alert_id: str             = Field(unique=True, index=True)          # "ALT-001"
-    type: str                 = Field()                                 # "billing_warning" | "license_usage"
-    title: str                = Field()
-    message: str              = Field(sa_column=Column(Text))
-    severity: str             = Field()                                 # "high" | "medium" | "low"
-    related_type: Optional[str]  = Field(default=None)                  # "clinic"
-    related_id: Optional[str]    = Field(default=None)                  # "CL-001"
-    is_read: bool             = Field(default=False)
+    id: Optional[int]                   = Field(default=None, primary_key=True)
+    alert_id: str                       = Field(unique=True, index=True)
+    type: str                           = Field()
+    title: str                          = Field()
+    message: str                        = Field(sa_column=Column(Text))
+    severity: str                       = Field()                  # "high" | "medium" | "low"
+    related_type: Optional[str]         = Field(default=None)
+    related_id: Optional[str]           = Field(default=None)
+    is_read: bool                       = Field(default=False)
     acknowledged_at: Optional[datetime] = Field(default=None)
-    created_at: datetime      = Field(default_factory=datetime.utcnow)
+    created_at: datetime                = Field(default_factory=datetime.utcnow)
 
 
 # ── 8. NOTIFICATIONS ───────────────────────────────────────────────────────────
@@ -160,12 +155,12 @@ class Notification(SQLModel, table=True):
     __tablename__ = "notifications"
 
     id: Optional[int]             = Field(default=None, primary_key=True)
-    notification_id: str          = Field(unique=True, index=True)      # "notif-001"
+    notification_id: str          = Field(unique=True, index=True)
     title: str                    = Field()
     message: str                  = Field(sa_column=Column(Text))
-    channel: str                  = Field()                             # "email" | "in_app"
-    status: str                   = Field(default="pending")            # "pending" | "sent" | "failed"
-    recipient_clinic_id: str      = Field()                             # "clinic-12345" o "all"
+    channel: str                  = Field()                        # "email" | "in_app"
+    status: str                   = Field(default="pending")       # "pending" | "sent" | "failed"
+    recipient_clinic_id: str      = Field()
     sent_by: str                  = Field()
     sender_name: Optional[str]    = Field(default=None)
     created_at: datetime          = Field(default_factory=datetime.utcnow)
@@ -176,15 +171,15 @@ class Notification(SQLModel, table=True):
 class Job(SQLModel, table=True):
     __tablename__ = "jobs"
 
-    id: Optional[int]            = Field(default=None, primary_key=True)
-    job_id: str                  = Field(unique=True, index=True)       # "job-8d72-4f1a-b3c9"
-    job_type: str                = Field()                              # "export_clinics"
-    status: str                  = Field(default="queued")             # "queued" | "running" | "completed" | "failed"
-    progress: int                = Field(default=0)
-    created_by: str              = Field()
-    result_url: Optional[str]    = Field(default=None)
-    error: Optional[str]         = Field(default=None)
-    created_at: datetime         = Field(default_factory=datetime.utcnow)
+    id: Optional[int]                = Field(default=None, primary_key=True)
+    job_id: str                      = Field(unique=True, index=True)
+    job_type: str                    = Field()
+    status: str                      = Field(default="queued")     # "queued" | "running" | "completed" | "failed"
+    progress: int                    = Field(default=0)
+    created_by: str                  = Field()
+    result_url: Optional[str]        = Field(default=None)
+    error: Optional[str]             = Field(default=None)
+    created_at: datetime             = Field(default_factory=datetime.utcnow)
     started_at: Optional[datetime]   = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
 
@@ -193,11 +188,255 @@ class Job(SQLModel, table=True):
 class AdminUser(SQLModel, table=True):
     __tablename__ = "admin_users"
 
-    id: Optional[int]       = Field(default=None, primary_key=True)
-    user_id: str            = Field(unique=True, index=True)            # "USR-SUPER-001"
-    full_name: str          = Field()
-    email: str              = Field(unique=True, index=True)
-    role: str               = Field()                                   # "super_admin" | "admin" | "viewer"
-    status: str             = Field(default="active")                   # "active" | "inactive"
+    id: Optional[int]              = Field(default=None, primary_key=True)
+    user_id: str                   = Field(unique=True, index=True)
+    full_name: str                 = Field()
+    email: str                     = Field(unique=True, index=True)
+    role: str                      = Field()                       # "super_admin" | "admin" | "viewer"
+    status: str                    = Field(default="active")       # "active" | "inactive"
     last_login: Optional[datetime] = Field(default=None)
-    created_at: datetime    = Field(default_factory=datetime.utcnow)
+    created_at: datetime           = Field(default_factory=datetime.utcnow)
+
+
+# ── 11. KPI_SNAPSHOTS ──────────────────────────────────────────────────────────
+class KpiSnapshot(SQLModel, table=True):
+    __tablename__ = "kpi_snapshots"
+
+    id: Optional[int]     = Field(default=None, primary_key=True)
+    month: str            = Field()                                # "Nov", "Dic", "Ene" …
+    year: int             = Field()
+    arr: float            = Field(default=0.0)
+    mrr: float            = Field(default=0.0)
+    nrr_percentage: float = Field(default=0.0)
+    expansion_mrr: float  = Field(default=0.0)
+    churn_mrr: float      = Field(default=0.0)
+    nrr_status: str       = Field(default="healthy")              # "healthy" | "warning" | "critical"
+    created_at: datetime  = Field(default_factory=datetime.utcnow)
+
+
+# ── 12. APP_METRICS ────────────────────────────────────────────────────────────
+class AppMetric(SQLModel, table=True):
+    __tablename__ = "app_metrics"
+
+    id: Optional[int]     = Field(default=None, primary_key=True)
+    metric_key: str       = Field(unique=True, index=True)
+    metric_value: float   = Field(default=0.0)
+    updated_at: datetime  = Field(default_factory=datetime.utcnow)
+
+
+# ── 13. INVOICES ───────────────────────────────────────────────────────────────
+class Invoice(SQLModel, table=True):
+    __tablename__ = "invoices"
+
+    id: Optional[int]             = Field(default=None, primary_key=True)
+    invoice_id: str               = Field(unique=True, index=True) # "INV-2026-001"
+    clinic_id: str                = Field(index=True)
+    amount: float                 = Field(default=0.0)
+    currency: str                 = Field(default="USD")
+    status: str                   = Field(default="pending")       # "paid" | "pending" | "overdue"
+    issued_at: datetime           = Field()
+    pdf_url: Optional[str]        = Field(default=None)
+    created_at: datetime          = Field(default_factory=datetime.utcnow)
+
+
+# ── 14. CLINIC_USAGE_METRICS ───────────────────────────────────────────────────
+class ClinicUsageMetric(SQLModel, table=True):
+    __tablename__ = "clinic_usage_metrics"
+
+    id: Optional[int]                  = Field(default=None, primary_key=True)
+    clinic_id: str                     = Field(index=True)
+    period: str                        = Field(default="last_30_days")
+    active_clinicians: int             = Field(default=0)
+    patient_sessions_completed: int    = Field(default=0)
+    ai_processing_minutes: int         = Field(default=0)
+    api_calls: int                     = Field(default=0)
+    recorded_at: datetime              = Field(default_factory=datetime.utcnow)
+
+
+# ── 15. SERVERS ────────────────────────────────────────────────────────────────
+class Server(SQLModel, table=True):
+    __tablename__ = "servers"
+
+    id: Optional[int]     = Field(default=None, primary_key=True)
+    server_id: str        = Field(unique=True, index=True)         # "SRV-AZ-001"
+    name: str             = Field()
+    region: str           = Field()
+    status: str           = Field(default="healthy")               # "healthy" | "warning" | "down"
+    uptime: str           = Field(default="99.9%")
+    cpu_usage: str        = Field(default="0%")
+    ram_usage: str        = Field(default="0%")
+    updated_at: datetime  = Field(default_factory=datetime.utcnow)
+
+
+# ── 16. BACKGROUND_PROCESSES ───────────────────────────────────────────────────
+class BackgroundProcess(SQLModel, table=True):
+    __tablename__ = "background_processes"
+
+    id: Optional[int]               = Field(default=None, primary_key=True)
+    process_id: str                 = Field(unique=True, index=True) # "PROC-001"
+    name: str                       = Field()
+    status: str                     = Field(default="running")     # "running" | "sleeping" | "failed"
+    queued_items: int               = Field(default=0)
+    memory_consumption: str         = Field(default="0MB")
+    description: Optional[str]      = Field(default=None, sa_column=Column(Text))
+    started_at: Optional[datetime]  = Field(default=None)
+    failed_at: Optional[datetime]   = Field(default=None)
+    restart_count: int              = Field(default=0)
+    updated_at: datetime            = Field(default_factory=datetime.utcnow)
+
+
+# ── 17. MRR_SNAPSHOTS ──────────────────────────────────────────────────────────
+class MrrSnapshot(SQLModel, table=True):
+    __tablename__ = "mrr_snapshots"
+
+    id: Optional[int]                  = Field(default=None, primary_key=True)
+    period_month: str                  = Field()                   # "Apr"
+    period_year: int                   = Field()
+    total_mrr: float                   = Field(default=0.0)
+    currency: str                      = Field(default="USD")
+    new_business: float                = Field(default=0.0)
+    expansion: float                   = Field(default=0.0)
+    contraction: float                 = Field(default=0.0)
+    churn: float                       = Field(default=0.0)
+    retained: float                    = Field(default=0.0)
+    monthly_growth_percentage: float   = Field(default=0.0)
+    created_at: datetime               = Field(default_factory=datetime.utcnow)
+
+
+# ── 18. CHURN_RISK_REGIONS ─────────────────────────────────────────────────────
+class ChurnRiskRegion(SQLModel, table=True):
+    __tablename__ = "churn_risk_regions"
+
+    id: Optional[int]          = Field(default=None, primary_key=True)
+    region: str                = Field()
+    clinics_at_risk: int       = Field(default=0)
+    potential_mrr_loss: float  = Field(default=0.0)
+    risk_level: str            = Field(default="Low")              # "Low" | "Medium" | "High"
+    recorded_at: datetime      = Field(default_factory=datetime.utcnow)
+
+
+# ── 19. APP_USAGE_STATS ────────────────────────────────────────────────────────
+class AppUsageStat(SQLModel, table=True):
+    __tablename__ = "app_usage_stats"
+
+    id: Optional[int]                          = Field(default=None, primary_key=True)
+    app_type: str                              = Field(index=True)  # "patients" | "tablet"
+    period: str                                = Field(default="current_month")
+    monthly_active_users: int                  = Field(default=0)
+    average_session_length_minutes: float      = Field(default=0.0)
+    crash_free_sessions_percentage: float      = Field(default=0.0)
+    top_screens: Optional[str]                 = Field(default=None)  # JSON array como string
+    recorded_at: datetime                      = Field(default_factory=datetime.utcnow)
+
+
+# ── 20. FEATURE_ADOPTION ───────────────────────────────────────────────────────
+class FeatureAdoption(SQLModel, table=True):
+    __tablename__ = "feature_adoption"
+
+    id: Optional[int]                  = Field(default=None, primary_key=True)
+    feature_name: str                  = Field()
+    period: str                        = Field(default="last_30_days")
+    adoption_rate_percentage: float    = Field(default=0.0)
+    total_uses: int                    = Field(default=0)
+    user_feedback_score: float         = Field(default=0.0)
+    recorded_at: datetime              = Field(default_factory=datetime.utcnow)
+
+
+# ── 21. ADHERENCE_SNAPSHOTS ────────────────────────────────────────────────────
+class AdherenceSnapshot(SQLModel, table=True):
+    __tablename__ = "adherence_snapshots"
+
+    id: Optional[int]                      = Field(default=None, primary_key=True)
+    period: str                            = Field(default="current_month")
+    overall_adherence_percentage: float    = Field(default=0.0)
+    breakdown_by_week: Optional[str]       = Field(default=None)   # JSON
+    top_dropping_point: Optional[str]      = Field(default=None)
+    recorded_at: datetime                  = Field(default_factory=datetime.utcnow)
+
+
+# ── 22. COHORT_RETENTION ───────────────────────────────────────────────────────
+class CohortRetention(SQLModel, table=True):
+    __tablename__ = "cohort_retention"
+
+    id: Optional[int]          = Field(default=None, primary_key=True)
+    cohort_label: str          = Field()                           # "Jan 2026"
+    cohort_month: int          = Field()
+    cohort_year: int           = Field()
+    users_count: int           = Field(default=0)
+    retention_by_month: str    = Field(sa_column=Column(Text))    # JSON
+    recorded_at: datetime      = Field(default_factory=datetime.utcnow)
+
+
+# ── 23. SOAP_QUALITY_METRICS ───────────────────────────────────────────────────
+class SoapQualityMetric(SQLModel, table=True):
+    __tablename__ = "soap_quality_metrics"
+
+    id: Optional[int]                              = Field(default=None, primary_key=True)
+    period: str                                    = Field(default="current_month")
+    total_notes_generated: int                     = Field(default=0)
+    acceptance_rate_percentage: float              = Field(default=0.0)
+    edits_required_percentage: float               = Field(default=0.0)
+    average_time_saved_minutes_per_note: float     = Field(default=0.0)
+    common_corrections: Optional[str]              = Field(default=None)  # JSON array
+    recorded_at: datetime                          = Field(default_factory=datetime.utcnow)
+
+
+# ── 24. AI_COST_SNAPSHOTS ──────────────────────────────────────────────────────
+class AiCostSnapshot(SQLModel, table=True):
+    __tablename__ = "ai_cost_snapshots"
+
+    id: Optional[int]              = Field(default=None, primary_key=True)
+    period: str                    = Field(default="current_month")
+    currency: str                  = Field(default="USD")
+    total_cost: float              = Field(default=0.0)
+    breakdown: Optional[str]       = Field(default=None, sa_column=Column(Text))  # JSON
+    projected_eom_cost: float      = Field(default=0.0)
+    recorded_at: datetime          = Field(default_factory=datetime.utcnow)
+
+
+# ── 25. AI_LATENCY_METRICS ─────────────────────────────────────────────────────
+class AiLatencyMetric(SQLModel, table=True):
+    __tablename__ = "ai_latency_metrics"
+
+    id: Optional[int]          = Field(default=None, primary_key=True)
+    service: str               = Field(index=True)                 # "pose_estimation_realtime"
+    period: str                = Field(default="last_24_hours")
+    average_latency_ms: int    = Field(default=0)
+    p95_latency_ms: int        = Field(default=0)
+    status: str                = Field(default="healthy")          # "healthy" | "warning" | "degraded"
+    recorded_at: datetime      = Field(default_factory=datetime.utcnow)
+
+
+# ── 26. POSE_ANALYSIS_SNAPSHOTS ────────────────────────────────────────────────
+class PoseAnalysisSnapshot(SQLModel, table=True):
+    __tablename__ = "pose_analysis_snapshots"
+
+    id: Optional[int]                          = Field(default=None, primary_key=True)
+    period: str                                = Field(default="last_7_days")
+    total_sessions_analyzed: int               = Field(default=0)
+    overall_success_rate_percentage: float     = Field(default=0.0)
+    failure_reasons: Optional[str]             = Field(default=None, sa_column=Column(Text))  # JSON
+    recorded_at: datetime                      = Field(default_factory=datetime.utcnow)
+
+
+# ── 27. APP_VERSIONS ───────────────────────────────────────────────────────────
+class AppVersion(SQLModel, table=True):
+    __tablename__ = "app_versions"
+
+    id: Optional[int]     = Field(default=None, primary_key=True)
+    app_type: str         = Field(index=True)                      # "patient" | "clinician"
+    version: str          = Field()
+    user_count: int       = Field(default=0)
+    percentage: float     = Field(default=0.0)
+    recorded_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ── 28. PLATFORM_SETTINGS ──────────────────────────────────────────────────────
+class PlatformSetting(SQLModel, table=True):
+    __tablename__ = "platform_settings"
+
+    id: Optional[int]      = Field(default=None, primary_key=True)
+    setting_key: str       = Field(unique=True, index=True)        # "maintenance_mode"
+    setting_value: str     = Field()                               # guardado como string
+    updated_at: datetime   = Field(default_factory=datetime.utcnow)
+    updated_by: str        = Field(default="admin@wellq.co")

@@ -1,154 +1,39 @@
-from fastapi import APIRouter, Path, Body, Query, status
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime
+from fastapi import APIRouter, Path, Body, Query, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, desc, asc
+from app.db.neon import get_db
+from app.models_db import ClinicPlan, ScheduledChange, ClinicUsageMetric
 
 router = APIRouter(prefix="/api/clinics", tags=["Asignación Plan–Clínica"])
-
-# ─── Datos en duro ────────────────────────────────────────────────────────────
-CLINIC_ASSIGNMENTS = {
-    "CL-001": {
-        "assignmentId": "asgn-001",
-        "clinicId": "CL-001",
-        "planSnapshot": {
-            "id": "plan-enterprise",
-            "name": "Enterprise",
-            "description": "Multi-location and hospital networks",
-            "monthlyPrice": 1999.00,
-            "currency": "USD",
-            "features": [
-                {"featureId": "feat-patients",   "limit": 5000,            "featureName": "Active Patients",     "unit": "patients"},
-                {"featureId": "feat-clinicians", "limit": 50,              "featureName": "Clinician Seats",      "unit": "seats"},
-                {"featureId": "feat-pose",       "limit": 20000,           "featureName": "Pose Analysis",        "unit": "sessions/mo"},
-                {"featureId": "feat-soap",       "limit": 10000,           "featureName": "SOAP Note Generation", "unit": "notes/mo"},
-                {"featureId": "feat-storage",    "limit": 2000,            "featureName": "Cloud Storage",        "unit": "GB"},
-                {"featureId": "feat-support",    "limit": "24/7 Priority", "featureName": "Support Tier",         "unit": "level"},
-            ],
-        },
-        "effectiveFrom": "2026-01-15T00:00:00Z",
-        "effectiveTo": None,
-        "assignedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "createdAt": "2026-01-15T00:00:00Z",
-    },
-    "CL-002": {
-        "assignmentId": "asgn-002",
-        "clinicId": "CL-002",
-        "planSnapshot": {
-            "id": "plan-smb",
-            "name": "SMB",
-            "description": "Small & medium clinics",
-            "monthlyPrice": 299.00,
-            "currency": "USD",
-            "features": [
-                {"featureId": "feat-patients",   "limit": 500,               "featureName": "Active Patients",     "unit": "patients"},
-                {"featureId": "feat-clinicians", "limit": 5,                 "featureName": "Clinician Seats",      "unit": "seats"},
-                {"featureId": "feat-pose",       "limit": 1000,              "featureName": "Pose Analysis",        "unit": "sessions/mo"},
-                {"featureId": "feat-storage",    "limit": 100,               "featureName": "Cloud Storage",        "unit": "GB"},
-                {"featureId": "feat-support",    "limit": "Business Hours",  "featureName": "Support Tier",         "unit": "level"},
-            ],
-        },
-        "effectiveFrom": "2026-02-01T00:00:00Z",
-        "effectiveTo": None,
-        "assignedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "createdAt": "2026-02-01T00:00:00Z",
-    },
-}
-
-CLINIC_HISTORY = {
-    "CL-001": [
-        {
-            "id": "asgn-001",
-            "clinicId": "CL-001",
-            "planId": "plan-enterprise",
-            "planSnapshot": {"id": "plan-enterprise", "name": "Enterprise", "monthlyPrice": 1999.00, "currency": "USD"},
-            "effectiveFrom": "2026-01-15T00:00:00Z",
-            "effectiveTo": None,
-            "assignedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-            "reason": "Upgrade inicial al plan Enterprise",
-            "createdAt": "2026-01-15T00:00:00Z",
-        },
-        {
-            "id": "asgn-000",
-            "clinicId": "CL-001",
-            "planId": "plan-smb",
-            "planSnapshot": {"id": "plan-smb", "name": "SMB", "monthlyPrice": 299.00, "currency": "USD"},
-            "effectiveFrom": "2025-05-01T00:00:00Z",
-            "effectiveTo": "2026-01-14T23:59:59Z",
-            "assignedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-            "reason": "Onboarding inicial",
-            "createdAt": "2025-05-01T00:00:00Z",
-        },
-    ],
-    "CL-002": [
-        {
-            "id": "asgn-002",
-            "clinicId": "CL-002",
-            "planId": "plan-smb",
-            "planSnapshot": {"id": "plan-smb", "name": "SMB", "monthlyPrice": 299.00, "currency": "USD"},
-            "effectiveFrom": "2026-02-01T00:00:00Z",
-            "effectiveTo": None,
-            "assignedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-            "reason": "Onboarding",
-            "createdAt": "2026-02-01T00:00:00Z",
-        },
-    ],
-}
-
-SCHEDULED_CHANGES = {
-    "CL-001": [
-        {
-            "id": "sched-001",
-            "clinicId": "CL-001",
-            "planId": "plan-enterprise",
-            "effectiveFrom": "2026-07-01T00:00:00Z",
-            "status": "scheduled",
-            "scheduledBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-            "executedAt": None,
-            "notifyClinic": True,
-        }
-    ],
-    "CL-002": [],
-}
-
-CLINIC_USAGE = {
-    "CL-001": {
-        "planSnapshotId": "asgn-001",
-        "period": "current_month",
-        "features": [
-            {"featureId": "feat-patients",   "name": "Active Patients",     "unit": "patients",    "limit": 5000,  "used": 4250, "percentage": 85.0, "status": "warning"},
-            {"featureId": "feat-clinicians", "name": "Clinician Seats",      "unit": "seats",       "limit": 50,    "used": 45,   "percentage": 90.0, "status": "critical"},
-            {"featureId": "feat-pose",       "name": "Pose Analysis",        "unit": "sessions/mo", "limit": 20000, "used": 8400, "percentage": 42.0, "status": "ok"},
-            {"featureId": "feat-soap",       "name": "SOAP Note Generation", "unit": "notes/mo",    "limit": 10000, "used": 3200, "percentage": 32.0, "status": "ok"},
-            {"featureId": "feat-storage",    "name": "Cloud Storage",        "unit": "GB",          "limit": 2000,  "used": 1650, "percentage": 82.5, "status": "warning"},
-            {"featureId": "feat-support",    "name": "Support Tier",         "unit": "level",       "limit": "24/7 Priority", "used": 0, "percentage": None, "status": "ok"},
-        ],
-        "overageCount": 0,
-    },
-    "CL-002": {
-        "planSnapshotId": "asgn-002",
-        "period": "current_month",
-        "features": [
-            {"featureId": "feat-patients",   "name": "Active Patients",     "unit": "patients",    "limit": 500,  "used": 340,  "percentage": 68.0, "status": "ok"},
-            {"featureId": "feat-clinicians", "name": "Clinician Seats",      "unit": "seats",       "limit": 5,    "used": 4,    "percentage": 80.0, "status": "warning"},
-            {"featureId": "feat-pose",       "name": "Pose Analysis",        "unit": "sessions/mo", "limit": 1000, "used": 520,  "percentage": 52.0, "status": "ok"},
-            {"featureId": "feat-storage",    "name": "Cloud Storage",        "unit": "GB",          "limit": 100,  "used": 38,   "percentage": 38.0, "status": "ok"},
-            {"featureId": "feat-support",    "name": "Support Tier",         "unit": "level",       "limit": "Business Hours", "used": 0, "percentage": None, "status": "ok"},
-        ],
-        "overageCount": 0,
-    },
-}
-
 
 # ─── GET /api/clinics/{clinicId}/plan ─────────────────────────────────────────
 @router.get(
     "/{clinicId}/plan",
     summary="Obtener el plan actualmente vigente de una clínica",
 )
-async def get_clinic_plan(clinicId: str = Path(...)):
-    assignment = CLINIC_ASSIGNMENTS.get(clinicId)
+async def get_clinic_plan(clinicId: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ClinicPlan)
+        .where(ClinicPlan.clinic_id == clinicId)
+        .where(ClinicPlan.effective_to == None)
+        .order_by(desc(ClinicPlan.created_at))
+    )
+    assignment = result.scalars().first()
+
     if not assignment:
-        if clinicId not in ["CL-001", "CL-002"]:
-            return {"error": {"code": "CLINIC_NOT_FOUND", "message": f"No se encontró la clínica '{clinicId}'"}}
-        return {"error": {"code": "CLINIC_HAS_NO_PLAN", "message": "La clínica nunca ha tenido un plan asignado"}}
-    return assignment
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    return {
+        "assignmentId": assignment.id,
+        "clinicId": assignment.clinic_id,
+        "planSnapshot": getattr(assignment, "plan_snapshot", {}),
+        "effectiveFrom": assignment.effective_from.isoformat() + "Z" if getattr(assignment, "effective_from", None) else None,
+        "effectiveTo": assignment.effective_to.isoformat() + "Z" if getattr(assignment, "effective_to", None) else None,
+        "assignedBy": getattr(assignment, "assigned_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
+        "createdAt": assignment.created_at.isoformat() + "Z" if getattr(assignment, "created_at", None) else None
+    }
 
 
 # ─── PUT /api/clinics/{clinicId}/plan ─────────────────────────────────────────
@@ -159,23 +44,54 @@ async def get_clinic_plan(clinicId: str = Path(...)):
 async def assign_clinic_plan(
     clinicId: str = Path(...),
     body: dict = Body(...),
+    db: AsyncSession = Depends(get_db)
 ):
     plan_id = body.get("planId")
     if not plan_id:
-        return {"error": {"code": "VALIDATION_ERROR", "message": "El campo 'planId' es obligatorio"}}
+        raise HTTPException(status_code=400, detail="El campo 'planId' es obligatorio")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.utcnow()
+
+    # Cerrar el plan actual (si existe)
+    current_plan_result = await db.execute(
+        select(ClinicPlan)
+        .where(ClinicPlan.clinic_id == clinicId)
+        .where(ClinicPlan.effective_to == None)
+    )
+    current_plan = current_plan_result.scalars().first()
+    if current_plan:
+        current_plan.effective_to = now
+        db.add(current_plan)
+
+    # Crear nueva asignación
+    new_assignment_id = f"asgn-{uuid.uuid4().hex[:8]}"
+    effective_from_str = body.get("effectiveFrom")
+    effective_from = datetime.fromisoformat(effective_from_str.replace("Z", "")) if effective_from_str else now
+
+    new_plan = ClinicPlan(
+        id=new_assignment_id,
+        clinic_id=clinicId,
+        plan_id=plan_id,
+        effective_from=effective_from,
+        effective_to=None,
+        reason=body.get("reason", None),
+        created_at=now
+        # plan_snapshot y assigned_by deberían setearse según tu auth y tabla de planes
+    )
+    db.add(new_plan)
+    await db.commit()
+
     return {
         "status": "success",
-        "assignmentId": f"asgn-new-{clinicId}",
+        "assignmentId": new_assignment_id,
         "clinicId": clinicId,
         "planId": plan_id,
-        "effectiveFrom": body.get("effectiveFrom", now),
+        "effectiveFrom": new_plan.effective_from.isoformat() + "Z",
         "effectiveTo": None,
-        "reason": body.get("reason", None),
+        "reason": new_plan.reason,
         "notifyClinic": body.get("notifyClinic", False),
         "assignedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "createdAt": now,
+        "createdAt": new_plan.created_at.isoformat() + "Z",
     }
 
 
@@ -190,15 +106,36 @@ async def get_clinic_plan_history(
     to_date: str | None = Query(None, alias="to"),
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
 ):
-    history = CLINIC_HISTORY.get(clinicId, [])
-    if not history and clinicId not in ["CL-001", "CL-002"]:
-        return {"error": {"code": "CLINIC_NOT_FOUND", "message": f"No se encontró la clínica '{clinicId}'"}}
+    # Total de registros para la clínica
+    count_result = await db.execute(select(func.count(ClinicPlan.id)).where(ClinicPlan.clinic_id == clinicId))
+    total = count_result.scalar() or 0
 
-    total = len(history)
+    if total == 0:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
     start = (page - 1) * pageSize
+    
+    query = select(ClinicPlan).where(ClinicPlan.clinic_id == clinicId).order_by(desc(ClinicPlan.effective_from)).offset(start).limit(pageSize)
+    result = await db.execute(query)
+    history = result.scalars().all()
+
     return {
-        "data": history[start: start + pageSize],
+        "data": [
+            {
+                "id": h.id,
+                "clinicId": h.clinic_id,
+                "planId": getattr(h, "plan_id", None),
+                "planSnapshot": getattr(h, "plan_snapshot", {}),
+                "effectiveFrom": h.effective_from.isoformat() + "Z" if getattr(h, "effective_from", None) else None,
+                "effectiveTo": h.effective_to.isoformat() + "Z" if getattr(h, "effective_to", None) else None,
+                "assignedBy": getattr(h, "assigned_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
+                "reason": getattr(h, "reason", ""),
+                "createdAt": h.created_at.isoformat() + "Z" if getattr(h, "created_at", None) else None,
+            }
+            for h in history
+        ],
         "pagination": {
             "total": total,
             "page": page,
@@ -217,24 +154,40 @@ async def get_clinic_plan_history(
 async def schedule_clinic_plan(
     clinicId: str = Path(...),
     body: dict = Body(...),
+    db: AsyncSession = Depends(get_db)
 ):
     plan_id = body.get("planId")
-    effective_from = body.get("effectiveFrom")
+    effective_from_str = body.get("effectiveFrom")
 
-    if not plan_id or not effective_from:
-        return {"error": {"code": "VALIDATION_ERROR", "message": "Los campos 'planId' y 'effectiveFrom' son obligatorios"}}
+    if not plan_id or not effective_from_str:
+        raise HTTPException(status_code=400, detail="Los campos 'planId' y 'effectiveFrom' son obligatorios")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.utcnow()
+    effective_from = datetime.fromisoformat(effective_from_str.replace("Z", ""))
+    new_schedule_id = f"sched-{uuid.uuid4().hex[:8]}"
+
+    new_schedule = ScheduledChange(
+        id=new_schedule_id,
+        clinic_id=clinicId,
+        plan_id=plan_id,
+        effective_from=effective_from,
+        status="scheduled",
+        notify_clinic=body.get("notifyClinic", False),
+        created_at=now
+    )
+    db.add(new_schedule)
+    await db.commit()
+
     return {
         "status": "success",
-        "scheduleId": f"sched-new-{clinicId}",
-        "clinicId": clinicId,
-        "planId": plan_id,
-        "effectiveFrom": effective_from,
-        "status_field": "scheduled",
+        "scheduleId": new_schedule.id,
+        "clinicId": new_schedule.clinic_id,
+        "planId": new_schedule.plan_id,
+        "effectiveFrom": new_schedule.effective_from.isoformat() + "Z",
+        "status_field": new_schedule.status,
         "scheduledBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "notifyClinic": body.get("notifyClinic", False),
-        "createdAt": now,
+        "notifyClinic": new_schedule.notify_clinic,
+        "createdAt": new_schedule.created_at.isoformat() + "Z",
     }
 
 
@@ -243,12 +196,31 @@ async def schedule_clinic_plan(
     "/{clinicId}/plan/scheduled",
     summary="Listar las programaciones de cambio pendientes de una clínica",
 )
-async def get_clinic_scheduled_changes(clinicId: str = Path(...)):
-    if clinicId not in SCHEDULED_CHANGES and clinicId not in ["CL-001", "CL-002"]:
-        return {"error": {"code": "CLINIC_NOT_FOUND", "message": f"No se encontró la clínica '{clinicId}'"}}
+async def get_clinic_scheduled_changes(clinicId: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ScheduledChange)
+        .where(ScheduledChange.clinic_id == clinicId)
+        .where(ScheduledChange.status == "scheduled")
+        .order_by(asc(ScheduledChange.effective_from))
+    )
+    scheduled_changes = result.scalars().all()
 
+    # Si quisieras levantar error al no tener resultados pero asegurando que la clínica exista, 
+    # asumo que con devolver la lista vacía o llena es lo correcto según el estándar REST
     return {
-        "data": SCHEDULED_CHANGES.get(clinicId, [])
+        "data": [
+            {
+                "id": s.id,
+                "clinicId": s.clinic_id,
+                "planId": s.plan_id,
+                "effectiveFrom": s.effective_from.isoformat() + "Z" if getattr(s, "effective_from", None) else None,
+                "status": s.status,
+                "scheduledBy": getattr(s, "scheduled_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
+                "executedAt": s.executed_at.isoformat() + "Z" if getattr(s, "executed_at", None) else None,
+                "notifyClinic": getattr(s, "notify_clinic", False),
+            }
+            for s in scheduled_changes
+        ]
     }
 
 
@@ -260,21 +232,35 @@ async def get_clinic_scheduled_changes(clinicId: str = Path(...)):
 async def cancel_scheduled_change(
     clinicId: str = Path(...),
     scheduleId: str = Path(...),
+    db: AsyncSession = Depends(get_db)
 ):
-    clinic_schedules = SCHEDULED_CHANGES.get(clinicId, [])
-    schedule = next((s for s in clinic_schedules if s["id"] == scheduleId), None)
+    result = await db.execute(
+        select(ScheduledChange)
+        .where(ScheduledChange.id == scheduleId)
+        .where(ScheduledChange.clinic_id == clinicId)
+    )
+    schedule = result.scalars().first()
 
     if not schedule:
-        return {"error": {"code": "SCHEDULE_NOT_FOUND", "message": f"No existe la programación '{scheduleId}' o ya fue ejecutada/cancelada"}}
-    if schedule["status"] != "scheduled":
-        return {"error": {"code": "SCHEDULE_NOT_PENDING", "message": "La programación no está en estado 'scheduled'"}}
+        raise HTTPException(status_code=404, detail="No encontrado")
+        
+    if schedule.status != "scheduled":
+        raise HTTPException(status_code=400, detail="La programación no está en estado 'scheduled'")
+
+    schedule.status = "cancelled"
+    cancelled_at = datetime.utcnow()
+    # Si existe una columna cancelled_at o updated_at, actívala:
+    if hasattr(schedule, "updated_at"):
+        schedule.updated_at = cancelled_at
+
+    await db.commit()
 
     return {
         "status": "success",
-        "scheduleId": scheduleId,
-        "clinicId": clinicId,
-        "status_field": "cancelled",
-        "cancelledAt": datetime.now(timezone.utc).isoformat(),
+        "scheduleId": schedule.id,
+        "clinicId": schedule.clinic_id,
+        "status_field": schedule.status,
+        "cancelledAt": cancelled_at.isoformat() + "Z",
     }
 
 
@@ -286,11 +272,19 @@ async def cancel_scheduled_change(
 async def get_clinic_plan_usage(
     clinicId: str = Path(...),
     period: str = Query("current_month", description="current_month | last_month | current_year"),
+    db: AsyncSession = Depends(get_db)
 ):
-    usage = CLINIC_USAGE.get(clinicId)
-    if not usage:
-        if clinicId not in ["CL-001", "CL-002"]:
-            return {"error": {"code": "CLINIC_NOT_FOUND", "message": f"No se encontró la clínica '{clinicId}'"}}
-        return {"error": {"code": "CLINIC_HAS_NO_PLAN", "message": "La clínica no tiene plan asignado"}}
+    # Obtenemos el uso actual de la clínica
+    result = await db.execute(select(ClinicUsageMetric).where(ClinicUsageMetric.clinic_id == clinicId))
+    usage = result.scalars().first()
 
-    return {**usage, "period": period}
+    if not usage:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    # Mapeo a formato del Frontend (presuponiendo que usage tiene un array o JSON dict features y attributes)
+    return {
+        "planSnapshotId": getattr(usage, "plan_snapshot_id", f"asgn-current-{clinicId}"),
+        "period": period,
+        "features": getattr(usage, "features", []),
+        "overageCount": getattr(usage, "overage_count", 0)
+    }

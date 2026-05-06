@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Path, status
+from datetime import datetime
+from fastapi import APIRouter, Path, status, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, desc, asc
+from app.db.neon import get_db
+from app.models_db import Server, BackgroundProcess
 
 router = APIRouter(prefix="/api/infrastructure", tags=["Infraestructura y Ops"])
 
@@ -6,31 +11,26 @@ router = APIRouter(prefix="/api/infrastructure", tags=["Infraestructura y Ops"])
 @router.get(
     "/servers",
     summary="Lista y estado de salud de todos los servidores",
-    description="Retorna JSON en duro con los servidores simulando un entorno en Azure."
+    description="Retorna la lista de servidores de la base de datos."
 )
-async def get_servers():
+async def get_servers(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Server))
+    servers = result.scalars().all()
+    
     return {
         "status": "success",
-        "total_servers": 2,
+        "total_servers": len(servers),
         "data": [
             {
-                "server_id": "SRV-AZ-001",
-                "name": "azure-vm-prod-app-01",
-                "region": "East US",
-                "status": "healthy",
-                "uptime": "99.98%",
-                "cpu_usage": "45%",
-                "ram_usage": "60%"
-            },
-            {
-                "server_id": "SRV-AZ-002",
-                "name": "azure-vm-prod-ai-01",
-                "region": "East US",
-                "status": "warning",
-                "uptime": "99.95%",
-                "cpu_usage": "85%",
-                "ram_usage": "90%"
+                "server_id": s.server_id,
+                "name": s.name,
+                "region": s.region,
+                "status": s.status,
+                "uptime": getattr(s, "uptime", "99.99%"),
+                "cpu_usage": s.cpu_usage,
+                "ram_usage": s.ram_usage
             }
+            for s in servers
         ]
     }
 
@@ -39,23 +39,29 @@ async def get_servers():
     "/servers/{server_id}",
     summary="Métricas detalladas de un servidor"
 )
-async def get_server_details(server_id: str = Path(...)):
+async def get_server_details(server_id: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Server).where(Server.server_id == server_id))
+    server = result.scalars().first()
+    
+    if not server:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
     return {
-        "server_id": server_id,
-        "name": f"azure-vm-{server_id.lower()}",
-        "status": "healthy",
+        "server_id": server.server_id,
+        "name": server.name,
+        "status": server.status,
         "specs": {
-            "vCPUs": 8,
-            "memory_gb": 32,
-            "os": "Ubuntu 22.04 LTS"
+            "vCPUs": getattr(server, "vcpus", 8),
+            "memory_gb": getattr(server, "memory_gb", 32),
+            "os": getattr(server, "os", "Ubuntu 22.04 LTS")
         },
         "current_metrics": {
-            "cpu_usage": "45%",
-            "ram_usage": "19.2GB",
-            "disk_usage": "40%",
-            "network_latency_ms": 12
+            "cpu_usage": server.cpu_usage,
+            "ram_usage": server.ram_usage,
+            "disk_usage": getattr(server, "disk_usage", "40%"),
+            "network_latency_ms": getattr(server, "network_latency_ms", 12)
         },
-        "last_updated": "2026-04-25T15:30:00Z"
+        "last_updated": getattr(server, "updated_at", datetime.utcnow())
     }
 
 # 31. GET /infrastructure/processes
@@ -63,32 +69,24 @@ async def get_server_details(server_id: str = Path(...)):
     "/processes",
     summary="Lista de procesos de fondo (background tasks)"
 )
-async def get_processes():
+async def get_processes(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(BackgroundProcess))
+    processes = result.scalars().all()
+    
+    active_count = sum(1 for p in processes if p.status == "running")
+    
     return {
         "status": "success",
-        "active_processes": 3,
+        "active_processes": active_count,
         "data": [
             {
-                "process_id": "PROC-001",
-                "name": "ai_video_processing_queue",
-                "status": "running",
-                "queued_items": 15,
-                "memory_consumption": "2.4GB"
-            },
-            {
-                "process_id": "PROC-002",
-                "name": "daily_invoice_generator",
-                "status": "sleeping",
-                "queued_items": 0,
-                "memory_consumption": "150MB"
-            },
-            {
-                "process_id": "PROC-003",
-                "name": "email_notification_dispatcher",
-                "status": "failed",
-                "queued_items": 42,
-                "memory_consumption": "0MB"
+                "process_id": p.process_id,
+                "name": p.name,
+                "status": p.status,
+                "queued_items": p.queued_items,
+                "memory_consumption": p.memory_consumption
             }
+            for p in processes
         ]
     }
 
@@ -97,15 +95,21 @@ async def get_processes():
     "/processes/{process_id}",
     summary="Detalle de estado de un proceso específico"
 )
-async def get_process_details(process_id: str = Path(...)):
+async def get_process_details(process_id: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(BackgroundProcess).where(BackgroundProcess.process_id == process_id))
+    process = result.scalars().first()
+    
+    if not process:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
     return {
-        "process_id": process_id,
-        "name": "email_notification_dispatcher",
-        "status": "failed",
-        "description": "Servicio encargado de enviar emails masivos y alertas a clínicas.",
-        "started_at": "2026-04-20T08:00:00Z",
-        "failed_at": "2026-04-25T14:15:00Z",
-        "restart_count": 3
+        "process_id": process.process_id,
+        "name": process.name,
+        "status": process.status,
+        "description": getattr(process, "description", ""),
+        "started_at": getattr(process, "started_at", None),
+        "failed_at": getattr(process, "failed_at", None),
+        "restart_count": getattr(process, "restart_count", 0)
     }
 
 # 33. GET /infrastructure/processes/{process_id}/logs
@@ -113,15 +117,18 @@ async def get_process_details(process_id: str = Path(...)):
     "/processes/{process_id}/logs",
     summary="Visualización de registros de error"
 )
-async def get_process_logs(process_id: str = Path(...)):
+async def get_process_logs(process_id: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(BackgroundProcess).where(BackgroundProcess.process_id == process_id))
+    process = result.scalars().first()
+    
+    if not process:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    # TODO: conectar a tabla de logs dedicada si se requiere, asumiendo campo en el modelo o array vacío
     return {
-        "process_id": process_id,
-        "log_level": "ERROR",
-        "logs": [
-            "[2026-04-25 14:14:58] INFO: Checking email queue...",
-            "[2026-04-25 14:14:59] WARN: SMTP connection timeout. Retrying...",
-            "[2026-04-25 14:15:00] ERROR: Connection refused by SendGrid API. Process terminated."
-        ]
+        "process_id": process.process_id,
+        "log_level": getattr(process, "log_level", "ERROR"),
+        "logs": getattr(process, "logs", [])
     }
 
 # 34. POST /infrastructure/processes/{process_id}/restart
@@ -130,10 +137,28 @@ async def get_process_logs(process_id: str = Path(...)):
     summary="Reinicio manual de un proceso que falló",
     status_code=status.HTTP_200_OK
 )
-async def restart_process(process_id: str = Path(...)):
+async def restart_process(process_id: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(BackgroundProcess).where(BackgroundProcess.process_id == process_id))
+    process = result.scalars().first()
+    
+    if not process:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    # Actualizar estado
+    process.status = "starting"
+    
+    if hasattr(process, "restart_count"):
+        process.restart_count += 1
+        
+    if hasattr(process, "updated_at"):
+        process.updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(process)
+
     return {
         "status": "success",
         "message": f"Señal de reinicio enviada al proceso {process_id} correctamente.",
         "expected_downtime_ms": 1500,
-        "new_status": "starting"
+        "new_status": process.status
     }

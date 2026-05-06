@@ -197,7 +197,6 @@ export default function App() {
         background:    '#0f172a',
         flexShrink:    0,
         willChange:    'width',
-        // ✅ FIX: overflow: hidden evita la scrollbar horizontal al colapsar
         overflow:      'hidden',
       }}
     >
@@ -258,7 +257,6 @@ export default function App() {
       <nav style={{
         flex:          1,
         overflowY:     'auto',
-        // ✅ FIX: overflow: hidden en nav (los tooltips salen por position:fixed)
         overflowX:     'hidden',
         padding:       '16px 12px',
         display:       'flex',
@@ -276,7 +274,6 @@ export default function App() {
                   e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
                   e.currentTarget.style.color = 'white';
                 }
-                // ✅ FIX: calculamos posición real para el tooltip fixed
                 if (!open) {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setTooltip({ id, top: rect.top + rect.height / 2 });
@@ -365,6 +362,7 @@ export default function App() {
         borderTop:   '1px solid #1e293b',
         display:     'flex',
         alignItems:  'center',
+        marginTop:   'auto',
       }}>
         <div style={{
           width:          38,
@@ -383,16 +381,19 @@ export default function App() {
         </div>
 
         <div style={{
-          display:    'flex',
-          alignItems: 'center',
-          maxWidth:   open ? '200px' : '0px',
-          opacity:    open ? 1 : 0,
-          overflow:   'hidden',
-          transition: 'all 300ms cubic-bezier(0.4,0,0.2,1)',
-          whiteSpace: 'nowrap',
-          marginLeft: open ? 12 : 0,
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'space-between',
+          flex:           open ? 1 : 0,
+          maxWidth:       open ? '200px' : '0px',
+          opacity:        open ? 1 : 0,
+          overflow:       'hidden',
+          transition:     'all 300ms cubic-bezier(0.4,0,0.2,1)',
+          whiteSpace:     'nowrap',
+          marginLeft:     open ? 12 : 0,
+          minWidth:       0,
         }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>John Doe</p>
             <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Super Admin</p>
           </div>

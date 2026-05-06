@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Path
+from datetime import datetime
+from fastapi import APIRouter, Path, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
+from app.db.neon import get_db
+from app.models_db import Alert
 
 router = APIRouter(prefix="/api/alerts", tags=["Alertas"])
 
@@ -6,31 +11,30 @@ router = APIRouter(prefix="/api/alerts", tags=["Alertas"])
 @router.get(
     "",
     summary="Notificaciones activas del sistema",
-    description="Retorna JSON en duro con las alertas globales para el administrador."
+    description="Retorna las alertas globales para el administrador."
 )
-async def get_alerts():
+async def get_alerts(db: AsyncSession = Depends(get_db)):
+    # Obtenemos todas las alertas ordenadas por fecha de creación descendente
+    result = await db.execute(select(Alert).order_by(desc(Alert.created_at)))
+    alerts = result.scalars().all()
+
+    # Calculamos el total de alertas no leídas (aquellas sin acknowledged_at o is_read == False)
+    unread_count = sum(1 for a in alerts if not getattr(a, "acknowledged_at", None))
+
     return {
         "status": "success",
-        "unread_count": 2,
+        "unread_count": unread_count,
         "data": [
             {
-                "alert_id": "ALT-001",
-                "type": "billing_warning",
-                "title": "Factura Vencida",
-                "message": "La Clínica San José tiene una factura pendiente de hace 30 días.",
-                "severity": "high",
-                "related_entity": {"type": "clinic", "id": "CL-001"},
-                "created_at": "2026-04-20T10:00:00Z"
-            },
-            {
-                "alert_id": "ALT-002",
-                "type": "license_usage",
-                "title": "Límite de licencias próximo",
-                "message": "Centro Médico Integral ha consumido el 90% de sus licencias de pacientes.",
-                "severity": "medium",
-                "related_entity": {"type": "clinic", "id": "CL-002"},
-                "created_at": "2026-04-24T15:30:00Z"
+                "alert_id": getattr(a, "id", ""),
+                "type": getattr(a, "type", ""),
+                "title": getattr(a, "title", ""),
+                "message": getattr(a, "message", ""),
+                "severity": getattr(a, "severity", "medium"),
+                "related_entity": getattr(a, "related_entity", {}),
+                "created_at": a.created_at.isoformat() + "Z" if getattr(a, "created_at", None) else None
             }
+            for a in alerts
         ]
     }
 
@@ -39,9 +43,27 @@ async def get_alerts():
     "/{alert_id}/acknowledge",
     summary="Marcar alerta como gestionada/leída"
 )
-async def acknowledge_alert(alert_id: str = Path(...)):
+async def acknowledge_alert(alert_id: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Alert).where(Alert.id == alert_id))
+    alert = result.scalars().first()
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    now = datetime.utcnow()
+    
+    # Actualizamos el estado de la alerta
+    if hasattr(alert, "acknowledged_at"):
+        alert.acknowledged_at = now
+    
+    if hasattr(alert, "status"):
+        alert.status = "acknowledged"
+
+    db.add(alert)
+    await db.commit()
+
     return {
         "status": "success",
         "message": f"Alerta {alert_id} marcada como leída.",
-        "acknowledged_at": "2026-04-25T15:30:00Z"
+        "acknowledged_at": now.isoformat() + "Z"
     }

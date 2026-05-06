@@ -1,111 +1,50 @@
-from fastapi import APIRouter, Path, Body, Query, status
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime
+from fastapi import APIRouter, Path, Body, Query, status, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, desc, asc, or_
+from app.db.neon import get_db
+from app.models_db import Plan, ClinicPlan
 
 router = APIRouter(prefix="/api/plans", tags=["Constructor de Planes"])
 
-# ─── Datos en duro ────────────────────────────────────────────────────────────
-PLANS_DB = [
-    {
-        "id": "plan-trial",
-        "name": "Trial",
-        "description": "14-day free evaluation tier",
-        "tagColor": "purple",
-        "status": "active",
-        "setupPrice": 0.00,
-        "monthlyPrice": 0.00,
-        "currency": "USD",
-        "effectiveDate": "2026-01-01",
-        "features": [
-            {"featureId": "feat-patients",   "limit": 50,      "featureName": "Active Patients",      "category": "Patients & Licenses",    "unit": "patients"},
-            {"featureId": "feat-clinicians", "limit": 2,       "featureName": "Clinician Seats",       "category": "Patients & Licenses",    "unit": "seats"},
-            {"featureId": "feat-pose",       "limit": 100,     "featureName": "Pose Analysis",         "category": "AI Capabilities",        "unit": "sessions/mo"},
-            {"featureId": "feat-storage",    "limit": 5,       "featureName": "Cloud Storage",         "category": "Storage & Data",         "unit": "GB"},
-            {"featureId": "feat-support",    "limit": "Email", "featureName": "Support Tier",          "category": "Support & Integrations", "unit": "level"},
-        ],
-        "metrics": {"activeClinics": 8, "arr": 0.00},
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-        "createdBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "updatedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-    },
-    {
-        "id": "plan-smb",
-        "name": "SMB",
-        "description": "Small & medium clinics",
-        "tagColor": "blue",
-        "status": "active",
-        "setupPrice": 500.00,
-        "monthlyPrice": 299.00,
-        "currency": "USD",
-        "effectiveDate": "2026-01-01",
-        "features": [
-            {"featureId": "feat-patients",   "limit": 500,                "featureName": "Active Patients",      "category": "Patients & Licenses",    "unit": "patients"},
-            {"featureId": "feat-clinicians", "limit": 5,                  "featureName": "Clinician Seats",       "category": "Patients & Licenses",    "unit": "seats"},
-            {"featureId": "feat-tablets",    "limit": 3,                  "featureName": "Tablet Devices",        "category": "Patients & Licenses",    "unit": "devices"},
-            {"featureId": "feat-pose",       "limit": 1000,               "featureName": "Pose Analysis",         "category": "AI Capabilities",        "unit": "sessions/mo"},
-            {"featureId": "feat-soap",       "limit": 500,                "featureName": "SOAP Note Generation",  "category": "AI Capabilities",        "unit": "notes/mo"},
-            {"featureId": "feat-storage",    "limit": 100,                "featureName": "Cloud Storage",         "category": "Storage & Data",         "unit": "GB"},
-            {"featureId": "feat-retention",  "limit": 24,                 "featureName": "Data Retention",        "category": "Storage & Data",         "unit": "months"},
-            {"featureId": "feat-support",    "limit": "Business Hours",   "featureName": "Support Tier",          "category": "Support & Integrations", "unit": "level"},
-            {"featureId": "feat-api",        "limit": 60,                 "featureName": "API Rate Limit",        "category": "Support & Integrations", "unit": "req/min"},
-        ],
-        "metrics": {"activeClinics": 74, "arr": 264_924.00},
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-03-15T10:00:00Z",
-        "archivedAt": None,
-        "createdBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "updatedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-    },
-    {
-        "id": "plan-enterprise",
-        "name": "Enterprise",
-        "description": "Multi-location and hospital networks",
-        "tagColor": "indigo",
-        "status": "active",
-        "setupPrice": 5000.00,
-        "monthlyPrice": 1999.00,
-        "currency": "USD",
-        "effectiveDate": "2026-01-01",
-        "features": [
-            {"featureId": "feat-patients",   "limit": 5000,               "featureName": "Active Patients",      "category": "Patients & Licenses",    "unit": "patients"},
-            {"featureId": "feat-clinicians", "limit": 50,                 "featureName": "Clinician Seats",       "category": "Patients & Licenses",    "unit": "seats"},
-            {"featureId": "feat-tablets",    "limit": 30,                 "featureName": "Tablet Devices",        "category": "Patients & Licenses",    "unit": "devices"},
-            {"featureId": "feat-locations",  "limit": 10,                 "featureName": "Clinic Locations",      "category": "Patients & Licenses",    "unit": "locations"},
-            {"featureId": "feat-pose",       "limit": 20000,              "featureName": "Pose Analysis",         "category": "AI Capabilities",        "unit": "sessions/mo"},
-            {"featureId": "feat-soap",       "limit": 10000,              "featureName": "SOAP Note Generation",  "category": "AI Capabilities",        "unit": "notes/mo"},
-            {"featureId": "feat-churn",      "limit": 1,                  "featureName": "Churn Prediction",      "category": "AI Capabilities",        "unit": "enabled"},
-            {"featureId": "feat-video",      "limit": 12000,              "featureName": "Video Processing",      "category": "AI Capabilities",        "unit": "minutes/mo"},
-            {"featureId": "feat-storage",    "limit": 2000,               "featureName": "Cloud Storage",         "category": "Storage & Data",         "unit": "GB"},
-            {"featureId": "feat-retention",  "limit": 84,                 "featureName": "Data Retention",        "category": "Storage & Data",         "unit": "months"},
-            {"featureId": "feat-exports",    "limit": 200,                "featureName": "Data Exports",          "category": "Storage & Data",         "unit": "exports/mo"},
-            {"featureId": "feat-backup",     "limit": 1,                  "featureName": "Daily Backups",         "category": "Storage & Data",         "unit": "enabled"},
-            {"featureId": "feat-support",    "limit": "24/7 Priority",    "featureName": "Support Tier",          "category": "Support & Integrations", "unit": "level"},
-            {"featureId": "feat-ehr",        "limit": 5,                  "featureName": "EHR Integration",       "category": "Support & Integrations", "unit": "integrations"},
-            {"featureId": "feat-api",        "limit": 600,                "featureName": "API Rate Limit",        "category": "Support & Integrations", "unit": "req/min"},
-            {"featureId": "feat-webhooks",   "limit": 1,                  "featureName": "Webhooks",              "category": "Support & Integrations", "unit": "enabled"},
-        ],
-        "metrics": {"activeClinics": 42, "arr": 1_007_496.00},
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-04-01T09:00:00Z",
-        "archivedAt": None,
-        "createdBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "updatedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-    },
-]
+
+async def _get_active_clinics_count(db: AsyncSession, plan_id: str) -> int:
+    count_stmt = select(func.count(ClinicPlan.id)).where(
+        ClinicPlan.plan_id == plan_id,
+        ClinicPlan.effective_to.is_(None)
+    )
+    result = await db.execute(count_stmt)
+    return result.scalar() or 0
 
 
-def _paginate(items: list, page: int, page_size: int) -> dict:
-    total = len(items)
-    start = (page - 1) * page_size
+async def _serialize_plan(db: AsyncSession, p: Plan) -> dict:
+    active_clinics = await _get_active_clinics_count(db, str(p.id))
+    monthly_price = getattr(p, "monthly_price", 0.0)
+    arr = active_clinics * monthly_price * 12
+
+    # Parseamos effective_date a string formato YYYY-MM-DD
+    eff_date_str = None
+    if getattr(p, "effective_date", None):
+        eff_date_str = p.effective_date.isoformat()[:10]
+
     return {
-        "data": items[start: start + page_size],
-        "pagination": {
-            "total": total,
-            "page": page,
-            "pageSize": page_size,
-            "totalPages": max(1, -(-total // page_size)),
-        },
+        "id": str(p.id),
+        "name": p.name,
+        "description": getattr(p, "description", ""),
+        "tagColor": getattr(p, "tag_color", "slate"),
+        "status": getattr(p, "status", "active"),
+        "setupPrice": getattr(p, "setup_price", 0.0),
+        "monthlyPrice": monthly_price,
+        "currency": getattr(p, "currency", "USD"),
+        "effectiveDate": eff_date_str,
+        "features": getattr(p, "features", []),
+        "metrics": {"activeClinics": active_clinics, "arr": arr},
+        "createdAt": p.created_at.isoformat() + "Z" if getattr(p, "created_at", None) else None,
+        "updatedAt": p.updated_at.isoformat() + "Z" if getattr(p, "updated_at", None) else None,
+        "archivedAt": p.archived_at.isoformat() + "Z" if getattr(p, "archived_at", None) else None,
+        "createdBy": getattr(p, "created_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
+        "updatedBy": getattr(p, "updated_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
     }
 
 
@@ -116,31 +55,67 @@ def _paginate(items: list, page: int, page_size: int) -> dict:
 )
 async def list_plans(
     search: str | None = Query(None),
-    status: str | None = Query(None, description="draft | active | archived (multi-valor separado por coma)"),
+    plan_status: str | None = Query(None, alias="status", description="draft | active | archived (multi-valor)"),
     currency: str | None = Query(None),
     includeArchived: bool = Query(False),
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100),
     sortBy: str = Query("name", description="name | monthlyPrice | effectiveDate | createdAt"),
     sortOrder: str = Query("asc"),
+    db: AsyncSession = Depends(get_db)
 ):
-    results = list(PLANS_DB)
+    stmt = select(Plan)
+    count_stmt = select(func.count(Plan.id))
 
+    filters = []
     if not includeArchived:
-        results = [p for p in results if p["status"] != "archived"]
-    if status:
-        allowed = [s.strip() for s in status.split(",")]
-        results = [p for p in results if p["status"] in allowed]
-    if search:
-        term = search.lower()
-        results = [p for p in results if term in p["name"].lower() or term in p["description"].lower()]
+        filters.append(Plan.status != "archived")
+    if plan_status:
+        allowed = [s.strip() for s in plan_status.split(",")]
+        filters.append(Plan.status.in_(allowed))
     if currency:
-        results = [p for p in results if p["currency"] == currency]
+        filters.append(Plan.currency == currency)
+    if search:
+        term = f"%{search.lower()}%"
+        filters.append(or_(
+            func.lower(Plan.name).like(term),
+            func.lower(Plan.description).like(term)
+        ))
 
-    reverse = sortOrder == "desc"
-    results.sort(key=lambda p: p.get(sortBy, p["name"]) or "", reverse=reverse)
+    if filters:
+        stmt = stmt.where(*filters)
+        count_stmt = count_stmt.where(*filters)
 
-    return _paginate(results, page, pageSize)
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    # Paginación y Ordenamiento
+    sort_column = Plan.name
+    if sortBy == "monthlyPrice": sort_column = Plan.monthly_price
+    elif sortBy == "effectiveDate": sort_column = Plan.effective_date
+    elif sortBy == "createdAt": sort_column = Plan.created_at
+
+    if sortOrder == "desc":
+        stmt = stmt.order_by(desc(sort_column))
+    else:
+        stmt = stmt.order_by(asc(sort_column))
+
+    start = (page - 1) * pageSize
+    stmt = stmt.offset(start).limit(pageSize)
+
+    result = await db.execute(stmt)
+    plans = result.scalars().all()
+
+    data = [await _serialize_plan(db, p) for p in plans]
+
+    return {
+        "data": data,
+        "pagination": {
+            "total": total,
+            "page": page,
+            "pageSize": pageSize,
+            "totalPages": max(1, -(-total // pageSize)),
+        },
+    }
 
 
 # ─── GET /api/plans/{planId} ──────────────────────────────────────────────────
@@ -148,11 +123,14 @@ async def list_plans(
     "/{planId}",
     summary="Obtener detalle completo de un plan",
 )
-async def get_plan(planId: str = Path(...)):
-    plan = next((p for p in PLANS_DB if p["id"] == planId), None)
+async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Plan).where(Plan.id == planId))
+    plan = result.scalars().first()
+
     if not plan:
-        return {"error": {"code": "PLAN_NOT_FOUND", "message": f"No se encontró el plan '{planId}'"}}
-    return plan
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    return await _serialize_plan(db, plan)
 
 
 # ─── POST /api/plans ──────────────────────────────────────────────────────────
@@ -161,38 +139,55 @@ async def get_plan(planId: str = Path(...)):
     summary="Crear un nuevo plan en estado draft",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_plan(body: dict = Body(...)):
+async def create_plan(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     name = body.get("name", "")
     if not name or len(name) < 3:
         return {"error": {"code": "VALIDATION_ERROR", "message": "El campo 'name' debe tener entre 3 y 60 caracteres"}}
 
-    duplicate = next((p for p in PLANS_DB if p["name"].lower() == name.lower() and p["status"] != "archived"), None)
+    # Verificar duplicado
+    duplicate_stmt = select(Plan).where(
+        func.lower(Plan.name) == name.lower(),
+        Plan.status != "archived"
+    )
+    duplicate = (await db.execute(duplicate_stmt)).scalars().first()
+    
     if duplicate:
         return {"error": {"code": "PLAN_NAME_DUPLICATE", "message": f"Ya existe un plan no archivado con el nombre '{name}'"}}
 
     if not body.get("features"):
         return {"error": {"code": "VALIDATION_ERROR", "message": "El plan debe incluir al menos un feature"}}
 
-    now = datetime.now(timezone.utc).isoformat()
-    new_plan = {
-        "id": f"plan-{name.lower().replace(' ', '-')}-{len(PLANS_DB) + 1}",
-        "name": name,
-        "description": body.get("description", ""),
-        "tagColor": body.get("tagColor", "slate"),
-        "status": "draft",
-        "setupPrice": body.get("setupPrice", 0.00),
-        "monthlyPrice": body.get("monthlyPrice", 0.00),
-        "currency": body.get("currency", "USD"),
-        "effectiveDate": body.get("effectiveDate", now[:10]),
-        "features": body.get("features", []),
-        "metrics": {"activeClinics": 0, "arr": 0.00},
-        "createdAt": now,
-        "updatedAt": now,
-        "archivedAt": None,
-        "createdBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-        "updatedBy": {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"},
-    }
-    return {"status": "success", "data": new_plan}
+    now = datetime.utcnow()
+    
+    effective_date_val = now
+    if body.get("effectiveDate"):
+        try:
+            effective_date_val = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    new_plan_id = f"plan-{name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:6]}"
+    
+    new_plan = Plan(
+        id=new_plan_id,
+        name=name,
+        description=body.get("description", ""),
+        tag_color=body.get("tagColor", "slate"),
+        status="draft",
+        setup_price=body.get("setupPrice", 0.00),
+        monthly_price=body.get("monthlyPrice", 0.00),
+        currency=body.get("currency", "USD"),
+        effective_date=effective_date_val,
+        features=body.get("features", []),
+        created_at=now,
+        updated_at=now
+    )
+
+    db.add(new_plan)
+    await db.commit()
+    await db.refresh(new_plan)
+
+    return {"status": "success", "data": await _serialize_plan(db, new_plan)}
 
 
 # ─── PUT /api/plans/{planId} ──────────────────────────────────────────────────
@@ -203,28 +198,53 @@ async def create_plan(body: dict = Body(...)):
 async def update_plan(
     planId: str = Path(...),
     body: dict = Body(...),
+    db: AsyncSession = Depends(get_db)
 ):
-    plan = next((p for p in PLANS_DB if p["id"] == planId), None)
+    result = await db.execute(select(Plan).where(Plan.id == planId))
+    plan = result.scalars().first()
+
     if not plan:
-        return {"error": {"code": "PLAN_NOT_FOUND", "message": f"No se encontró el plan '{planId}'"}}
-    if plan["status"] == "archived":
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    if plan.status == "archived":
         return {"error": {"code": "PLAN_ARCHIVED", "message": "No se puede editar un plan archivado. Use restore primero."}}
 
     if "name" in body:
-        collision = next(
-            (p for p in PLANS_DB if p["name"].lower() == body["name"].lower() and p["id"] != planId and p["status"] != "archived"),
-            None,
+        collision_stmt = select(Plan).where(
+            func.lower(Plan.name) == body["name"].lower(),
+            Plan.id != planId,
+            Plan.status != "archived"
         )
+        collision = (await db.execute(collision_stmt)).scalars().first()
         if collision:
             return {"error": {"code": "PLAN_NAME_DUPLICATE", "message": f"El nombre '{body['name']}' ya está en uso"}}
 
-    if "currency" in body and body["currency"] != plan["currency"] and plan["metrics"]["activeClinics"] > 0:
+    active_clinics = await _get_active_clinics_count(db, plan.id)
+    if "currency" in body and body["currency"] != getattr(plan, "currency", "") and active_clinics > 0:
         return {"error": {"code": "PLAN_CURRENCY_LOCKED", "message": "El plan tiene asignaciones activas y la moneda es inmutable"}}
 
-    updated = {**plan, **{k: v for k, v in body.items() if k not in ("id", "createdAt", "createdBy", "metrics")}}
-    updated["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    # Mapeo de campos
+    if "name" in body: plan.name = body["name"]
+    if "description" in body: plan.description = body["description"]
+    if "tagColor" in body: plan.tag_color = body["tagColor"]
+    if "status" in body: plan.status = body["status"]
+    if "setupPrice" in body: plan.setup_price = body["setupPrice"]
+    if "monthlyPrice" in body: plan.monthly_price = body["monthlyPrice"]
+    if "currency" in body: plan.currency = body["currency"]
+    if "features" in body: plan.features = body["features"]
+    if "effectiveDate" in body and body["effectiveDate"]:
+        try:
+            plan.effective_date = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
+        except ValueError:
+            pass
 
-    return {"status": "success", "data": updated}
+    plan.updated_at = datetime.utcnow()
+    
+    db.add(plan)
+    await db.commit()
+    await db.refresh(plan)
+
+    return {"status": "success", "data": await _serialize_plan(db, plan)}
 
 
 # ─── POST /api/plans/{planId}/duplicate ───────────────────────────────────────
@@ -236,30 +256,55 @@ async def update_plan(
 async def duplicate_plan(
     planId: str = Path(...),
     body: dict = Body(default={}),
+    db: AsyncSession = Depends(get_db)
 ):
-    plan = next((p for p in PLANS_DB if p["id"] == planId), None)
+    result = await db.execute(select(Plan).where(Plan.id == planId))
+    plan = result.scalars().first()
+
     if not plan:
-        return {"error": {"code": "PLAN_NOT_FOUND", "message": f"No se encontró el plan '{planId}'"}}
+        raise HTTPException(status_code=404, detail="No encontrado")
 
-    now = datetime.now(timezone.utc).isoformat()
-    new_name = body.get("name", f"{plan['name']} (Copy)")
+    new_name = body.get("name", f"{plan.name} (Copy)")
 
-    collision = next((p for p in PLANS_DB if p["name"].lower() == new_name.lower() and p["status"] != "archived"), None)
+    collision_stmt = select(Plan).where(
+        func.lower(Plan.name) == new_name.lower(),
+        Plan.status != "archived"
+    )
+    collision = (await db.execute(collision_stmt)).scalars().first()
+    
     if collision:
         return {"error": {"code": "PLAN_NAME_DUPLICATE", "message": f"El nombre '{new_name}' ya está en uso"}}
 
-    duplicated = {
-        **plan,
-        "id": f"plan-copy-{len(PLANS_DB) + 1}",
-        "name": new_name,
-        "status": "draft",
-        "effectiveDate": body.get("effectiveDate", plan["effectiveDate"]),
-        "metrics": {"activeClinics": 0, "arr": 0.00},
-        "createdAt": now,
-        "updatedAt": now,
-        "archivedAt": None,
-    }
-    return {"status": "success", "data": duplicated}
+    now = datetime.utcnow()
+    new_plan_id = f"plan-copy-{uuid.uuid4().hex[:8]}"
+
+    effective_date_val = plan.effective_date
+    if body.get("effectiveDate"):
+        try:
+            effective_date_val = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    duplicated = Plan(
+        id=new_plan_id,
+        name=new_name,
+        description=getattr(plan, "description", ""),
+        tag_color=getattr(plan, "tag_color", "slate"),
+        status="draft",
+        setup_price=getattr(plan, "setup_price", 0.00),
+        monthly_price=getattr(plan, "monthly_price", 0.00),
+        currency=getattr(plan, "currency", "USD"),
+        effective_date=effective_date_val,
+        features=getattr(plan, "features", []),
+        created_at=now,
+        updated_at=now
+    )
+
+    db.add(duplicated)
+    await db.commit()
+    await db.refresh(duplicated)
+
+    return {"status": "success", "data": await _serialize_plan(db, duplicated)}
 
 
 # ─── POST /api/plans/{planId}/archive ─────────────────────────────────────────
@@ -267,20 +312,32 @@ async def duplicate_plan(
     "/{planId}/archive",
     summary="Archivar un plan (soft-delete)",
 )
-async def archive_plan(planId: str = Path(...)):
-    plan = next((p for p in PLANS_DB if p["id"] == planId), None)
+async def archive_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Plan).where(Plan.id == planId))
+    plan = result.scalars().first()
+
     if not plan:
-        return {"error": {"code": "PLAN_NOT_FOUND", "message": f"No se encontró el plan '{planId}'"}}
-    if plan["status"] == "archived":
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    if getattr(plan, "status", "") == "archived":
         return {"error": {"code": "PLAN_ALREADY_ARCHIVED", "message": "El plan ya está archivado"}}
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.utcnow()
+    plan.status = "archived"
+    plan.archived_at = now
+    plan.updated_at = now
+    
+    db.add(plan)
+    await db.commit()
+    
+    active_clinics = await _get_active_clinics_count(db, plan.id)
+
     return {
         "status": "success",
-        "id": planId,
-        "status_field": "archived",
-        "archivedAt": now,
-        "affectedClinics": plan["metrics"]["activeClinics"],
+        "id": plan.id,
+        "status_field": plan.status,
+        "archivedAt": plan.archived_at.isoformat() + "Z",
+        "affectedClinics": active_clinics,
     }
 
 
@@ -289,17 +346,28 @@ async def archive_plan(planId: str = Path(...)):
     "/{planId}/restore",
     summary="Restaurar un plan archivado",
 )
-async def restore_plan(planId: str = Path(...)):
-    plan = next((p for p in PLANS_DB if p["id"] == planId), None)
+async def restore_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Plan).where(Plan.id == planId))
+    plan = result.scalars().first()
+
     if not plan:
-        return {"error": {"code": "PLAN_NOT_FOUND", "message": f"No se encontró el plan '{planId}'"}}
-    if plan["status"] != "archived":
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    if getattr(plan, "status", "") != "archived":
         return {"error": {"code": "PLAN_NOT_ARCHIVED", "message": "El plan ya está activo"}}
+
+    now = datetime.utcnow()
+    plan.status = "active" # o 'draft' dependiendo la regla de negocio
+    plan.archived_at = None
+    plan.updated_at = now
+
+    db.add(plan)
+    await db.commit()
 
     return {
         "status": "success",
-        "id": planId,
-        "status_field": "active",
+        "id": plan.id,
+        "status_field": plan.status,
         "archivedAt": None,
-        "restoredAt": datetime.now(timezone.utc).isoformat(),
+        "restoredAt": now.isoformat() + "Z",
     }

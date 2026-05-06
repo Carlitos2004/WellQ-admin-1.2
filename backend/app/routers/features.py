@@ -1,251 +1,28 @@
-from fastapi import APIRouter, Path, Body, Query, status
-from datetime import datetime, timezone
+from fastapi import APIRouter, Path, Body, Query, status, Depends, HTTPException
+from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, desc, asc, or_
+from app.db.neon import get_db
+from app.models_db import Feature
 
 router = APIRouter(prefix="/api/features", tags=["Catálogo de Funcionalidades (Features)"])
 
-# ─── Datos en duro ────────────────────────────────────────────────────────────
-FEATURES_DB = [
-    {
-        "id": "feat-patients",
-        "name": "Active Patients",
-        "category": "Patients & Licenses",
-        "unit": "patients",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 500,
-        "description": "Maximum number of concurrent active patients",
-        "icon": "users",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-clinicians",
-        "name": "Clinician Seats",
-        "category": "Patients & Licenses",
-        "unit": "seats",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 5,
-        "description": "Number of clinician licenses included",
-        "icon": "users",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-tablets",
-        "name": "Tablet Devices",
-        "category": "Patients & Licenses",
-        "unit": "devices",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 3,
-        "description": "Connected clinician tablet devices",
-        "icon": "smartphone",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-locations",
-        "name": "Clinic Locations",
-        "category": "Patients & Licenses",
-        "unit": "locations",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 1,
-        "description": "Number of physical locations under one account",
-        "icon": "building2",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-pose",
-        "name": "Pose Analysis",
-        "category": "AI Capabilities",
-        "unit": "sessions/mo",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 1000,
-        "description": "AI-powered movement & pose analysis sessions",
-        "icon": "activity",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-soap",
-        "name": "SOAP Note Generation",
-        "category": "AI Capabilities",
-        "unit": "notes/mo",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 500,
-        "description": "Auto-generated clinical SOAP notes",
-        "icon": "fileText",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-churn",
-        "name": "Churn Prediction",
-        "category": "AI Capabilities",
-        "unit": "enabled",
-        "unitType": "toggle",
-        "options": None,
-        "defaultLimit": 1,
-        "description": "AI-driven patient/clinic churn risk insights",
-        "icon": "trendingUp",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-video",
-        "name": "Video Processing",
-        "category": "AI Capabilities",
-        "unit": "minutes/mo",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 600,
-        "description": "Cloud video session processing minutes",
-        "icon": "zap",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-storage",
-        "name": "Cloud Storage",
-        "category": "Storage & Data",
-        "unit": "GB",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 100,
-        "description": "Patient records and media storage",
-        "icon": "hardDrive",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-retention",
-        "name": "Data Retention",
-        "category": "Storage & Data",
-        "unit": "months",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 24,
-        "description": "How long historical records are kept",
-        "icon": "calendar",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-exports",
-        "name": "Data Exports",
-        "category": "Storage & Data",
-        "unit": "exports/mo",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 10,
-        "description": "Bulk data export operations per month",
-        "icon": "download",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-backup",
-        "name": "Daily Backups",
-        "category": "Storage & Data",
-        "unit": "enabled",
-        "unitType": "toggle",
-        "options": None,
-        "defaultLimit": 1,
-        "description": "Automated encrypted daily backups",
-        "icon": "database",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-support",
-        "name": "Support Tier",
-        "category": "Support & Integrations",
-        "unit": "level",
-        "unitType": "select",
-        "options": ["Email", "Business Hours", "24/7 Priority"],
-        "defaultLimit": "Email",
-        "description": "Customer support response level",
-        "icon": "headphones",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-ehr",
-        "name": "EHR Integration",
-        "category": "Support & Integrations",
-        "unit": "integrations",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 1,
-        "description": "Connections to external EHR systems",
-        "icon": "globe",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-api",
-        "name": "API Rate Limit",
-        "category": "Support & Integrations",
-        "unit": "req/min",
-        "unitType": "number",
-        "options": None,
-        "defaultLimit": 60,
-        "description": "Public API requests per minute",
-        "icon": "zap",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-    {
-        "id": "feat-webhooks",
-        "name": "Webhooks",
-        "category": "Support & Integrations",
-        "unit": "enabled",
-        "unitType": "toggle",
-        "options": None,
-        "defaultLimit": 0,
-        "description": "Real-time event webhooks",
-        "icon": "globe",
-        "status": "active",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z",
-        "archivedAt": None,
-    },
-]
+def _serialize_feature(f):
+    return {
+        "id": f.id,
+        "name": f.name,
+        "category": getattr(f, "category", None),
+        "unit": getattr(f, "unit", None),
+        "unitType": getattr(f, "unit_type", None),
+        "options": getattr(f, "options", None),
+        "defaultLimit": getattr(f, "default_limit", None),
+        "description": getattr(f, "description", None),
+        "icon": getattr(f, "icon", None),
+        "status": getattr(f, "status", None),
+        "createdAt": f.created_at.isoformat() + "Z" if getattr(f, "created_at", None) else None,
+        "updatedAt": f.updated_at.isoformat() + "Z" if getattr(f, "updated_at", None) else None,
+        "archivedAt": f.archived_at.isoformat() + "Z" if getattr(f, "archived_at", None) else None,
+    }
 
 
 # ─── GET /api/features ────────────────────────────────────────────────────────
@@ -263,26 +40,54 @@ async def list_features(
     pageSize: int = Query(20, ge=1, le=100),
     sortBy: str = Query("name", description="name | category | createdAt"),
     sortOrder: str = Query("asc", description="asc | desc"),
+    db: AsyncSession = Depends(get_db)
 ):
-    results = [f for f in FEATURES_DB if includeArchived or f["status"] == "active"]
+    query = select(Feature)
+
+    if not includeArchived:
+        query = query.where(Feature.status == "active")
 
     if search:
-        term = search.lower()
-        results = [f for f in results if term in f["name"].lower() or term in f["description"].lower()]
+        term = f"%{search.lower()}%"
+        query = query.where(
+            or_(
+                func.lower(Feature.name).like(term),
+                func.lower(Feature.description).like(term)
+            )
+        )
+
     if category:
-        results = [f for f in results if f["category"] == category]
+        query = query.where(Feature.category == category)
+        
     if unitType:
-        results = [f for f in results if f["unitType"] == unitType]
+        query = query.where(Feature.unit_type == unitType)
 
-    reverse = sortOrder == "desc"
-    results.sort(key=lambda f: f.get(sortBy, f["name"]) or "", reverse=reverse)
+    # Calcular total para paginación
+    total_result = await db.execute(select(func.count()).select_from(query.subquery()))
+    total = total_result.scalar_one() or 0
 
-    total = len(results)
+    # Ordenamiento
+    sort_column_map = {
+        "name": Feature.name,
+        "category": Feature.category,
+        "createdAt": Feature.created_at
+    }
+    sort_col = sort_column_map.get(sortBy, Feature.name)
+    
+    if sortOrder == "desc":
+        query = query.order_by(desc(sort_col))
+    else:
+        query = query.order_by(asc(sort_col))
+
+    # Paginación
     start = (page - 1) * pageSize
-    page_data = results[start: start + pageSize]
+    query = query.offset(start).limit(pageSize)
+
+    result = await db.execute(query)
+    features = result.scalars().all()
 
     return {
-        "data": page_data,
+        "data": [_serialize_feature(f) for f in features],
         "pagination": {
             "total": total,
             "page": page,
@@ -297,11 +102,17 @@ async def list_features(
     "/{featureId}",
     summary="Obtener detalle de un feature",
 )
-async def get_feature(featureId: str = Path(..., description="Identificador único del feature")):
-    feature = next((f for f in FEATURES_DB if f["id"] == featureId), None)
+async def get_feature(
+    featureId: str = Path(..., description="Identificador único del feature"),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Feature).where(Feature.id == featureId))
+    feature = result.scalar_one_or_none()
+    
     if not feature:
-        return {"error": {"code": "FEATURE_NOT_FOUND", "message": f"No se encontró el feature '{featureId}'"}}
-    return feature
+        raise HTTPException(status_code=404, detail="No encontrado")
+        
+    return _serialize_feature(feature)
 
 
 # ─── POST /api/features ───────────────────────────────────────────────────────
@@ -310,32 +121,46 @@ async def get_feature(featureId: str = Path(..., description="Identificador úni
     summary="Crear un nuevo feature en el catálogo",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_feature(body: dict = Body(...)):
+async def create_feature(
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db)
+):
     name = body.get("name", "")
     if not name or len(name) < 3:
         return {"error": {"code": "VALIDATION_ERROR", "message": "El campo 'name' debe tener entre 3 y 80 caracteres"}}
 
-    duplicate = next((f for f in FEATURES_DB if f["name"].lower() == name.lower() and f["status"] == "active"), None)
-    if duplicate:
+    # Verificar duplicado
+    duplicate_result = await db.execute(
+        select(Feature)
+        .where(func.lower(Feature.name) == name.lower(), Feature.status == "active")
+    )
+    if duplicate_result.scalar_one_or_none():
         return {"error": {"code": "FEATURE_NAME_DUPLICATE", "message": f"Ya existe un feature activo con el nombre '{name}'"}}
 
-    now = datetime.now(timezone.utc).isoformat()
-    new_feature = {
-        "id": f"feat-{name.lower().replace(' ', '-')}-{len(FEATURES_DB) + 1}",
-        "name": name,
-        "category": body.get("category", "Support & Integrations"),
-        "unit": body.get("unit", "units"),
-        "unitType": body.get("unitType", "number"),
-        "options": body.get("options", None),
-        "defaultLimit": body.get("defaultLimit", 0),
-        "description": body.get("description", ""),
-        "icon": body.get("icon", None),
-        "status": "active",
-        "createdAt": now,
-        "updatedAt": now,
-        "archivedAt": None,
-    }
-    return {"status": "success", "data": new_feature}
+    now = datetime.utcnow()
+    new_id = f"feat-{name.lower().replace(' ', '-')}-{int(now.timestamp())}"
+    
+    new_feature = Feature(
+        id=new_id,
+        name=name,
+        category=body.get("category", "Support & Integrations"),
+        unit=body.get("unit", "units"),
+        unit_type=body.get("unitType", "number"),
+        options=body.get("options", None),
+        default_limit=body.get("defaultLimit", 0),
+        description=body.get("description", ""),
+        icon=body.get("icon", None),
+        status="active",
+        created_at=now,
+        updated_at=now,
+        archived_at=None,
+    )
+    
+    db.add(new_feature)
+    await db.commit()
+    await db.refresh(new_feature)
+
+    return {"status": "success", "data": _serialize_feature(new_feature)}
 
 
 # ─── PUT /api/features/{featureId} ───────────────────────────────────────────
@@ -346,27 +171,44 @@ async def create_feature(body: dict = Body(...)):
 async def update_feature(
     featureId: str = Path(...),
     body: dict = Body(...),
+    db: AsyncSession = Depends(get_db)
 ):
-    feature = next((f for f in FEATURES_DB if f["id"] == featureId), None)
+    result = await db.execute(select(Feature).where(Feature.id == featureId))
+    feature = result.scalar_one_or_none()
+    
     if not feature:
-        return {"error": {"code": "FEATURE_NOT_FOUND", "message": f"No se encontró el feature '{featureId}'"}}
+        raise HTTPException(status_code=404, detail="No encontrado")
 
-    if "unitType" in body and body["unitType"] != feature["unitType"]:
+    if "unitType" in body and body["unitType"] != feature.unit_type:
         return {"error": {"code": "FEATURE_UNITTYPE_IMMUTABLE", "message": "El campo 'unitType' no puede modificarse"}}
 
     if "name" in body:
         new_name = body["name"]
-        collision = next(
-            (f for f in FEATURES_DB if f["name"].lower() == new_name.lower() and f["id"] != featureId and f["status"] == "active"),
-            None,
+        collision_result = await db.execute(
+            select(Feature)
+            .where(
+                func.lower(Feature.name) == new_name.lower(),
+                Feature.id != featureId,
+                Feature.status == "active"
+            )
         )
-        if collision:
+        if collision_result.scalar_one_or_none():
             return {"error": {"code": "FEATURE_NAME_DUPLICATE", "message": f"Ya existe un feature activo con el nombre '{new_name}'"}}
 
-    updated = {**feature, **{k: v for k, v in body.items() if k not in ("id", "unitType", "createdAt")}}
-    updated["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    # Actualizar campos
+    for key, value in body.items():
+        if key not in ("id", "unitType", "createdAt"):
+            # Mapear camelCase a snake_case
+            db_key = "unit_type" if key == "unitType" else "default_limit" if key == "defaultLimit" else key
+            setattr(feature, db_key, value)
 
-    return {"status": "success", "data": updated}
+    feature.updated_at = datetime.utcnow()
+    
+    db.add(feature)
+    await db.commit()
+    await db.refresh(feature)
+
+    return {"status": "success", "data": _serialize_feature(feature)}
 
 
 # ─── DELETE /api/features/{featureId} ────────────────────────────────────────
@@ -374,20 +216,33 @@ async def update_feature(
     "/{featureId}",
     summary="Archivar (soft-delete) un feature",
 )
-async def archive_feature(featureId: str = Path(...)):
-    feature = next((f for f in FEATURES_DB if f["id"] == featureId), None)
+async def archive_feature(
+    featureId: str = Path(...),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Feature).where(Feature.id == featureId))
+    feature = result.scalar_one_or_none()
+    
     if not feature:
-        return {"error": {"code": "FEATURE_NOT_FOUND", "message": f"No se encontró el feature '{featureId}'"}}
-    if feature["status"] == "archived":
+        raise HTTPException(status_code=404, detail="No encontrado")
+        
+    if feature.status == "archived":
         return {"error": {"code": "FEATURE_ALREADY_ARCHIVED", "message": "El feature ya está archivado"}}
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.utcnow()
+    feature.status = "archived"
+    feature.archived_at = now
+    feature.updated_at = now
+    
+    db.add(feature)
+    await db.commit()
+
     return {
         "status": "success",
         "id": featureId,
         "status_field": "archived",
-        "archivedAt": now,
-        "inUseByPlans": 2,
+        "archivedAt": now.isoformat() + "Z",
+        "inUseByPlans": 2, # TODO: Consultar cantidad real en plan_features si es necesario
     }
 
 
@@ -396,17 +251,31 @@ async def archive_feature(featureId: str = Path(...)):
     "/{featureId}/restore",
     summary="Restaurar un feature archivado",
 )
-async def restore_feature(featureId: str = Path(...)):
-    feature = next((f for f in FEATURES_DB if f["id"] == featureId), None)
+async def restore_feature(
+    featureId: str = Path(...),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Feature).where(Feature.id == featureId))
+    feature = result.scalar_one_or_none()
+    
     if not feature:
-        return {"error": {"code": "FEATURE_NOT_FOUND", "message": f"No se encontró el feature '{featureId}'"}}
-    if feature["status"] == "active":
+        raise HTTPException(status_code=404, detail="No encontrado")
+        
+    if feature.status == "active":
         return {"error": {"code": "FEATURE_NOT_ARCHIVED", "message": "El feature ya está activo"}}
+
+    now = datetime.utcnow()
+    feature.status = "active"
+    feature.archived_at = None
+    feature.updated_at = now
+    
+    db.add(feature)
+    await db.commit()
 
     return {
         "status": "success",
         "id": featureId,
         "status_field": "active",
         "archivedAt": None,
-        "restoredAt": datetime.now(timezone.utc).isoformat(),
+        "restoredAt": now.isoformat() + "Z",
     }

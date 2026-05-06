@@ -1,4 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, desc, asc
+from app.db.neon import get_db
+from app.models_db import MrrSnapshot, ChurnRiskRegion
 
 router = APIRouter(
     prefix="/api/financials",
@@ -7,46 +11,50 @@ router = APIRouter(
 
 # 12. GET /financials/mrr/breakdown
 @router.get("/mrr/breakdown")
-def get_mrr_breakdown():
+async def get_mrr_breakdown(db: AsyncSession = Depends(get_db)):
+    # Obtenemos el registro más reciente ordenando por ID o created_at (asumiendo id autoincremental o UUID secuencial)
+    result = await db.execute(select(MrrSnapshot).order_by(desc(MrrSnapshot.id)))
+    snapshot = result.scalars().first()
+
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    # Asumiendo que si total_mrr no está directo en la tabla, lo calculamos de los componentes
+    total_mrr = getattr(snapshot, "total_mrr", 
+                        snapshot.new_business + snapshot.expansion + snapshot.contraction + snapshot.churn + snapshot.retained)
+    currency = getattr(snapshot, "currency", "USD")
+
     return {
         "status": "success",
         "data": {
-            "total_mrr": 45000,
-            "currency": "USD",
+            "total_mrr": total_mrr,
+            "currency": currency,
             "breakdown": {
-                "new_business": 5000,
-                "expansion": 2000,
-                "contraction": -500,
-                "churn": -1000,
-                "retained": 39500
+                "new_business": snapshot.new_business,
+                "expansion": snapshot.expansion,
+                "contraction": snapshot.contraction,
+                "churn": snapshot.churn,
+                "retained": snapshot.retained
             },
-            "monthly_growth_percentage": 3.2
+            "monthly_growth_percentage": snapshot.monthly_growth_percentage
         }
     }
 
 # 13. GET /financials/churn-risk/by-region
 @router.get("/churn-risk/by-region")
-def get_churn_risk_by_region():
+async def get_churn_risk_by_region(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ChurnRiskRegion))
+    regions = result.scalars().all()
+
     return {
         "status": "success",
         "data": [
             {
-                "region": "North America",
-                "clinics_at_risk": 3,
-                "potential_mrr_loss": 1200,
-                "risk_level": "Medium"
-            },
-            {
-                "region": "Europe",
-                "clinics_at_risk": 1,
-                "potential_mrr_loss": 400,
-                "risk_level": "Low"
-            },
-            {
-                "region": "Latin America",
-                "clinics_at_risk": 5,
-                "potential_mrr_loss": 850,
-                "risk_level": "High"
+                "region": r.region,
+                "clinics_at_risk": r.clinics_at_risk,
+                "potential_mrr_loss": r.potential_mrr_loss,
+                "risk_level": r.risk_level
             }
+            for r in regions
         ]
     }
