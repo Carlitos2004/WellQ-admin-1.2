@@ -1,31 +1,46 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
-export const MRRChart = ({ apiBreakdown }) => {
-  const hardcoded = [
-    { month: 'Esp.', new: 0, expansion: 0, churn: 0 },
-    { month: 'Esp.', new: 0, expansion: 0, churn: 0 },
-    { month: 'Esp.', new: 0, expansion: 0, churn: 0 },
-    { month: 'Esp.', new: 0, expansion: 0, churn: 0 },
-    { month: 'Esp.', new: 0, expansion: 0, churn: 0 },
-    { month: 'Esp.', new: 0, expansion: 0, churn: 0 },
-  ];
+const formatCurrency = (val) => {
+  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
+  return `$${val}`;
+};
 
-  const data = apiBreakdown
-    ? [
-        ...hardcoded.slice(0, 5),
-        {
-          month: 'Cur',
-          new: apiBreakdown.new_business ?? 0,
-          expansion: apiBreakdown.expansion ?? 0,
-          churn: apiBreakdown.churn ?? 0,
-        },
-      ]
-    : hardcoded;
+export const MRRChart = () => {
+  const [snapshots, setSnapshots] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
 
-  const maxVal = Math.max(...data.map((d) => (d.new || 0) + (d.expansion || 0)), 100);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/financials/mrr/snapshots');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        setSnapshots(json.data ?? []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Último snapshot para los KPIs del encabezado
+  const latest = snapshots[snapshots.length - 1] ?? null;
+  const totalMRR = latest?.total_mrr ?? 0;
+  const growth   = latest?.monthly_growth_percentage ?? null;
+  const churn    = latest?.churn ?? 0;
+
+  const maxVal = Math.max(
+    ...snapshots.map((d) => (d.new_business ?? 0) + (d.expansion ?? 0)),
+    100
+  );
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="font-semibold text-slate-900">MRR Growth vs. Churn</h3>
@@ -43,27 +58,91 @@ export const MRRChart = ({ apiBreakdown }) => {
           </span>
         </div>
       </div>
-      <div className="flex items-end gap-4 h-48">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-1">
-            <div className="w-full flex flex-col-reverse gap-0.5" style={{ height: '160px' }}>
-              <div
-                className="w-full bg-emerald-500 rounded-t transition-all duration-500 hover:brightness-110"
-                style={{ height: `${(d.new / maxVal) * 100}%` }}
-              />
-              <div
-                className="w-full bg-indigo-500 rounded transition-all duration-500 hover:brightness-110"
-                style={{ height: `${(d.expansion / maxVal) * 100}%` }}
-              />
-            </div>
-            <div
-              className="w-full bg-red-400 rounded-b transition-all duration-500 hover:brightness-110"
-              style={{ height: `${(Math.abs(d.churn) / maxVal) * 40}px` }}
-            />
-            <span className="text-xs text-slate-400 mt-2">{d.month}</span>
+
+      {/* KPI row */}
+      {!loading && !error && latest && (
+        <div className="flex items-center gap-6 mb-5">
+          <div>
+            <p className="text-xs text-slate-400 mb-0.5">MRR Total</p>
+            <p className="text-xl font-bold text-slate-900">{formatCurrency(totalMRR)}</p>
           </div>
-        ))}
-      </div>
+          {growth !== null && (
+            <div>
+              <p className="text-xs text-slate-400 mb-0.5">Crecimiento mensual</p>
+              <p className={`text-xl font-bold ${growth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                {growth >= 0 ? '+' : ''}{growth.toFixed(1)}%
+              </p>
+            </div>
+          )}
+          <div>
+            <p className="text-xs text-slate-400 mb-0.5">Churn</p>
+            <p className="text-xl font-bold text-red-400">
+              {formatCurrency(Math.abs(churn))}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center h-48">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-slate-400">Cargando datos…</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
+      {!loading && error && (
+        <div className="flex items-center justify-center h-48">
+          <p className="text-sm text-red-400">Error al cargar: {error}</p>
+        </div>
+      )}
+
+      {/* Chart */}
+      {!loading && !error && (
+        <div className="flex items-end gap-2 h-48 overflow-x-auto">
+          {snapshots.map((d, i) => (
+            <div key={i} className="flex-1 min-w-[40px] flex flex-col items-center gap-1">
+              <div className="relative group w-full">
+                {/* Tooltip */}
+                <div className="absolute -top-16 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center z-10 pointer-events-none">
+                  <div className="bg-slate-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
+                    <div className="text-emerald-400">New: {formatCurrency(d.new_business ?? 0)}</div>
+                    <div className="text-indigo-400">Exp: {formatCurrency(d.expansion ?? 0)}</div>
+                    <div className="text-red-400">Churn: {formatCurrency(Math.abs(d.churn ?? 0))}</div>
+                  </div>
+                  <div className="w-2 h-2 bg-slate-800 rotate-45 -mt-1" />
+                </div>
+
+                {/* Bars */}
+                <div className="w-full flex flex-col-reverse gap-0.5" style={{ height: '160px' }}>
+                  <div
+                    className="w-full rounded-t transition-all duration-700 bg-emerald-500 hover:brightness-110"
+                    style={{ height: `${((d.new_business ?? 0) / maxVal) * 100}%` }}
+                  />
+                  <div
+                    className="w-full rounded transition-all duration-700 bg-indigo-500 hover:brightness-110"
+                    style={{ height: `${((d.expansion ?? 0) / maxVal) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Churn bar below */}
+              <div
+                className="w-full rounded-b transition-all duration-700 bg-red-400 hover:brightness-110"
+                style={{ height: `${(Math.abs(d.churn ?? 0) / maxVal) * 40}px` }}
+              />
+
+              {/* Month label */}
+              <span className="text-xs mt-2 text-slate-500 font-medium">
+                {d.period_month}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,8 @@
 import React from 'react';
 import {
   TrendingUp, AlertTriangle, Bell, Zap, Server, Users, Smartphone,
-  Clock, Activity, LayoutDashboard, ArrowUpRight, ChevronRight
+  Clock, Activity, ArrowUpRight, ChevronRight, CheckCheck, Info,
+  Tablet, Monitor,
 } from 'lucide-react';
 import { KPICard, AlertItem, SegmentedControl, Skeleton } from '../components/ui';
 import { MRRChart } from '../components/charts/MRRChart';
@@ -35,6 +36,151 @@ const getLoadColor = (pct) => {
   if (pct >= 85) return 'bg-red-500';
   if (pct >= 70) return 'bg-amber-500';
   return 'bg-emerald-500';
+};
+
+const getSeverityStyle = (severity) => {
+  switch (severity) {
+    case 'critical': return { bar: 'bg-red-500',    icon: 'text-red-500',    bg: 'bg-red-50',    border: 'border-red-100' };
+    case 'high':     return { bar: 'bg-orange-400', icon: 'text-orange-400', bg: 'bg-orange-50', border: 'border-orange-100' };
+    case 'medium':   return { bar: 'bg-amber-400',  icon: 'text-amber-400',  bg: 'bg-amber-50',  border: 'border-amber-100' };
+    default:         return { bar: 'bg-blue-400',   icon: 'text-blue-400',   bg: 'bg-blue-50',   border: 'border-blue-100' };
+  }
+};
+
+// ─── App Usage Breakdown ──────────────────────────────────────────────────────
+const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : (n ?? 0).toLocaleString();
+
+const AppUsageBreakdown = ({ appStats }) => {
+  const patients = appStats?.patients;
+  const tablet   = appStats?.tablet;
+  const web      = appStats?.web;
+
+  const apps = [
+    {
+      label:       'Patient App',
+      icon:        Smartphone,
+      iconBg:      'bg-indigo-100',
+      iconColor:   'text-indigo-600',
+      total:       patients?.total_downloads   ?? 0,
+      activeToday: patients?.active_today      ?? 0,
+      active30d:   patients?.active_30d        ?? 0,
+      inactive:    patients?.inactive_users    ?? 0,
+      ios:         patients?.ios_downloads     ?? 0,
+      android:     patients?.android_downloads ?? 0,
+      registered:  0,
+      isWeb:       false,
+      barActive:   'bg-indigo-500',
+      barInactive: 'bg-amber-400',
+    },
+    {
+      label:       'Clinician Tablet',
+      icon:        Tablet,
+      iconBg:      'bg-emerald-100',
+      iconColor:   'text-emerald-600',
+      total:       tablet?.total_downloads   ?? 0,
+      activeToday: tablet?.active_today      ?? 0,
+      active30d:   tablet?.active_30d        ?? 0,
+      inactive:    tablet?.inactive_users    ?? 0,
+      ios:         tablet?.ios_downloads     ?? 0,
+      android:     tablet?.android_downloads ?? 0,
+      registered:  0,
+      isWeb:       false,
+      barActive:   'bg-emerald-500',
+      barInactive: 'bg-amber-400',
+    },
+    {
+      label:       'Web Dashboard',
+      icon:        Monitor,
+      iconBg:      'bg-slate-100',
+      iconColor:   'text-slate-600',
+      total:       0,
+      activeToday: web?.active_today    ?? 0,
+      active30d:   web?.active_30d      ?? 0,
+      inactive:    web?.inactive_users  ?? 0,
+      ios:         0,
+      android:     0,
+      registered:  web?.registered_users ?? 0,
+      isWeb:       true,
+      barActive:   'bg-slate-500',
+      barInactive: 'bg-amber-400',
+    },
+  ];
+
+  if (!patients && !tablet && !web) {
+    return (
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="mb-5">
+          <h3 className="font-semibold text-slate-900">App Usage Breakdown</h3>
+          <p className="text-sm text-slate-400">Downloads vs active users</p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-10 gap-2">
+          <Smartphone size={28} className="text-slate-200" />
+          <p className="text-sm text-slate-400">Esperando datos de la app…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+      <div className="mb-5">
+        <h3 className="font-semibold text-slate-900">App Usage Breakdown</h3>
+        <p className="text-sm text-slate-400">Downloads vs active users</p>
+      </div>
+      <div className="space-y-4">
+        {apps.map((app, i) => {
+          const Icon          = app.icon;
+          const base          = app.isWeb ? app.registered : app.total;
+          const activeRatio   = base > 0 ? Math.round((app.active30d / base) * 100) : 0;
+          const inactiveRatio = base > 0 ? Math.round((app.inactive  / base) * 100) : 0;
+          return (
+            <div key={i} className="rounded-xl border border-slate-100 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg ${app.iconBg} flex items-center justify-center`}>
+                    <Icon size={16} className={app.iconColor} />
+                  </div>
+                  <span className="font-medium text-slate-900 text-sm">{app.label}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-bold text-indigo-600">
+                    {app.isWeb ? fmt(app.registered) : fmt(app.total)}
+                  </span>
+                  <p className="text-xs text-slate-400">
+                    {app.isWeb ? 'registered users' : 'total downloads'}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="text-base font-bold text-emerald-600">{fmt(app.activeToday)}</p>
+                  <p className="text-xs text-slate-400">Active Today</p>
+                </div>
+                <div>
+                  <p className="text-base font-bold text-indigo-600">{fmt(app.active30d)}</p>
+                  <p className="text-xs text-slate-400">Active (30d)</p>
+                </div>
+                <div>
+                  <p className="text-base font-bold text-amber-500">{fmt(app.inactive)}</p>
+                  <p className="text-xs text-slate-400">Inactive</p>
+                </div>
+              </div>
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex">
+                <div className={`${app.barActive} h-full`}   style={{ width: `${activeRatio}%` }} />
+                <div className={`${app.barInactive} h-full`} style={{ width: `${inactiveRatio}%` }} />
+              </div>
+              {!app.isWeb && (app.ios > 0 || app.android > 0) && (
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>iOS: {fmt(app.ios)}</span>
+                  <span>Android: {fmt(app.android)}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 // ─── Sub-views ────────────────────────────────────────────────────────────────
@@ -94,57 +240,81 @@ const BusinessHealthTab = ({
       </div>
 
       <div className="grid grid-cols-2 gap-6">
-        <MRRChart apiBreakdown={mrrData?.breakdown} />
+        <MRRChart />
         <ChurnHeatmap apiRegions={churnRegions} />
       </div>
 
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900">
-            Needs Attention
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-slate-900">Needs Attention</h3>
             {apiAlerts.length > 0 && (
-              <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">
+              <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">
                 {apiAlerts.length}
               </span>
             )}
-          </h3>
+          </div>
           <span className="text-xs text-slate-400">Updated recently</span>
         </div>
-        <div className="space-y-2">
-          {apiAlerts.length > 0
-            ? apiAlerts.map((alert) => (
-                <div key={alert.alert_id} className="relative group">
-                  <AlertItem
-                    icon={
-                      alert.severity === 'high' || alert.severity === 'critical'
-                        ? AlertTriangle
-                        : Bell
-                    }
-                    message={alert.message}
-                    title={alert.title}
-                    severity={alert.severity}
-                  />
+
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-14 bg-slate-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : apiAlerts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <CheckCheck size={28} className="text-emerald-400" />
+            <p className="text-sm font-medium text-slate-600">Todo en orden</p>
+            <p className="text-xs text-slate-400">No hay alertas activas en este momento</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {apiAlerts.map((alert) => {
+              const style = getSeverityStyle(alert.severity);
+              return (
+                <div
+                  key={alert.alert_id}
+                  className={`flex items-center gap-4 p-4 rounded-xl border ${style.border} ${style.bg} transition-all`}
+                >
+                  <div className={`w-1 h-10 rounded-full flex-shrink-0 ${style.bar}`} />
+                  <AlertTriangle size={18} className={`flex-shrink-0 ${style.icon}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{alert.title}</p>
+                    <p className="text-xs text-slate-500 truncate mt-0.5">{alert.message}</p>
+                  </div>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-md capitalize flex-shrink-0 ${
+                    alert.severity === 'critical' ? 'bg-red-100 text-red-600' :
+                    alert.severity === 'high'     ? 'bg-orange-100 text-orange-600' :
+                    alert.severity === 'medium'   ? 'bg-amber-100 text-amber-600' :
+                                                    'bg-blue-100 text-blue-600'
+                  }`}>
+                    {alert.severity}
+                  </span>
                   <button
                     onClick={() => onAcknowledgeAlert(alert.alert_id)}
-                    className="absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600 hover:bg-slate-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all flex-shrink-0 cursor-pointer"
                   >
+                    <CheckCheck size={13} />
                     Mark read
                   </button>
                 </div>
-              ))
-            : (
-              <>
-                <AlertItem icon={AlertTriangle} message="Esperando conexión con backend..." severity="info" />
-                <AlertItem icon={Zap} message="Esperando base de datos..." severity="info" />
-              </>
-            )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
 };
 
-const OperationalStatusTab = ({ apiServers, apiProcesses }) => {
+// ── OperationalStatusTab ──────────────────────────────────────────────────────
+const OperationalStatusTab = ({
+  apiServers, apiProcesses,
+  kpiSystemHealth, kpiActiveNow, kpiDownloads, kpiDormant,
+  appStats,
+}) => {
   const servers = apiServers ?? [
     { name: 'Esperando conexión...', status: 'idle', uptime: '0%', cpu: 0, memory: 0, region: 'N/A' },
   ];
@@ -153,24 +323,47 @@ const OperationalStatusTab = ({ apiServers, apiProcesses }) => {
   ];
 
   const normalizeServer = (s) => ({
-    name: s.name,
+    name:   s.name,
     status: s.status === 'healthy' ? 'operational' : s.status,
     uptime: s.uptime,
-    cpu: typeof s.cpu === 'string' ? parseInt(s.cpu) : (s.cpu ?? (s.cpu_usage ? parseInt(s.cpu_usage) : 0)),
+    cpu:    typeof s.cpu === 'string' ? parseInt(s.cpu) : (s.cpu ?? (s.cpu_usage ? parseInt(s.cpu_usage) : 0)),
     memory: typeof s.memory === 'number' ? s.memory : (s.ram_usage ? parseInt(s.ram_usage) : 0),
     region: s.region,
   });
 
+  const systemHealthValue = kpiSystemHealth
+    ? (kpiSystemHealth.overall_status === 'optimal' ? '100%' : '50%') : '—';
+  const systemHealthColor = kpiSystemHealth
+    ? (kpiSystemHealth.overall_status === 'optimal' ? 'text-emerald-600' : 'text-amber-500') : 'text-slate-400';
+  const systemHealthSub = kpiSystemHealth
+    ? `Latencia: ${kpiSystemHealth.latency_ms}ms` : 'Esperando conexión...';
+
+  const activeNowValue = kpiActiveNow != null ? String(kpiActiveNow.active_now) : '—';
+  const activeNowSub   = kpiActiveNow
+    ? `Web: ${kpiActiveNow.platform_distribution.web_admin} · Mobile: ${kpiActiveNow.platform_distribution.mobile_clinician + kpiActiveNow.platform_distribution.mobile_patient}`
+    : 'vs yesterday';
+
+  const downloadsValue = kpiDownloads != null ? kpiDownloads.total_downloads.toLocaleString() : '—';
+  const downloadsSub   = kpiDownloads
+    ? `iOS: ${kpiDownloads.ios.toLocaleString()} · Android: ${kpiDownloads.android.toLocaleString()}`
+    : 'Esperando base de datos';
+
+  const dormantValue = kpiDormant != null ? String(kpiDormant.dormant_30d) : '—';
+  const dormantSub   = kpiDormant
+    ? `${kpiDormant.dormant_90d} inactivos 90d · ${kpiDormant.risk_of_churn_clinics} en riesgo`
+    : 'Esperando base de datos';
+
+  const cards = [
+    { label: 'System Health',    value: systemHealthValue, icon: null,       color: systemHealthColor,  sub: systemHealthSub },
+    { label: 'Active Users Now', value: activeNowValue,    icon: Users,      color: 'text-indigo-600',  sub: activeNowSub },
+    { label: 'Total Downloads',  value: downloadsValue,    icon: Smartphone, color: 'text-slate-900',   sub: downloadsSub },
+    { label: 'Dormant Users',    value: dormantValue,      icon: Clock,      color: 'text-amber-600',   sub: dormantSub },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Top KPIs */}
       <div className="grid grid-cols-4 gap-6">
-        {[
-          { label: 'System Health', value: '0.0%', icon: null, color: 'text-emerald-600', sub: 'Esperando conexión...' },
-          { label: 'Active Users Now', value: '0', icon: Users, color: 'text-indigo-600', sub: 'vs yesterday' },
-          { label: 'Total Downloads', value: '0', icon: Smartphone, color: 'text-slate-900', sub: 'Esperando base de datos' },
-          { label: 'Dormant Users', value: '0', icon: Clock, color: 'text-amber-600', sub: 'Esperando base de datos' },
-        ].map(({ label, value, icon: Icon, color, sub }, i) => (
+        {cards.map(({ label, value, icon: Icon, color, sub }, i) => (
           <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-500">{label}</span>
@@ -182,7 +375,6 @@ const OperationalStatusTab = ({ apiServers, apiProcesses }) => {
         ))}
       </div>
 
-      {/* Servers */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="mb-6">
           <h3 className="font-semibold text-slate-900">Server Infrastructure</h3>
@@ -221,28 +413,33 @@ const OperationalStatusTab = ({ apiServers, apiProcesses }) => {
         </div>
       </div>
 
-      {/* Processes */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-        <h3 className="font-semibold text-slate-900 mb-4">Background Processes</h3>
-        <div className="space-y-2">
-          {processes.map((proc, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <div className={`w-2 h-2 rounded-full ${getStatusDot(proc.status)}`} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-slate-900 truncate">{proc.name}</div>
+      {/* Background Processes + App Usage Breakdown lado a lado */}
+      <div className="grid grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <h3 className="font-semibold text-slate-900 mb-4">Background Processes</h3>
+          <div className="space-y-2">
+            {processes.map((proc, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <div className={`w-2 h-2 rounded-full ${getStatusDot(proc.status)}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-slate-900 truncate">{proc.name}</div>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(proc.status)}`}>
+                  {proc.status}
+                </span>
+                <div className="text-right text-xs text-slate-900 w-20">
+                  <div>{(proc.queued_items ?? 0).toLocaleString()} jobs</div>
+                </div>
               </div>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(proc.status)}`}>
-                {proc.status}
-              </span>
-              <div className="text-right text-xs text-slate-900 w-20">
-                <div>{(proc.queued_items ?? 0).toLocaleString()} jobs</div>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+
+        {/* ── NUEVO: App Usage Breakdown ── */}
+        <AppUsageBreakdown appStats={appStats} />
       </div>
     </div>
   );
@@ -253,12 +450,13 @@ export const OverviewView = ({
   loading, kpiArr, kpiClinics, kpiPatients, kpiNrr,
   mrrData, churnRegions, apiAlerts, onAcknowledgeAlert,
   apiServers, apiProcesses, fmtArr,
+  kpiSystemHealth, kpiActiveNow, kpiDownloads, kpiDormant,
+  appStats, // ── NUEVO
 }) => {
   const [tab, setTab] = React.useState('business');
 
   return (
     <div className="space-y-6">
-      {/* Tab switcher */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit">
         <button
           onClick={() => setTab('business')}
@@ -293,7 +491,15 @@ export const OverviewView = ({
         />
       )}
       {tab === 'operational' && (
-        <OperationalStatusTab apiServers={apiServers} apiProcesses={apiProcesses} />
+        <OperationalStatusTab
+          apiServers={apiServers}
+          apiProcesses={apiProcesses}
+          kpiSystemHealth={kpiSystemHealth}
+          kpiActiveNow={kpiActiveNow}
+          kpiDownloads={kpiDownloads}
+          kpiDormant={kpiDormant}
+          appStats={appStats}
+        />
       )}
     </div>
   );

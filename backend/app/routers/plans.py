@@ -2,9 +2,9 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, Path, Body, Query, status, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, asc, or_
+from sqlalchemy import select, func, desc, asc, or_, delete
 from app.db.neon import get_db
-from app.models_db import Plan, ClinicPlan
+from app.models_db import Plan, PlanFeature, ClinicPlan
 
 router = APIRouter(prefix="/api/plans", tags=["Constructor de Planes"])
 
@@ -18,49 +18,68 @@ async def _get_active_clinics_count(db: AsyncSession, plan_id: str) -> int:
     return result.scalar() or 0
 
 
-async def _serialize_plan(db: AsyncSession, p: Plan) -> dict:
-    active_clinics = await _get_active_clinics_count(db, str(p.id))
-    monthly_price = getattr(p, "monthly_price", 0.0)
-    arr = active_clinics * monthly_price * 12
+async def _get_plan_features(db: AsyncSession, plan_id: str) -> list:
+    """Retorna features del plan desde la tabla plan_features."""
+    stmt = select(PlanFeature).where(PlanFeature.plan_id == plan_id)
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+    return [{"featureId": row.feature_id, "limit": row.limit_value} for row in rows]
 
-    # Parseamos effective_date a string formato YYYY-MM-DD
+
+async def _save_plan_features(db: AsyncSession, plan_id: str, features: list):
+    """Reemplaza todas las features del plan. features = [{ featureId, limit }]"""
+    await db.execute(delete(PlanFeature).where(PlanFeature.plan_id == plan_id))
+    for f in features:
+        db.add(PlanFeature(
+            plan_id=plan_id,
+            feature_id=f.get("featureId", ""),
+            limit_value=str(f.get("limit", "0")),
+        ))
+
+
+async def _serialize_plan(db: AsyncSession, p: Plan) -> dict:
+    active_clinics = await _get_active_clinics_count(db, p.plan_id)
+    monthly_price = p.monthly_price or 0.0
+    arr = active_clinics * monthly_price * 12
+    features = await _get_plan_features(db, p.plan_id)
+
     eff_date_str = None
-    if getattr(p, "effective_date", None):
-        eff_date_str = p.effective_date.isoformat()[:10]
+    if p.effective_date:
+        if isinstance(p.effective_date, str):
+            eff_date_str = p.effective_date[:10]
+        else:
+            eff_date_str = p.effective_date.isoformat()[:10]
 
     return {
-        "id": str(p.id),
+        "id": p.plan_id,
         "name": p.name,
-        "description": getattr(p, "description", ""),
-        "tagColor": getattr(p, "tag_color", "slate"),
-        "status": getattr(p, "status", "active"),
-        "setupPrice": getattr(p, "setup_price", 0.0),
+        "description": p.description or "",
+        "tagColor": p.tag_color or "slate",
+        "status": p.status or "active",
+        "setupPrice": p.setup_price or 0.0,
         "monthlyPrice": monthly_price,
-        "currency": getattr(p, "currency", "USD"),
+        "currency": p.currency or "USD",
         "effectiveDate": eff_date_str,
-        "features": getattr(p, "features", []),
+        "features": features,
         "metrics": {"activeClinics": active_clinics, "arr": arr},
-        "createdAt": p.created_at.isoformat() + "Z" if getattr(p, "created_at", None) else None,
-        "updatedAt": p.updated_at.isoformat() + "Z" if getattr(p, "updated_at", None) else None,
-        "archivedAt": p.archived_at.isoformat() + "Z" if getattr(p, "archived_at", None) else None,
-        "createdBy": getattr(p, "created_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
-        "updatedBy": getattr(p, "updated_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
+        "createdAt": p.created_at.isoformat() + "Z" if p.created_at else None,
+        "updatedAt": p.updated_at.isoformat() + "Z" if p.updated_at else None,
+        "archivedAt": p.archived_at.isoformat() + "Z" if p.archived_at else None,
+        "createdBy": {"email": p.created_by_email, "name": p.created_by_name},
+        "updatedBy": {"email": p.updated_by_email, "name": p.updated_by_name},
     }
 
 
 # ─── GET /api/plans ───────────────────────────────────────────────────────────
-@router.get(
-    "",
-    summary="Listar planes con filtros y paginación",
-)
+@router.get("", summary="Listar planes con filtros y paginación")
 async def list_plans(
     search: str | None = Query(None),
-    plan_status: str | None = Query(None, alias="status", description="draft | active | archived (multi-valor)"),
+    plan_status: str | None = Query(None, alias="status"),
     currency: str | None = Query(None),
     includeArchived: bool = Query(False),
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100),
-    sortBy: str = Query("name", description="name | monthlyPrice | effectiveDate | createdAt"),
+    sortBy: str = Query("name"),
     sortOrder: str = Query("asc"),
     db: AsyncSession = Depends(get_db)
 ):
@@ -88,23 +107,16 @@ async def list_plans(
 
     total = (await db.execute(count_stmt)).scalar() or 0
 
-    # Paginación y Ordenamiento
     sort_column = Plan.name
-    if sortBy == "monthlyPrice": sort_column = Plan.monthly_price
+    if sortBy == "monthlyPrice":   sort_column = Plan.monthly_price
     elif sortBy == "effectiveDate": sort_column = Plan.effective_date
-    elif sortBy == "createdAt": sort_column = Plan.created_at
+    elif sortBy == "createdAt":     sort_column = Plan.created_at
 
-    if sortOrder == "desc":
-        stmt = stmt.order_by(desc(sort_column))
-    else:
-        stmt = stmt.order_by(asc(sort_column))
-
-    start = (page - 1) * pageSize
-    stmt = stmt.offset(start).limit(pageSize)
+    stmt = stmt.order_by(desc(sort_column) if sortOrder == "desc" else asc(sort_column))
+    stmt = stmt.offset((page - 1) * pageSize).limit(pageSize)
 
     result = await db.execute(stmt)
     plans = result.scalars().all()
-
     data = [await _serialize_plan(db, p) for p in plans]
 
     return {
@@ -119,46 +131,33 @@ async def list_plans(
 
 
 # ─── GET /api/plans/{planId} ──────────────────────────────────────────────────
-@router.get(
-    "/{planId}",
-    summary="Obtener detalle completo de un plan",
-)
+@router.get("/{planId}", summary="Obtener detalle completo de un plan")
 async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Plan).where(Plan.id == planId))
+    result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
-
     if not plan:
         raise HTTPException(status_code=404, detail="No encontrado")
-
     return await _serialize_plan(db, plan)
 
 
 # ─── POST /api/plans ──────────────────────────────────────────────────────────
-@router.post(
-    "",
-    summary="Crear un nuevo plan en estado draft",
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("", summary="Crear un nuevo plan", status_code=status.HTTP_201_CREATED)
 async def create_plan(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
-    name = body.get("name", "")
+    name = body.get("name", "").strip()
     if not name or len(name) < 3:
         return {"error": {"code": "VALIDATION_ERROR", "message": "El campo 'name' debe tener entre 3 y 60 caracteres"}}
 
-    # Verificar duplicado
-    duplicate_stmt = select(Plan).where(
-        func.lower(Plan.name) == name.lower(),
-        Plan.status != "archived"
-    )
-    duplicate = (await db.execute(duplicate_stmt)).scalars().first()
-    
+    duplicate = (await db.execute(
+        select(Plan).where(func.lower(Plan.name) == name.lower(), Plan.status != "archived")
+    )).scalars().first()
     if duplicate:
-        return {"error": {"code": "PLAN_NAME_DUPLICATE", "message": f"Ya existe un plan no archivado con el nombre '{name}'"}}
+        return {"error": {"code": "PLAN_NAME_DUPLICATE", "message": f"Ya existe un plan con el nombre '{name}'"}}
 
-    if not body.get("features"):
+    features = body.get("features", [])
+    if not features:
         return {"error": {"code": "VALIDATION_ERROR", "message": "El plan debe incluir al menos un feature"}}
 
     now = datetime.utcnow()
-    
     effective_date_val = now
     if body.get("effectiveDate"):
         try:
@@ -167,23 +166,24 @@ async def create_plan(body: dict = Body(...), db: AsyncSession = Depends(get_db)
             pass
 
     new_plan_id = f"plan-{name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:6]}"
-    
+
     new_plan = Plan(
-        id=new_plan_id,
+        plan_id=new_plan_id,
         name=name,
         description=body.get("description", ""),
         tag_color=body.get("tagColor", "slate"),
         status="draft",
-        setup_price=body.get("setupPrice", 0.00),
-        monthly_price=body.get("monthlyPrice", 0.00),
+        setup_price=body.get("setupPrice", 0.0),
+        monthly_price=body.get("monthlyPrice", 0.0),
         currency=body.get("currency", "USD"),
         effective_date=effective_date_val,
-        features=body.get("features", []),
         created_at=now,
-        updated_at=now
+        updated_at=now,
     )
-
     db.add(new_plan)
+    await db.flush()  # para que exista antes de guardar features
+
+    await _save_plan_features(db, new_plan_id, features)
     await db.commit()
     await db.refresh(new_plan)
 
@@ -191,18 +191,14 @@ async def create_plan(body: dict = Body(...), db: AsyncSession = Depends(get_db)
 
 
 # ─── PUT /api/plans/{planId} ──────────────────────────────────────────────────
-@router.put(
-    "/{planId}",
-    summary="Actualizar un plan existente",
-)
+@router.put("/{planId}", summary="Actualizar un plan existente")
 async def update_plan(
     planId: str = Path(...),
     body: dict = Body(...),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Plan).where(Plan.id == planId))
+    result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
-
     if not plan:
         raise HTTPException(status_code=404, detail="No encontrado")
 
@@ -210,36 +206,36 @@ async def update_plan(
         return {"error": {"code": "PLAN_ARCHIVED", "message": "No se puede editar un plan archivado. Use restore primero."}}
 
     if "name" in body:
-        collision_stmt = select(Plan).where(
-            func.lower(Plan.name) == body["name"].lower(),
-            Plan.id != planId,
-            Plan.status != "archived"
-        )
-        collision = (await db.execute(collision_stmt)).scalars().first()
+        collision = (await db.execute(
+            select(Plan).where(
+                func.lower(Plan.name) == body["name"].lower(),
+                Plan.plan_id != planId,
+                Plan.status != "archived"
+            )
+        )).scalars().first()
         if collision:
             return {"error": {"code": "PLAN_NAME_DUPLICATE", "message": f"El nombre '{body['name']}' ya está en uso"}}
 
-    active_clinics = await _get_active_clinics_count(db, plan.id)
-    if "currency" in body and body["currency"] != getattr(plan, "currency", "") and active_clinics > 0:
+    active_clinics = await _get_active_clinics_count(db, planId)
+    if "currency" in body and body["currency"] != plan.currency and active_clinics > 0:
         return {"error": {"code": "PLAN_CURRENCY_LOCKED", "message": "El plan tiene asignaciones activas y la moneda es inmutable"}}
 
-    # Mapeo de campos
-    if "name" in body: plan.name = body["name"]
+    if "name" in body:        plan.name = body["name"]
     if "description" in body: plan.description = body["description"]
-    if "tagColor" in body: plan.tag_color = body["tagColor"]
-    if "status" in body: plan.status = body["status"]
-    if "setupPrice" in body: plan.setup_price = body["setupPrice"]
+    if "tagColor" in body:    plan.tag_color = body["tagColor"]
+    if "status" in body:      plan.status = body["status"]
+    if "setupPrice" in body:  plan.setup_price = body["setupPrice"]
     if "monthlyPrice" in body: plan.monthly_price = body["monthlyPrice"]
-    if "currency" in body: plan.currency = body["currency"]
-    if "features" in body: plan.features = body["features"]
+    if "currency" in body:    plan.currency = body["currency"]
     if "effectiveDate" in body and body["effectiveDate"]:
         try:
             plan.effective_date = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
         except ValueError:
             pass
+    if "features" in body:
+        await _save_plan_features(db, planId, body["features"])
 
     plan.updated_at = datetime.utcnow()
-    
     db.add(plan)
     await db.commit()
     await db.refresh(plan)
@@ -248,30 +244,21 @@ async def update_plan(
 
 
 # ─── POST /api/plans/{planId}/duplicate ───────────────────────────────────────
-@router.post(
-    "/{planId}/duplicate",
-    summary="Duplicar un plan existente",
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/{planId}/duplicate", summary="Duplicar un plan", status_code=status.HTTP_201_CREATED)
 async def duplicate_plan(
     planId: str = Path(...),
     body: dict = Body(default={}),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Plan).where(Plan.id == planId))
+    result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
-
     if not plan:
         raise HTTPException(status_code=404, detail="No encontrado")
 
     new_name = body.get("name", f"{plan.name} (Copy)")
-
-    collision_stmt = select(Plan).where(
-        func.lower(Plan.name) == new_name.lower(),
-        Plan.status != "archived"
-    )
-    collision = (await db.execute(collision_stmt)).scalars().first()
-    
+    collision = (await db.execute(
+        select(Plan).where(func.lower(Plan.name) == new_name.lower(), Plan.status != "archived")
+    )).scalars().first()
     if collision:
         return {"error": {"code": "PLAN_NAME_DUPLICATE", "message": f"El nombre '{new_name}' ya está en uso"}}
 
@@ -286,21 +273,25 @@ async def duplicate_plan(
             pass
 
     duplicated = Plan(
-        id=new_plan_id,
+        plan_id=new_plan_id,
         name=new_name,
-        description=getattr(plan, "description", ""),
-        tag_color=getattr(plan, "tag_color", "slate"),
+        description=plan.description or "",
+        tag_color=plan.tag_color or "slate",
         status="draft",
-        setup_price=getattr(plan, "setup_price", 0.00),
-        monthly_price=getattr(plan, "monthly_price", 0.00),
-        currency=getattr(plan, "currency", "USD"),
+        setup_price=plan.setup_price or 0.0,
+        monthly_price=plan.monthly_price or 0.0,
+        currency=plan.currency or "USD",
         effective_date=effective_date_val,
-        features=getattr(plan, "features", []),
         created_at=now,
-        updated_at=now
+        updated_at=now,
     )
-
     db.add(duplicated)
+    await db.flush()
+
+    # Copiar features del plan original
+    original_features = await _get_plan_features(db, planId)
+    await _save_plan_features(db, new_plan_id, original_features)
+
     await db.commit()
     await db.refresh(duplicated)
 
@@ -308,66 +299,50 @@ async def duplicate_plan(
 
 
 # ─── POST /api/plans/{planId}/archive ─────────────────────────────────────────
-@router.post(
-    "/{planId}/archive",
-    summary="Archivar un plan (soft-delete)",
-)
+@router.post("/{planId}/archive", summary="Archivar un plan")
 async def archive_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Plan).where(Plan.id == planId))
+    result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
-
     if not plan:
         raise HTTPException(status_code=404, detail="No encontrado")
-
-    if getattr(plan, "status", "") == "archived":
+    if plan.status == "archived":
         return {"error": {"code": "PLAN_ALREADY_ARCHIVED", "message": "El plan ya está archivado"}}
 
     now = datetime.utcnow()
     plan.status = "archived"
     plan.archived_at = now
     plan.updated_at = now
-    
     db.add(plan)
     await db.commit()
-    
-    active_clinics = await _get_active_clinics_count(db, plan.id)
 
+    active_clinics = await _get_active_clinics_count(db, planId)
     return {
         "status": "success",
-        "id": plan.id,
-        "status_field": plan.status,
+        "id": planId,
         "archivedAt": plan.archived_at.isoformat() + "Z",
         "affectedClinics": active_clinics,
     }
 
 
 # ─── POST /api/plans/{planId}/restore ─────────────────────────────────────────
-@router.post(
-    "/{planId}/restore",
-    summary="Restaurar un plan archivado",
-)
+@router.post("/{planId}/restore", summary="Restaurar un plan archivado")
 async def restore_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Plan).where(Plan.id == planId))
+    result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
-
     if not plan:
         raise HTTPException(status_code=404, detail="No encontrado")
-
-    if getattr(plan, "status", "") != "archived":
+    if plan.status != "archived":
         return {"error": {"code": "PLAN_NOT_ARCHIVED", "message": "El plan ya está activo"}}
 
     now = datetime.utcnow()
-    plan.status = "active" # o 'draft' dependiendo la regla de negocio
+    plan.status = "active"
     plan.archived_at = None
     plan.updated_at = now
-
     db.add(plan)
     await db.commit()
 
     return {
         "status": "success",
-        "id": plan.id,
-        "status_field": plan.status,
-        "archivedAt": None,
+        "id": planId,
         "restoredAt": now.isoformat() + "Z",
     }

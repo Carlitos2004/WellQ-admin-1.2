@@ -66,15 +66,15 @@ class Plan(SQLModel, table=True):
     __tablename__ = "plans"
 
     id: Optional[int]               = Field(default=None, primary_key=True)
-    plan_id: str                    = Field(unique=True, index=True)
+    plan_id: str                    = Field(unique=True, index=True)   # ← string ID canónico
     name: str                       = Field(unique=True)
     description: Optional[str]      = Field(default=None, sa_column=Column(Text))
     tag_color: str                  = Field(default="slate")
-    status: str                     = Field(default="active")      # "draft" | "active" | "archived"
+    status: str                     = Field(default="active")          # "draft" | "active" | "archived"
     setup_price: float              = Field(default=0.0)
     monthly_price: float            = Field(default=0.0)
     currency: str                   = Field(default="USD")
-    effective_date: str             = Field(default="")
+    effective_date: Optional[datetime] = Field(default=None)           # ← datetime, no str
     active_clinics: int             = Field(default=0)
     arr: float                      = Field(default=0.0)
     created_by_email: str           = Field(default="admin@wellq.co")
@@ -91,9 +91,9 @@ class PlanFeature(SQLModel, table=True):
     __tablename__ = "plan_features"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    plan_id: str      = Field(index=True)
-    feature_id: str   = Field(index=True)
-    limit_value: str  = Field(default="0")
+    plan_id: str      = Field(index=True)     # referencia a Plan.plan_id
+    feature_id: str   = Field(index=True)     # referencia a Feature.feature_id
+    limit_value: str  = Field(default="0")    # guardado como string para soportar "Email", "1", etc.
 
 
 # ── 5. CLINIC_PLANS ────────────────────────────────────────────────────────────
@@ -203,14 +203,14 @@ class KpiSnapshot(SQLModel, table=True):
     __tablename__ = "kpi_snapshots"
 
     id: Optional[int]     = Field(default=None, primary_key=True)
-    month: str            = Field()                                # "Nov", "Dic", "Ene" …
+    month: str            = Field()
     year: int             = Field()
     arr: float            = Field(default=0.0)
     mrr: float            = Field(default=0.0)
     nrr_percentage: float = Field(default=0.0)
     expansion_mrr: float  = Field(default=0.0)
     churn_mrr: float      = Field(default=0.0)
-    nrr_status: str       = Field(default="healthy")              # "healthy" | "warning" | "critical"
+    nrr_status: str       = Field(default="healthy")
     created_at: datetime  = Field(default_factory=datetime.utcnow)
 
 
@@ -229,11 +229,11 @@ class Invoice(SQLModel, table=True):
     __tablename__ = "invoices"
 
     id: Optional[int]             = Field(default=None, primary_key=True)
-    invoice_id: str               = Field(unique=True, index=True) # "INV-2026-001"
+    invoice_id: str               = Field(unique=True, index=True)
     clinic_id: str                = Field(index=True)
     amount: float                 = Field(default=0.0)
     currency: str                 = Field(default="USD")
-    status: str                   = Field(default="pending")       # "paid" | "pending" | "overdue"
+    status: str                   = Field(default="pending")
     issued_at: datetime           = Field()
     pdf_url: Optional[str]        = Field(default=None)
     created_at: datetime          = Field(default_factory=datetime.utcnow)
@@ -258,10 +258,10 @@ class Server(SQLModel, table=True):
     __tablename__ = "servers"
 
     id: Optional[int]     = Field(default=None, primary_key=True)
-    server_id: str        = Field(unique=True, index=True)         # "SRV-AZ-001"
+    server_id: str        = Field(unique=True, index=True)
     name: str             = Field()
     region: str           = Field()
-    status: str           = Field(default="healthy")               # "healthy" | "warning" | "down"
+    status: str           = Field(default="healthy")
     uptime: str           = Field(default="99.9%")
     cpu_usage: str        = Field(default="0%")
     ram_usage: str        = Field(default="0%")
@@ -273,9 +273,9 @@ class BackgroundProcess(SQLModel, table=True):
     __tablename__ = "background_processes"
 
     id: Optional[int]               = Field(default=None, primary_key=True)
-    process_id: str                 = Field(unique=True, index=True) # "PROC-001"
+    process_id: str                 = Field(unique=True, index=True)
     name: str                       = Field()
-    status: str                     = Field(default="running")     # "running" | "sleeping" | "failed"
+    status: str                     = Field(default="running")
     queued_items: int               = Field(default=0)
     memory_consumption: str         = Field(default="0MB")
     description: Optional[str]      = Field(default=None, sa_column=Column(Text))
@@ -290,7 +290,7 @@ class MrrSnapshot(SQLModel, table=True):
     __tablename__ = "mrr_snapshots"
 
     id: Optional[int]                  = Field(default=None, primary_key=True)
-    period_month: str                  = Field()                   # "Apr"
+    period_month: str                  = Field()
     period_year: int                   = Field()
     total_mrr: float                   = Field(default=0.0)
     currency: str                      = Field(default="USD")
@@ -311,7 +311,7 @@ class ChurnRiskRegion(SQLModel, table=True):
     region: str                = Field()
     clinics_at_risk: int       = Field(default=0)
     potential_mrr_loss: float  = Field(default=0.0)
-    risk_level: str            = Field(default="Low")              # "Low" | "Medium" | "High"
+    risk_level: str            = Field(default="Low")
     recorded_at: datetime      = Field(default_factory=datetime.utcnow)
 
 
@@ -320,13 +320,21 @@ class AppUsageStat(SQLModel, table=True):
     __tablename__ = "app_usage_stats"
 
     id: Optional[int]                          = Field(default=None, primary_key=True)
-    app_type: str                              = Field(index=True)  # "patients" | "tablet"
+    app_type: str                              = Field(index=True)
     period: str                                = Field(default="current_month")
     monthly_active_users: int                  = Field(default=0)
     average_session_length_minutes: float      = Field(default=0.0)
     crash_free_sessions_percentage: float      = Field(default=0.0)
-    top_screens: Optional[str]                 = Field(default=None)  # JSON array como string
+    top_screens: Optional[str]                 = Field(default=None)
     recorded_at: datetime                      = Field(default_factory=datetime.utcnow)
+    # ── NUEVOS ────────────────────────────────────────────────────────────────
+    total_downloads: int                       = Field(default=0)
+    active_today: int                          = Field(default=0)
+    active_30d: int                            = Field(default=0)
+    inactive_users: int                        = Field(default=0)
+    ios_downloads: int                         = Field(default=0)
+    android_downloads: int                     = Field(default=0)
+    registered_users: int                      = Field(default=0)
 
 
 # ── 20. FEATURE_ADOPTION ───────────────────────────────────────────────────────
@@ -349,7 +357,7 @@ class AdherenceSnapshot(SQLModel, table=True):
     id: Optional[int]                      = Field(default=None, primary_key=True)
     period: str                            = Field(default="current_month")
     overall_adherence_percentage: float    = Field(default=0.0)
-    breakdown_by_week: Optional[str]       = Field(default=None)   # JSON
+    breakdown_by_week: Optional[str]       = Field(default=None)
     top_dropping_point: Optional[str]      = Field(default=None)
     recorded_at: datetime                  = Field(default_factory=datetime.utcnow)
 
@@ -359,11 +367,11 @@ class CohortRetention(SQLModel, table=True):
     __tablename__ = "cohort_retention"
 
     id: Optional[int]          = Field(default=None, primary_key=True)
-    cohort_label: str          = Field()                           # "Jan 2026"
+    cohort_label: str          = Field()
     cohort_month: int          = Field()
     cohort_year: int           = Field()
     users_count: int           = Field(default=0)
-    retention_by_month: str    = Field(sa_column=Column(Text))    # JSON
+    retention_by_month: str    = Field(sa_column=Column(Text))
     recorded_at: datetime      = Field(default_factory=datetime.utcnow)
 
 
@@ -377,7 +385,7 @@ class SoapQualityMetric(SQLModel, table=True):
     acceptance_rate_percentage: float              = Field(default=0.0)
     edits_required_percentage: float               = Field(default=0.0)
     average_time_saved_minutes_per_note: float     = Field(default=0.0)
-    common_corrections: Optional[str]              = Field(default=None)  # JSON array
+    common_corrections: Optional[str]              = Field(default=None)
     recorded_at: datetime                          = Field(default_factory=datetime.utcnow)
 
 
@@ -389,7 +397,7 @@ class AiCostSnapshot(SQLModel, table=True):
     period: str                    = Field(default="current_month")
     currency: str                  = Field(default="USD")
     total_cost: float              = Field(default=0.0)
-    breakdown: Optional[str]       = Field(default=None, sa_column=Column(Text))  # JSON
+    breakdown: Optional[str]       = Field(default=None, sa_column=Column(Text))
     projected_eom_cost: float      = Field(default=0.0)
     recorded_at: datetime          = Field(default_factory=datetime.utcnow)
 
@@ -399,11 +407,11 @@ class AiLatencyMetric(SQLModel, table=True):
     __tablename__ = "ai_latency_metrics"
 
     id: Optional[int]          = Field(default=None, primary_key=True)
-    service: str               = Field(index=True)                 # "pose_estimation_realtime"
+    service: str               = Field(index=True)
     period: str                = Field(default="last_24_hours")
     average_latency_ms: int    = Field(default=0)
     p95_latency_ms: int        = Field(default=0)
-    status: str                = Field(default="healthy")          # "healthy" | "warning" | "degraded"
+    status: str                = Field(default="healthy")
     recorded_at: datetime      = Field(default_factory=datetime.utcnow)
 
 
@@ -415,7 +423,7 @@ class PoseAnalysisSnapshot(SQLModel, table=True):
     period: str                                = Field(default="last_7_days")
     total_sessions_analyzed: int               = Field(default=0)
     overall_success_rate_percentage: float     = Field(default=0.0)
-    failure_reasons: Optional[str]             = Field(default=None, sa_column=Column(Text))  # JSON
+    failure_reasons: Optional[str]             = Field(default=None, sa_column=Column(Text))
     recorded_at: datetime                      = Field(default_factory=datetime.utcnow)
 
 
@@ -424,7 +432,7 @@ class AppVersion(SQLModel, table=True):
     __tablename__ = "app_versions"
 
     id: Optional[int]     = Field(default=None, primary_key=True)
-    app_type: str         = Field(index=True)                      # "patient" | "clinician"
+    app_type: str         = Field(index=True)
     version: str          = Field()
     user_count: int       = Field(default=0)
     percentage: float     = Field(default=0.0)
@@ -436,7 +444,71 @@ class PlatformSetting(SQLModel, table=True):
     __tablename__ = "platform_settings"
 
     id: Optional[int]      = Field(default=None, primary_key=True)
-    setting_key: str       = Field(unique=True, index=True)        # "maintenance_mode"
-    setting_value: str     = Field()                               # guardado como string
+    setting_key: str       = Field(unique=True, index=True)
+    setting_value: str     = Field()
     updated_at: datetime   = Field(default_factory=datetime.utcnow)
     updated_by: str        = Field(default="admin@wellq.co")
+
+
+# ── 29. IMPERSONATE_AUDIT_LOG ──────────────────────────────────────────────────
+class ImpersonateAuditLog(SQLModel, table=True):
+    __tablename__ = "impersonate_audit_log"
+
+    id: Optional[int]              = Field(default=None, primary_key=True)
+    audit_log_id: str              = Field(unique=True, index=True)    # "audit-uuid"
+    clinic_id: str                 = Field(index=True)
+    clinic_name: str               = Field()
+    admin_user_id: str             = Field(index=True)
+    admin_email: str               = Field()
+    reason: str                    = Field(sa_column=Column(Text))     # Motivo declarado (min 10 chars)
+    session_token_hash: str        = Field()                           # Hash del token (nunca el token plano)
+    expires_at: datetime           = Field()
+    revoked_at: Optional[datetime] = Field(default=None)
+    created_at: datetime           = Field(default_factory=datetime.utcnow)
+
+
+# ── 30. NEEDS_ATTENTION_ITEMS ──────────────────────────────────────────────────
+class NeedsAttentionItem(SQLModel, table=True):
+    __tablename__ = "needs_attention_items"
+
+    id: Optional[int]               = Field(default=None, primary_key=True)
+    item_id: str                    = Field(unique=True, index=True)   # "attn-001"
+    clinic_id: str                  = Field(index=True)
+    clinic_name: str                = Field()
+    issue_type: str                 = Field(index=True)                # "overdue_invoice" | "no_login" | "low_health"
+    severity: str                   = Field()                          # "critical" | "warning" | "info"
+    description: str                = Field(sa_column=Column(Text))
+    action_url: Optional[str]       = Field(default=None)
+    is_resolved: bool               = Field(default=False)
+    resolved_at: Optional[datetime] = Field(default=None)
+    created_at: datetime            = Field(default_factory=datetime.utcnow)
+
+
+# ── 31. INFRASTRUCTURE_COST_SNAPSHOTS ─────────────────────────────────────────
+class InfrastructureCostSnapshot(SQLModel, table=True):
+    __tablename__ = "infrastructure_cost_snapshots"
+
+    id: Optional[int]          = Field(default=None, primary_key=True)
+    period: str                = Field(index=True)                     # "Marzo 2026"
+    period_year: int           = Field()
+    period_month: int          = Field()
+    total_usd: float           = Field(default=0.0)
+    budget_usd: float          = Field(default=0.0)
+    budget_used_percent: float = Field(default=0.0)
+    breakdown: Optional[str]   = Field(default=None, sa_column=Column(Text))  # JSON array de CostBreakdown
+    last_updated: datetime     = Field(default_factory=datetime.utcnow)
+    created_at: datetime       = Field(default_factory=datetime.utcnow)
+
+
+# ── 32. INFRA_NODES ────────────────────────────────────────────────────────────
+class InfraNode(SQLModel, table=True):
+    __tablename__ = "infra_nodes"
+
+    id: Optional[int]          = Field(default=None, primary_key=True)
+    node_id: str               = Field(unique=True, index=True)        # "node-api-us-east"
+    name: str                  = Field()
+    type: str                  = Field(index=True)                     # "api" | "worker" | "database" | "cache" | "cdn" | "queue"
+    status: str                = Field(default="healthy")              # "healthy" | "degraded" | "down"
+    region: Optional[str]      = Field(default=None)
+    metrics: Optional[str]     = Field(default=None, sa_column=Column(Text))  # JSON libre
+    updated_at: datetime       = Field(default_factory=datetime.utcnow)

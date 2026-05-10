@@ -15,12 +15,11 @@ import app.models  # registra todos los modelos SQLModel
 from app.config import settings
 from app.db.neon import init_neon, close_neon, create_db_tables
 
-
 from app.routers import (
     auth, dashboard, clinics, platform, financials,
     alerts, search, infrastructure, analytics, users,
     notifications, jobs, settings as settings_router,
-    features, plans, clinic_plans,
+    features, plans, clinic_plans, kpis,
 )
 
 structlog.configure(
@@ -65,7 +64,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,6 +77,7 @@ app.include_router(platform.router)
 app.include_router(notifications.router)
 app.include_router(jobs.router)
 app.include_router(financials.router)
+app.include_router(kpis.router)
 app.include_router(alerts.router)
 app.include_router(search.router)
 app.include_router(infrastructure.router)

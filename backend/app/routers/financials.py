@@ -1,34 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, asc
+from sqlalchemy import select, desc
+from datetime import datetime
 from app.db.neon import get_db
 from app.models_db import MrrSnapshot, ChurnRiskRegion
 
-router = APIRouter(
-    prefix="/api/financials",
-    tags=["Financials"]
-)
+router = APIRouter(prefix="/api/financials", tags=["Financials"])
 
-# 12. GET /financials/mrr/breakdown
+def parse_date(date_str: str | None) -> datetime | None:
+    if not date_str:
+        return None
+    try:
+        return datetime.fromisoformat(date_str)
+    except ValueError:
+        return None
+
 @router.get("/mrr/breakdown")
-async def get_mrr_breakdown(db: AsyncSession = Depends(get_db)):
-    # Obtenemos el registro más reciente ordenando por ID o created_at (asumiendo id autoincremental o UUID secuencial)
-    result = await db.execute(select(MrrSnapshot).order_by(desc(MrrSnapshot.id)))
-    snapshot = result.scalars().first()
-
+async def get_mrr_breakdown(
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    # Obtener el snapshot más reciente (podría filtrarse por fecha si tuvieras recorded_at)
+    stmt = select(MrrSnapshot).order_by(MrrSnapshot.period_year.desc(), MrrSnapshot.id.desc())
+    snapshot = (await db.execute(stmt)).scalars().first()
     if not snapshot:
         raise HTTPException(status_code=404, detail="No encontrado")
-
-    # Asumiendo que si total_mrr no está directo en la tabla, lo calculamos de los componentes
-    total_mrr = getattr(snapshot, "total_mrr", 
-                        snapshot.new_business + snapshot.expansion + snapshot.contraction + snapshot.churn + snapshot.retained)
-    currency = getattr(snapshot, "currency", "USD")
-
     return {
         "status": "success",
         "data": {
-            "total_mrr": total_mrr,
-            "currency": currency,
+            "total_mrr": snapshot.total_mrr,
+            "currency": snapshot.currency,
             "breakdown": {
                 "new_business": snapshot.new_business,
                 "expansion": snapshot.expansion,
@@ -40,12 +42,40 @@ async def get_mrr_breakdown(db: AsyncSession = Depends(get_db)):
         }
     }
 
-# 13. GET /financials/churn-risk/by-region
-@router.get("/churn-risk/by-region")
-async def get_churn_risk_by_region(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ChurnRiskRegion))
-    regions = result.scalars().all()
+@router.get("/mrr/snapshots")
+async def get_mrr_snapshots(
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(MrrSnapshot).order_by(MrrSnapshot.period_year.asc(), MrrSnapshot.id.asc())
+    snapshots = (await db.execute(stmt)).scalars().all()
+    return {
+        "status": "success",
+        "data": [
+            {
+                "period_month": s.period_month,
+                "period_year": s.period_year,
+                "total_mrr": s.total_mrr,
+                "new_business": s.new_business,
+                "expansion": s.expansion,
+                "contraction": s.contraction,
+                "churn": s.churn,
+                "retained": s.retained,
+                "monthly_growth_percentage": s.monthly_growth_percentage,
+            }
+            for s in snapshots
+        ]
+    }
 
+@router.get("/churn-risk/by-region")
+async def get_churn_risk_by_region(
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(ChurnRiskRegion)
+    regions = (await db.execute(stmt)).scalars().all()
     return {
         "status": "success",
         "data": [

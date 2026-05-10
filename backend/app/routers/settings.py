@@ -164,3 +164,26 @@ async def setup_database(config: dict = Body(...), db: AsyncSession = Depends(ge
     await db.commit()
 
     return {"status": "success", "message": "Parámetros de base de datos actualizados exitosamente."}
+
+
+# 56. GET /settings/api-keys/gcp
+@router.get("/api-keys/gcp", summary="Obtener API Key de GCP")
+async def get_gcp_key(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(PlatformSetting).where(PlatformSetting.setting_key == 'gcp_api_key')
+    )
+    setting = result.scalars().first()
+    data = _load(setting)
+    return {"gcp_api_key": data.get("api_key", "")}
+
+# 57. POST /settings/api-keys/gcp
+@router.post("/api-keys/gcp", summary="Guardar API Key de GCP")
+async def set_gcp_key(payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    api_key = payload.get("api_key", "")
+    setting = await _get_or_create(db, 'gcp_api_key')
+    data = _load(setting)
+    data["api_key"] = api_key
+    setting.setting_value = json.dumps(data)
+    setting.updated_at = datetime.utcnow()
+    await db.commit()
+    return {"status": "success", "message": "GCP API Key actualizada"}

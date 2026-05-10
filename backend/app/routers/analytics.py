@@ -60,6 +60,9 @@ async def get_app_usage(app_type: str = Path(...), db: AsyncSession = Depends(ge
     if not stat:
         return {
             "status": "success", "app_type": app_type, "appType": app_type,
+            "total_downloads": 0, "active_today": 0, "active_30d": 0,
+            "inactive_users": 0, "ios_downloads": 0, "android_downloads": 0,
+            "registered_users": 0,
             "metrics": {
                 "monthly_active_users": 0, "monthlyActiveUsers": 0,
                 "average_session_length_minutes": 0, "averageSessionLengthMinutes": 0,
@@ -68,12 +71,18 @@ async def get_app_usage(app_type: str = Path(...), db: AsyncSession = Depends(ge
             }
         }
 
-    # Forzamos que top_screens sea un array para evitar otro .map error
     top_screens = force_list(stat.top_screens)
 
     return {
         "status": "success",
         "app_type": stat.app_type, "appType": stat.app_type,
+        "total_downloads":   stat.total_downloads,
+        "active_today":      stat.active_today,
+        "active_30d":        stat.active_30d,
+        "inactive_users":    stat.inactive_users,
+        "ios_downloads":     stat.ios_downloads,
+        "android_downloads": stat.android_downloads,
+        "registered_users":  stat.registered_users,
         "metrics": {
             "monthly_active_users": stat.monthly_active_users,
             "monthlyActiveUsers": stat.monthly_active_users,

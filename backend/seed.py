@@ -20,7 +20,6 @@ from sqlalchemy.orm import sessionmaker
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
-# SE AGREGARON LAS 16 TABLAS NUEVAS AL IMPORT
 from app.models_db import (
     Clinic, Feature, Plan, PlanFeature,
     ClinicPlan, ScheduledChange, Alert,
@@ -29,7 +28,9 @@ from app.models_db import (
     Invoice, ClinicUsageMetric, Server, BackgroundProcess,
     MrrSnapshot, ChurnRiskRegion, AppUsageStat, FeatureAdoption,
     AdherenceSnapshot, CohortRetention, SoapQualityMetric, AiCostSnapshot,
-    AiLatencyMetric, PoseAnalysisSnapshot, AppVersion, PlatformSetting
+    AiLatencyMetric, PoseAnalysisSnapshot, AppVersion, PlatformSetting,
+    ImpersonateAuditLog, NeedsAttentionItem,
+    InfrastructureCostSnapshot, InfraNode
 )
 
 DATABASE_URL = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
@@ -71,6 +72,63 @@ CLINICS_DATA = [
         "address": "Av. Las Condes 456, Santiago",
         "internal_notes": None,
     },
+    # ── NUEVAS CLÍNICAS ──────────────────────────────────────────────────────
+    {
+        "clinic_id": "CL-003", "name": "Centro Kinésico del Sur",
+        "tier": "smb", "status": "active",
+        "patients_used": 412, "patients_limit": 500,
+        "health_score": 54,
+        "last_login": datetime(2026, 5, 1, 8, 45, 0),
+        "mrr": 299.0,
+        "contact_name": "Pedro Alarcón", "contact_email": "pedro@kinesur.cl",
+        "contact_phone": "+56933333333",
+        "company_name": "Kinésica del Sur Ltda.", "tax_id": "78.111.222-3",
+        "billing_email": "facturas@kinesur.cl",
+        "address": "Av. Matta 2001, Santiago",
+        "internal_notes": "Posible upgrade a plan superior en 3 meses.",
+    },
+    {
+        "clinic_id": "CL-004", "name": "Fisioclínica Norte",
+        "tier": "enterprise", "status": "active",
+        "patients_used": 3800, "patients_limit": 5000,
+        "health_score": 91,
+        "last_login": datetime(2026, 5, 2, 10, 20, 0),
+        "mrr": 1999.0,
+        "contact_name": "Carolina Muñoz", "contact_email": "carolina@fisioclinicanorte.cl",
+        "contact_phone": "+56944444444",
+        "company_name": "Fisioclínica Norte SpA", "tax_id": "79.333.444-5",
+        "billing_email": "carolina@fisioclinicanorte.cl",
+        "address": "Av. Independencia 3456, Santiago",
+        "internal_notes": None,
+    },
+    {
+        "clinic_id": "CL-005", "name": "Rehab Centro",
+        "tier": "trial", "status": "trial",
+        "patients_used": 30, "patients_limit": 50,
+        "health_score": 88,
+        "last_login": datetime(2026, 5, 3, 16, 0, 0),
+        "mrr": 0.0,
+        "contact_name": "Andrés Soto", "contact_email": "info@rehabcentro.cl",
+        "contact_phone": "+56955555555",
+        "company_name": "Rehab Centro Ltda.", "tax_id": "80.555.666-7",
+        "billing_email": None,
+        "address": "Calle Ejército 123, Santiago",
+        "internal_notes": "Cliente en período de prueba, muy activo.",
+    },
+    {
+        "clinic_id": "CL-006", "name": "Clínica del Deporte SpA",
+        "tier": "smb", "status": "warning",
+        "patients_used": 490, "patients_limit": 500,
+        "health_score": 41,
+        "last_login": datetime(2026, 4, 15, 12, 30, 0),
+        "mrr": 299.0,
+        "contact_name": "Ignacio Rojas", "contact_email": "irojas@deporte.cl",
+        "contact_phone": "+56966666666",
+        "company_name": "Clínica del Deporte SpA", "tax_id": "81.777.888-9",
+        "billing_email": "irojas@deporte.cl",
+        "address": "Av. Bilbao 987, Santiago",
+        "internal_notes": "Salud financiera baja, riesgo de churn moderado.",
+    },
 ]
 
 FEATURES_DATA = [
@@ -98,19 +156,19 @@ PLANS_DATA = [
         "plan_id": "plan-trial", "name": "Trial", "tag_color": "purple", "status": "active",
         "description": "14-day free evaluation tier",
         "setup_price": 0.0, "monthly_price": 0.0, "currency": "USD",
-        "effective_date": "2026-01-01", "active_clinics": 8, "arr": 0.0,
+        "effective_date": datetime(2026, 1, 1), "active_clinics": 8, "arr": 0.0,
     },
     {
         "plan_id": "plan-smb", "name": "SMB", "tag_color": "blue", "status": "active",
         "description": "Small & medium clinics",
         "setup_price": 500.0, "monthly_price": 299.0, "currency": "USD",
-        "effective_date": "2026-01-01", "active_clinics": 74, "arr": 264924.0,
+        "effective_date": datetime(2026, 1, 1), "active_clinics": 74, "arr": 264924.0,
     },
     {
         "plan_id": "plan-enterprise", "name": "Enterprise", "tag_color": "indigo", "status": "active",
         "description": "Multi-location and hospital networks",
         "setup_price": 5000.0, "monthly_price": 1999.0, "currency": "USD",
-        "effective_date": "2026-01-01", "active_clinics": 42, "arr": 1007496.0,
+        "effective_date": datetime(2026, 1, 1), "active_clinics": 42, "arr": 1007496.0,
     },
 ]
 
@@ -153,6 +211,31 @@ CLINIC_PLANS_DATA = [
         "effective_from": datetime(2026, 2, 1), "effective_to": None,
         "reason": "Onboarding",
     },
+    # ── NUEVAS ASIGNACIONES ──────────────────────────────────────────────────
+    {
+        "assignment_id": "asgn-003", "clinic_id": "CL-003", "plan_id": "plan-smb",
+        "plan_snapshot": json.dumps({"id": "plan-smb", "name": "SMB", "monthlyPrice": 299.0, "currency": "USD"}),
+        "effective_from": datetime(2026, 3, 15), "effective_to": None,
+        "reason": "Onboarding",
+    },
+    {
+        "assignment_id": "asgn-004", "clinic_id": "CL-004", "plan_id": "plan-enterprise",
+        "plan_snapshot": json.dumps({"id": "plan-enterprise", "name": "Enterprise", "monthlyPrice": 1999.0, "currency": "USD"}),
+        "effective_from": datetime(2026, 1, 20), "effective_to": None,
+        "reason": "Cliente grande desde inicio",
+    },
+    {
+        "assignment_id": "asgn-005", "clinic_id": "CL-005", "plan_id": "plan-trial",
+        "plan_snapshot": json.dumps({"id": "plan-trial", "name": "Trial", "monthlyPrice": 0.0, "currency": "USD"}),
+        "effective_from": datetime(2026, 5, 1), "effective_to": datetime(2026, 5, 14, 23, 59, 59),
+        "reason": "Período de prueba 14 días",
+    },
+    {
+        "assignment_id": "asgn-006", "clinic_id": "CL-006", "plan_id": "plan-smb",
+        "plan_snapshot": json.dumps({"id": "plan-smb", "name": "SMB", "monthlyPrice": 299.0, "currency": "USD"}),
+        "effective_from": datetime(2026, 3, 1), "effective_to": None,
+        "reason": "Onboarding",
+    },
 ]
 
 SCHEDULED_CHANGES_DATA = [
@@ -160,6 +243,12 @@ SCHEDULED_CHANGES_DATA = [
         "schedule_id": "sched-001", "clinic_id": "CL-001", "plan_id": "plan-enterprise",
         "effective_from": datetime(2026, 7, 1),
         "status": "scheduled", "notify_clinic": True,
+    },
+    # ── NUEVOS CAMBIOS PROGRAMADOS ──────────────────────────────────────────
+    {
+        "schedule_id": "sched-002", "clinic_id": "CL-003", "plan_id": "plan-enterprise",
+        "effective_from": datetime(2026, 8, 1),
+        "status": "scheduled", "notify_clinic": False,
     },
 ]
 
@@ -178,6 +267,21 @@ ALERTS_DATA = [
         "severity": "medium", "related_type": "clinic", "related_id": "CL-002",
         "created_at": datetime(2026, 4, 24, 15, 30, 0),
     },
+    # ── NUEVAS ALERTAS ──────────────────────────────────────────────────────
+    {
+        "alert_id": "ALT-003", "type": "health_declining",
+        "title": "Salud de cliente cayendo",
+        "message": "Clínica del Deporte SpA descendió a health score 41. Riesgo de churn.",
+        "severity": "high", "related_type": "clinic", "related_id": "CL-006",
+        "created_at": datetime(2026, 5, 1, 9, 15, 0),
+    },
+    {
+        "alert_id": "ALT-004", "type": "trial_ending",
+        "title": "Prueba por terminar",
+        "message": "Rehab Centro finaliza su prueba en 2 días. Sin plan activo asignado después.",
+        "severity": "medium", "related_type": "clinic", "related_id": "CL-005",
+        "created_at": datetime(2026, 5, 6, 11, 0, 0),
+    },
 ]
 
 NOTIFICATIONS_DATA = [
@@ -194,6 +298,20 @@ NOTIFICATIONS_DATA = [
         "channel": "in_app", "status": "pending", "recipient_clinic_id": "all",
         "sent_by": "system-ops", "sender_name": "System Ops",
     },
+    # ── NUEVAS NOTIFICACIONES ──────────────────────────────────────────────
+    {
+        "notification_id": "notif-003", "title": "Recordatorio de pago",
+        "message": "Su factura de abril está disponible. Pague antes del 5 de mayo.",
+        "channel": "email", "status": "sent", "recipient_clinic_id": "CL-003",
+        "sent_by": "system-billing", "sender_name": "Facturación WellQ",
+        "sent_at": datetime(2026, 5, 1, 8, 0, 0),
+    },
+    {
+        "notification_id": "notif-004", "title": "Nuevo feature: Integración con Clio",
+        "message": "Ya puedes conectar tu cuenta con Clio EHR. Actívalo en Settings.",
+        "channel": "in_app", "status": "pending", "recipient_clinic_id": "all",
+        "sent_by": "PM-001", "sender_name": "Producto WellQ",
+    },
 ]
 
 JOBS_DATA = [
@@ -205,12 +323,32 @@ JOBS_DATA = [
         "started_at": datetime(2026, 4, 25, 19, 0, 5),
         "completed_at": datetime(2026, 4, 25, 19, 1, 10),
     },
+    # ── NUEVOS JOBS ─────────────────────────────────────────────────────────
+    {
+        "job_id": "job-b2a5-4c9e-8d1f", "job_type": "generate_monthly_invoices",
+        "status": "running", "progress": 45, "created_by": "system-scheduler",
+        "result_url": None,
+        "created_at": datetime(2026, 5, 1, 1, 0, 0),
+        "started_at": datetime(2026, 5, 1, 1, 0, 3),
+        "completed_at": None,
+    },
+    {
+        "job_id": "job-1f3c-4a2b-9e7d", "job_type": "data_cleanup_temp_files",
+        "status": "completed", "progress": 100, "created_by": "system-ops",
+        "result_url": None,
+        "created_at": datetime(2026, 4, 30, 22, 0, 0),
+        "started_at": datetime(2026, 4, 30, 22, 0, 1),
+        "completed_at": datetime(2026, 4, 30, 22, 5, 45),
+    },
 ]
 
 ADMIN_USERS_DATA = [
     {"user_id": "USR-SUPER-001", "full_name": "Carlos Administrador", "email": "carlos.admin@wellq.co", "role": "super_admin", "status": "active"},
     {"user_id": "USR-ADMIN-002", "full_name": "Ana Soporte",          "email": "ana.soporte@wellq.co",  "role": "admin",       "status": "active"},
     {"user_id": "USR-VIEW-003",  "full_name": "Juan Auditor",         "email": "juan.auditor@wellq.co", "role": "viewer",      "status": "inactive"},
+    # ── NUEVOS ADMIN USERS ──────────────────────────────────────────────────
+    {"user_id": "USR-ADMIN-004", "full_name": "Laura Devops",         "email": "laura.devops@wellq.co",  "role": "admin",       "status": "active"},
+    {"user_id": "USR-VIEW-005",  "full_name": "Sofía Contraloría",   "email": "sofia.contraloria@wellq.co", "role": "viewer", "status": "active"},
 ]
 
 KPI_SNAPSHOTS_DATA = [
@@ -234,47 +372,121 @@ APP_METRICS_DATA = [
 ]
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DATOS NUEVOS AGREGADOS (LAS 16 TABLAS FALTANTES DE MODELS_DB.PY)
+# DATOS NUEVOS (YA EXISTENTES + NUEVOS)
 # ══════════════════════════════════════════════════════════════════════════════
 
 INVOICES_DATA = [
-    {"invoice_id": "INV-2026-001", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "paid", "issued_at": datetime(2026, 4, 1), "pdf_url": "https://storage.wellq.co/inv/1.pdf"},
-    {"invoice_id": "INV-2026-002", "clinic_id": "CL-002", "amount": 299.0, "currency": "USD", "status": "pending", "issued_at": datetime(2026, 4, 15), "pdf_url": "https://storage.wellq.co/inv/2.pdf"},
+    {"invoice_id": "INV-2026-001", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 4, 1),  "pdf_url": "https://storage.wellq.co/inv/1.pdf"},
+    {"invoice_id": "INV-2026-002", "clinic_id": "CL-002", "amount": 299.0,  "currency": "USD", "status": "pending", "issued_at": datetime(2026, 4, 15), "pdf_url": "https://storage.wellq.co/inv/2.pdf"},
+    # ── NUEVAS INVOICES ─────────────────────────────────────────────────────
+    {"invoice_id": "INV-2026-003", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "pending", "issued_at": datetime(2026, 5, 1),  "pdf_url": "https://storage.wellq.co/inv/3.pdf"},
+    {"invoice_id": "INV-2026-004", "clinic_id": "CL-003", "amount": 299.0,  "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 3, 15), "pdf_url": "https://storage.wellq.co/inv/4.pdf"},
+    {"invoice_id": "INV-2026-005", "clinic_id": "CL-004", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 4, 20), "pdf_url": "https://storage.wellq.co/inv/5.pdf"},
+    {"invoice_id": "INV-2026-006", "clinic_id": "CL-004", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 5, 1),  "pdf_url": "https://storage.wellq.co/inv/6.pdf"},
+    {"invoice_id": "INV-2026-007", "clinic_id": "CL-006", "amount": 299.0,  "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 2, 1),  "pdf_url": "https://storage.wellq.co/inv/7.pdf"},
+    {"invoice_id": "INV-2026-008", "clinic_id": "CL-006", "amount": 299.0,  "currency": "USD", "status": "pending", "issued_at": datetime(2026, 5, 1),  "pdf_url": "https://storage.wellq.co/inv/8.pdf"},
 ]
 
 CLINIC_USAGE_METRICS_DATA = [
-    {"clinic_id": "CL-001", "period": "last_30_days", "active_clinicians": 45, "patient_sessions_completed": 3500, "ai_processing_minutes": 8400, "api_calls": 125000},
-    {"clinic_id": "CL-002", "period": "last_30_days", "active_clinicians": 5, "patient_sessions_completed": 450, "ai_processing_minutes": 950, "api_calls": 12000},
+    {"clinic_id": "CL-001", "period": "last_30_days", "active_clinicians": 45, "patient_sessions_completed": 3500, "ai_processing_minutes": 8400,  "api_calls": 125000},
+    {"clinic_id": "CL-002", "period": "last_30_days", "active_clinicians": 5,  "patient_sessions_completed": 450,  "ai_processing_minutes": 950,   "api_calls": 12000},
+    # ── NUEVAS MÉTRICAS DE USO ──────────────────────────────────────────────
+    {"clinic_id": "CL-003", "period": "last_30_days", "active_clinicians": 4,  "patient_sessions_completed": 380,  "ai_processing_minutes": 720,   "api_calls": 9400},
+    {"clinic_id": "CL-004", "period": "last_30_days", "active_clinicians": 42, "patient_sessions_completed": 3200, "ai_processing_minutes": 7600,  "api_calls": 98500},
+    {"clinic_id": "CL-005", "period": "last_30_days", "active_clinicians": 1,  "patient_sessions_completed": 80,   "ai_processing_minutes": 110,   "api_calls": 1350},
+    {"clinic_id": "CL-006", "period": "last_30_days", "active_clinicians": 3,  "patient_sessions_completed": 320,  "ai_processing_minutes": 510,   "api_calls": 8700},
 ]
 
 SERVERS_DATA = [
-    {"server_id": "SRV-AZ-001", "name": "AI Processing Node 1", "region": "us-east-1", "status": "healthy", "uptime": "99.9%", "cpu_usage": "45%", "ram_usage": "60%"},
-    {"server_id": "SRV-AZ-002", "name": "Database Primary", "region": "sa-east-1", "status": "healthy", "uptime": "99.99%", "cpu_usage": "65%", "ram_usage": "80%"},
+    {"server_id": "SRV-AZ-001", "name": "AI Processing Node 1", "region": "us-east-1", "status": "healthy", "uptime": "99.9%",  "cpu_usage": "45%", "ram_usage": "60%"},
+    {"server_id": "SRV-AZ-002", "name": "Database Primary",     "region": "sa-east-1", "status": "healthy", "uptime": "99.99%", "cpu_usage": "65%", "ram_usage": "80%"},
+    # ── NUEVOS SERVIDORES ───────────────────────────────────────────────────
+    {"server_id": "SRV-AZ-003", "name": "Web App Server",       "region": "us-east-1", "status": "healthy", "uptime": "99.95%", "cpu_usage": "30%", "ram_usage": "55%"},
+    {"server_id": "SRV-AZ-004", "name": "Cache Redis",          "region": "sa-east-1", "status": "healthy", "uptime": "100%",   "cpu_usage": "10%", "ram_usage": "25%"},
+    {"server_id": "SRV-AZ-005", "name": "Queue Worker 1",       "region": "us-east-1", "status": "degraded","uptime": "99.8%",  "cpu_usage": "78%", "ram_usage": "90%"},
 ]
 
 BACKGROUND_PROCESSES_DATA = [
-    {"process_id": "PROC-001", "name": "Daily Invoice Generation", "status": "sleeping", "queued_items": 0, "memory_consumption": "120MB"},
-    {"process_id": "PROC-002", "name": "Video Pose Estimation Queue", "status": "running", "queued_items": 15, "memory_consumption": "1024MB"},
+    {"process_id": "PROC-001", "name": "Daily Invoice Generation",   "status": "sleeping", "queued_items": 0,  "memory_consumption": "120MB"},
+    {"process_id": "PROC-002", "name": "Video Pose Estimation Queue","status": "running",  "queued_items": 15, "memory_consumption": "1024MB"},
+    # ── NUEVOS PROCESOS ─────────────────────────────────────────────────────
+    {"process_id": "PROC-003", "name": "Email Scheduler",            "status": "running",  "queued_items": 120,"memory_consumption": "45MB"},
+    {"process_id": "PROC-004", "name": "Health Score Calculator",    "status": "sleeping", "queued_items": 0,  "memory_consumption": "80MB"},
+    {"process_id": "PROC-005", "name": "Churn Prediction Job",       "status": "running",  "queued_items": 3,  "memory_consumption": "512MB"},
 ]
 
+# ── MRR: 12 meses completos (Jun 2025 → May 2026) ─────────────────────────────
 MRR_SNAPSHOTS_DATA = [
+    {"period_month": "Jun", "period_year": 2025, "total_mrr": 36500.0, "new_business": 900.0,  "expansion": 5500.0,  "contraction": 400.0, "churn": 2100.0, "retained": 34400.0, "monthly_growth_percentage": 1.2},
+    {"period_month": "Jul", "period_year": 2025, "total_mrr": 37800.0, "new_business": 1000.0, "expansion": 6200.0,  "contraction": 350.0, "churn": 2000.0, "retained": 35800.0, "monthly_growth_percentage": 3.6},
+    {"period_month": "Ago", "period_year": 2025, "total_mrr": 38900.0, "new_business": 850.0,  "expansion": 7000.0,  "contraction": 300.0, "churn": 1950.0, "retained": 36950.0, "monthly_growth_percentage": 2.9},
+    {"period_month": "Sep", "period_year": 2025, "total_mrr": 39800.0, "new_business": 950.0,  "expansion": 7500.0,  "contraction": 320.0, "churn": 1900.0, "retained": 37900.0, "monthly_growth_percentage": 2.3},
+    {"period_month": "Oct", "period_year": 2025, "total_mrr": 40600.0, "new_business": 1100.0, "expansion": 7800.0,  "contraction": 280.0, "churn": 2050.0, "retained": 38550.0, "monthly_growth_percentage": 2.0},
+    {"period_month": "Nov", "period_year": 2025, "total_mrr": 41000.0, "new_business": 800.0,  "expansion": 8000.0,  "contraction": 260.0, "churn": 2100.0, "retained": 38900.0, "monthly_growth_percentage": 1.0},
+    {"period_month": "Dic", "period_year": 2025, "total_mrr": 42000.0, "new_business": 1300.0, "expansion": 9500.0,  "contraction": 240.0, "churn": 1900.0, "retained": 40100.0, "monthly_growth_percentage": 2.4},
+    {"period_month": "Ene", "period_year": 2026, "total_mrr": 43950.0, "new_business": 1500.0, "expansion": 11000.0, "contraction": 310.0, "churn": 1750.0, "retained": 42200.0, "monthly_growth_percentage": 4.6},
+    {"period_month": "Feb", "period_year": 2026, "total_mrr": 44750.0, "new_business": 1200.0, "expansion": 12500.0, "contraction": 290.0, "churn": 1700.0, "retained": 43050.0, "monthly_growth_percentage": 1.8},
     {"period_month": "Mar", "period_year": 2026, "total_mrr": 46300.0, "new_business": 1200.0, "expansion": 14000.0, "contraction": 500.0, "churn": 1650.0, "retained": 44650.0, "monthly_growth_percentage": 3.4},
     {"period_month": "Abr", "period_year": 2026, "total_mrr": 45200.0, "new_business": 1500.0, "expansion": 15000.0, "contraction": 800.0, "churn": 1600.0, "retained": 43600.0, "monthly_growth_percentage": 2.1},
+    {"period_month": "May", "period_year": 2026, "total_mrr": 46400.0, "new_business": 1800.0, "expansion": 15500.0, "contraction": 600.0, "churn": 1580.0, "retained": 44820.0, "monthly_growth_percentage": 2.7},
 ]
 
+# ── Churn risk con risk_level siempre definido ─────────────────────────────────
 CHURN_RISK_REGIONS_DATA = [
-    {"region": "North America", "clinics_at_risk": 2, "potential_mrr_loss": 598.0, "risk_level": "Low"},
-    {"region": "LATAM", "clinics_at_risk": 5, "potential_mrr_loss": 1495.0, "risk_level": "Medium"},
+    {"region": "North America", "clinics_at_risk": 2, "potential_mrr_loss": 598.0,  "risk_level": "Low"},
+    {"region": "LATAM",         "clinics_at_risk": 5, "potential_mrr_loss": 1495.0, "risk_level": "Medium"},
+    {"region": "Europe",        "clinics_at_risk": 1, "potential_mrr_loss": 299.0,  "risk_level": "Low"},
+    {"region": "Asia Pacific",  "clinics_at_risk": 3, "potential_mrr_loss": 897.0,  "risk_level": "Medium"},
 ]
 
 APP_USAGE_STATS_DATA = [
-    {"app_type": "patients", "period": "current_month", "monthly_active_users": 15200, "average_session_length_minutes": 8.5, "crash_free_sessions_percentage": 99.8, "top_screens": json.dumps(["Home", "Exercises", "Progress"])},
-    {"app_type": "tablet", "period": "current_month", "monthly_active_users": 3400, "average_session_length_minutes": 45.2, "crash_free_sessions_percentage": 99.9, "top_screens": json.dumps(["Dashboard", "Patient Details", "Notes"])},
+    {
+        "app_type": "patients", "period": "current_month",
+        "monthly_active_users": 15200,
+        "average_session_length_minutes": 8.5,
+        "crash_free_sessions_percentage": 99.8,
+        "top_screens": json.dumps(["Home", "Exercises", "Progress"]),
+        "total_downloads": 892000,
+        "active_today": 45200,
+        "active_30d": 579000,
+        "inactive_users": 314000,
+        "ios_downloads": 456000,
+        "android_downloads": 436000,
+        "registered_users": 0,
+    },
+    {
+        "app_type": "tablet", "period": "current_month",
+        "monthly_active_users": 3400,
+        "average_session_length_minutes": 45.2,
+        "crash_free_sessions_percentage": 99.9,
+        "top_screens": json.dumps(["Dashboard", "Patient Details", "Notes"]),
+        "total_downloads": 4850,
+        "active_today": 2340,
+        "active_30d": 4210,
+        "inactive_users": 640,
+        "ios_downloads": 2900,
+        "android_downloads": 1950,
+        "registered_users": 0,
+    },
+    {
+        "app_type": "web", "period": "current_month",
+        "monthly_active_users": 7890,
+        "average_session_length_minutes": 22.0,
+        "crash_free_sessions_percentage": 99.7,
+        "top_screens": json.dumps(["Dashboard", "Clinics", "Reports"]),
+        "total_downloads": 0,
+        "active_today": 1245,
+        "active_30d": 7890,
+        "inactive_users": 1030,
+        "ios_downloads": 0,
+        "android_downloads": 0,
+        "registered_users": 8920,
+    },
 ]
 
 FEATURE_ADOPTION_DATA = [
     {"feature_name": "SOAP Note Generation", "period": "last_30_days", "adoption_rate_percentage": 68.5, "total_uses": 45000, "user_feedback_score": 4.8},
-    {"feature_name": "Pose Analysis", "period": "last_30_days", "adoption_rate_percentage": 42.0, "total_uses": 12500, "user_feedback_score": 4.5},
+    {"feature_name": "Pose Analysis",        "period": "last_30_days", "adoption_rate_percentage": 42.0, "total_uses": 12500, "user_feedback_score": 4.5},
 ]
 
 ADHERENCE_SNAPSHOTS_DATA = [
@@ -295,8 +507,8 @@ AI_COST_SNAPSHOTS_DATA = [
 ]
 
 AI_LATENCY_METRICS_DATA = [
-    {"service": "soap_generation", "period": "last_24_hours", "average_latency_ms": 1200, "p95_latency_ms": 2500, "status": "healthy"},
-    {"service": "pose_estimation_realtime", "period": "last_24_hours", "average_latency_ms": 150, "p95_latency_ms": 300, "status": "healthy"},
+    {"service": "soap_generation",        "period": "last_24_hours", "average_latency_ms": 1200, "p95_latency_ms": 2500, "status": "healthy"},
+    {"service": "pose_estimation_realtime","period": "last_24_hours", "average_latency_ms": 150,  "p95_latency_ms": 300,  "status": "healthy"},
 ]
 
 POSE_ANALYSIS_SNAPSHOTS_DATA = [
@@ -304,16 +516,105 @@ POSE_ANALYSIS_SNAPSHOTS_DATA = [
 ]
 
 APP_VERSIONS_DATA = [
-    {"app_type": "patient", "version": "v2.1.0", "user_count": 12000, "percentage": 80.0},
-    {"app_type": "patient", "version": "v2.0.5", "user_count": 3000, "percentage": 20.0},
-    {"app_type": "clinician", "version": "v3.0.0", "user_count": 3400, "percentage": 100.0},
+    {"app_type": "patient",   "version": "v2.1.0", "user_count": 12000, "percentage": 80.0},
+    {"app_type": "patient",   "version": "v2.0.5", "user_count": 3000,  "percentage": 20.0},
+    {"app_type": "clinician", "version": "v3.0.0", "user_count": 3400,  "percentage": 100.0},
 ]
 
 PLATFORM_SETTINGS_DATA = [
     {"setting_key": "maintenance_mode", "setting_value": "false"},
-    {"setting_key": "enforce_2fa", "setting_value": "true"},
-    {"setting_key": "api_version", "setting_value": "v1.4.2"},
-    {"setting_key": "support_email", "setting_value": "support@wellq.co"},
+    {"setting_key": "enforce_2fa",      "setting_value": "true"},
+    {"setting_key": "api_version",      "setting_value": "v1.4.2"},
+    {"setting_key": "support_email",    "setting_value": "support@wellq.co"},
+]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NUEVAS TABLAS – DATOS INICIALES
+# ══════════════════════════════════════════════════════════════════════════════
+
+IMPERSONATE_AUDIT_LOG_DATA = [
+    {
+        "audit_log_id": "audit-001", "clinic_id": "CL-001", "clinic_name": "Clínica San José",
+        "admin_user_id": "USR-SUPER-001", "admin_email": "carlos.admin@wellq.co",
+        "reason": "Revisar configuración de facturación por solicitud del cliente.",
+        "session_token_hash": "hash123ejemplo",
+        "expires_at": datetime(2026, 5, 8, 12, 0, 0),
+        "revoked_at": None,
+    },
+]
+
+NEEDS_ATTENTION_ITEMS_DATA = [
+    {
+        "item_id": "attn-001", "clinic_id": "CL-001", "clinic_name": "Clínica San José",
+        "issue_type": "overdue_invoice", "severity": "critical",
+        "description": "Factura INV-2026-001 vencida hace más de 30 días.",
+        "action_url": "/invoices/INV-2026-001",
+    },
+    {
+        "item_id": "attn-002", "clinic_id": "CL-006", "clinic_name": "Clínica del Deporte SpA",
+        "issue_type": "low_health", "severity": "warning",
+        "description": "Health Score bajó a 41. Revisar engagement y facturación.",
+        "action_url": "/clinics/CL-006",
+    },
+    {
+        "item_id": "attn-003", "clinic_id": "CL-005", "clinic_name": "Rehab Centro",
+        "issue_type": "no_login", "severity": "info",
+        "description": "No ha iniciado sesión en 3 días. Posible inactividad en prueba.",
+        "action_url": "/clinics/CL-005",
+    },
+]
+
+INFRASTRUCTURE_COST_SNAPSHOTS_DATA = [
+    {
+        "period": "Marzo 2026", "period_year": 2026, "period_month": 3,
+        "total_usd": 8450.0, "budget_usd": 9000.0, "budget_used_percent": 93.9,
+        "breakdown": json.dumps([
+            {"service": "Compute Engine", "cost": 3200},
+            {"service": "Cloud SQL", "cost": 1800},
+            {"service": "Cloud Storage", "cost": 450},
+            {"service": "AI APIs", "cost": 2200},
+            {"service": "Networking", "cost": 800},
+        ]),
+    },
+    {
+        "period": "Abril 2026", "period_year": 2026, "period_month": 4,
+        "total_usd": 9120.0, "budget_usd": 9000.0, "budget_used_percent": 101.3,
+        "breakdown": json.dumps([
+            {"service": "Compute Engine", "cost": 3500},
+            {"service": "Cloud SQL", "cost": 1900},
+            {"service": "Cloud Storage", "cost": 520},
+            {"service": "AI APIs", "cost": 2400},
+            {"service": "Networking", "cost": 800},
+        ]),
+    },
+]
+
+INFRA_NODES_DATA = [
+    {
+        "node_id": "node-api-us-east", "name": "API Gateway US East", "type": "api",
+        "status": "healthy", "region": "us-east-1",
+        "metrics": json.dumps({"requests_per_sec": 340, "latency_p95": 120}),
+    },
+    {
+        "node_id": "node-worker-pose", "name": "Pose Worker", "type": "worker",
+        "status": "healthy", "region": "us-east-1",
+        "metrics": json.dumps({"queue_depth": 15, "processed_last_hour": 200}),
+    },
+    {
+        "node_id": "node-db-primary", "name": "Database Primary", "type": "database",
+        "status": "healthy", "region": "sa-east-1",
+        "metrics": json.dumps({"connections": 45, "slow_queries": 2}),
+    },
+    {
+        "node_id": "node-cache-01", "name": "Redis Cache", "type": "cache",
+        "status": "healthy", "region": "us-east-1",
+        "metrics": json.dumps({"hit_rate": 0.92, "memory_used_mb": 256}),
+    },
+    {
+        "node_id": "node-queue-01", "name": "Bull Queue Worker", "type": "queue",
+        "status": "degraded", "region": "us-east-1",
+        "metrics": json.dumps({"queue_depth": 340, "failures_last_hour": 5}),
+    },
 ]
 
 
@@ -324,24 +625,30 @@ PLATFORM_SETTINGS_DATA = [
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+        # Agrega columnas nuevas si no existen
+        from sqlalchemy import text
+        await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS total_downloads integer DEFAULT 0"))
+        await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS active_today integer DEFAULT 0"))
+        await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS active_30d integer DEFAULT 0"))
+        await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS inactive_users integer DEFAULT 0"))
+        await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS ios_downloads integer DEFAULT 0"))
+        await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS android_downloads integer DEFAULT 0"))
+        await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS registered_users integer DEFAULT 0"))
     print("✅ Tablas creadas/verificadas en Neon")
 
-async def seed_clinics(session: AsyncSession):
-    for data in CLINICS_DATA:
-        session.add(Clinic(**data))
+async def seed_clinics(session):
+    for data in CLINICS_DATA: session.add(Clinic(**data))
     print(f"  → {len(CLINICS_DATA)} clínicas")
 
-async def seed_features(session: AsyncSession):
-    for data in FEATURES_DATA:
-        session.add(Feature(**data))
+async def seed_features(session):
+    for data in FEATURES_DATA: session.add(Feature(**data))
     print(f"  → {len(FEATURES_DATA)} features")
 
-async def seed_plans(session: AsyncSession):
-    for data in PLANS_DATA:
-        session.add(Plan(**data))
+async def seed_plans(session):
+    for data in PLANS_DATA: session.add(Plan(**data))
     print(f"  → {len(PLANS_DATA)} planes")
 
-async def seed_plan_features(session: AsyncSession):
+async def seed_plan_features(session):
     count = 0
     for plan_id, features in PLAN_FEATURES_DATA.items():
         for feature_id, limit in features:
@@ -349,127 +656,122 @@ async def seed_plan_features(session: AsyncSession):
             count += 1
     print(f"  → {count} plan_features (relaciones plan↔feature)")
 
-async def seed_clinic_plans(session: AsyncSession):
-    for data in CLINIC_PLANS_DATA:
-        session.add(ClinicPlan(**data))
+async def seed_clinic_plans(session):
+    for data in CLINIC_PLANS_DATA: session.add(ClinicPlan(**data))
     print(f"  → {len(CLINIC_PLANS_DATA)} asignaciones de planes a clínicas")
 
-async def seed_scheduled_changes(session: AsyncSession):
-    for data in SCHEDULED_CHANGES_DATA:
-        session.add(ScheduledChange(**data))
+async def seed_scheduled_changes(session):
+    for data in SCHEDULED_CHANGES_DATA: session.add(ScheduledChange(**data))
     print(f"  → {len(SCHEDULED_CHANGES_DATA)} cambios programados")
 
-async def seed_alerts(session: AsyncSession):
-    for data in ALERTS_DATA:
-        session.add(Alert(**data))
+async def seed_alerts(session):
+    for data in ALERTS_DATA: session.add(Alert(**data))
     print(f"  → {len(ALERTS_DATA)} alertas")
 
-async def seed_notifications(session: AsyncSession):
-    for data in NOTIFICATIONS_DATA:
-        session.add(Notification(**data))
+async def seed_notifications(session):
+    for data in NOTIFICATIONS_DATA: session.add(Notification(**data))
     print(f"  → {len(NOTIFICATIONS_DATA)} notificaciones")
 
-async def seed_jobs(session: AsyncSession):
-    for data in JOBS_DATA:
-        session.add(Job(**data))
+async def seed_jobs(session):
+    for data in JOBS_DATA: session.add(Job(**data))
     print(f"  → {len(JOBS_DATA)} jobs")
 
-async def seed_admin_users(session: AsyncSession):
-    for data in ADMIN_USERS_DATA:
-        session.add(AdminUser(**data))
+async def seed_admin_users(session):
+    for data in ADMIN_USERS_DATA: session.add(AdminUser(**data))
     print(f"  → {len(ADMIN_USERS_DATA)} usuarios admin")
 
-async def seed_kpi_snapshots(session: AsyncSession):
-    for data in KPI_SNAPSHOTS_DATA:
-        session.add(KpiSnapshot(**data))
+async def seed_kpi_snapshots(session):
+    for data in KPI_SNAPSHOTS_DATA: session.add(KpiSnapshot(**data))
     print(f"  → {len(KPI_SNAPSHOTS_DATA)} kpi_snapshots")
 
-async def seed_app_metrics(session: AsyncSession):
-    for data in APP_METRICS_DATA:
-        session.add(AppMetric(**data))
+async def seed_app_metrics(session):
+    for data in APP_METRICS_DATA: session.add(AppMetric(**data))
     print(f"  → {len(APP_METRICS_DATA)} app_metrics")
 
-# --- NUEVAS FUNCIONES DE SEED (LAS 16 TABLAS FALTANTES) ---
-
-async def seed_invoices(session: AsyncSession):
-    for data in INVOICES_DATA:
-        session.add(Invoice(**data))
+async def seed_invoices(session):
+    for data in INVOICES_DATA: session.add(Invoice(**data))
     print(f"  → {len(INVOICES_DATA)} invoices")
 
-async def seed_clinic_usage_metrics(session: AsyncSession):
-    for data in CLINIC_USAGE_METRICS_DATA:
-        session.add(ClinicUsageMetric(**data))
+async def seed_clinic_usage_metrics(session):
+    for data in CLINIC_USAGE_METRICS_DATA: session.add(ClinicUsageMetric(**data))
     print(f"  → {len(CLINIC_USAGE_METRICS_DATA)} clinic_usage_metrics")
 
-async def seed_servers(session: AsyncSession):
-    for data in SERVERS_DATA:
-        session.add(Server(**data))
+async def seed_servers(session):
+    for data in SERVERS_DATA: session.add(Server(**data))
     print(f"  → {len(SERVERS_DATA)} servers")
 
-async def seed_background_processes(session: AsyncSession):
-    for data in BACKGROUND_PROCESSES_DATA:
-        session.add(BackgroundProcess(**data))
+async def seed_background_processes(session):
+    for data in BACKGROUND_PROCESSES_DATA: session.add(BackgroundProcess(**data))
     print(f"  → {len(BACKGROUND_PROCESSES_DATA)} background_processes")
 
-async def seed_mrr_snapshots(session: AsyncSession):
-    for data in MRR_SNAPSHOTS_DATA:
-        session.add(MrrSnapshot(**data))
+async def seed_mrr_snapshots(session):
+    for data in MRR_SNAPSHOTS_DATA: session.add(MrrSnapshot(**data))
     print(f"  → {len(MRR_SNAPSHOTS_DATA)} mrr_snapshots")
 
-async def seed_churn_risk_regions(session: AsyncSession):
-    for data in CHURN_RISK_REGIONS_DATA:
-        session.add(ChurnRiskRegion(**data))
+async def seed_churn_risk_regions(session):
+    for data in CHURN_RISK_REGIONS_DATA: session.add(ChurnRiskRegion(**data))
     print(f"  → {len(CHURN_RISK_REGIONS_DATA)} churn_risk_regions")
 
-async def seed_app_usage_stats(session: AsyncSession):
-    for data in APP_USAGE_STATS_DATA:
-        session.add(AppUsageStat(**data))
+async def seed_app_usage_stats(session):
+    for data in APP_USAGE_STATS_DATA: session.add(AppUsageStat(**data))
     print(f"  → {len(APP_USAGE_STATS_DATA)} app_usage_stats")
 
-async def seed_feature_adoption(session: AsyncSession):
-    for data in FEATURE_ADOPTION_DATA:
-        session.add(FeatureAdoption(**data))
+async def seed_feature_adoption(session):
+    for data in FEATURE_ADOPTION_DATA: session.add(FeatureAdoption(**data))
     print(f"  → {len(FEATURE_ADOPTION_DATA)} feature_adoption")
 
-async def seed_adherence_snapshots(session: AsyncSession):
-    for data in ADHERENCE_SNAPSHOTS_DATA:
-        session.add(AdherenceSnapshot(**data))
+async def seed_adherence_snapshots(session):
+    for data in ADHERENCE_SNAPSHOTS_DATA: session.add(AdherenceSnapshot(**data))
     print(f"  → {len(ADHERENCE_SNAPSHOTS_DATA)} adherence_snapshots")
 
-async def seed_cohort_retention(session: AsyncSession):
-    for data in COHORT_RETENTION_DATA:
-        session.add(CohortRetention(**data))
+async def seed_cohort_retention(session):
+    for data in COHORT_RETENTION_DATA: session.add(CohortRetention(**data))
     print(f"  → {len(COHORT_RETENTION_DATA)} cohort_retention")
 
-async def seed_soap_quality_metrics(session: AsyncSession):
-    for data in SOAP_QUALITY_METRICS_DATA:
-        session.add(SoapQualityMetric(**data))
+async def seed_soap_quality_metrics(session):
+    for data in SOAP_QUALITY_METRICS_DATA: session.add(SoapQualityMetric(**data))
     print(f"  → {len(SOAP_QUALITY_METRICS_DATA)} soap_quality_metrics")
 
-async def seed_ai_cost_snapshots(session: AsyncSession):
-    for data in AI_COST_SNAPSHOTS_DATA:
-        session.add(AiCostSnapshot(**data))
+async def seed_ai_cost_snapshots(session):
+    for data in AI_COST_SNAPSHOTS_DATA: session.add(AiCostSnapshot(**data))
     print(f"  → {len(AI_COST_SNAPSHOTS_DATA)} ai_cost_snapshots")
 
-async def seed_ai_latency_metrics(session: AsyncSession):
-    for data in AI_LATENCY_METRICS_DATA:
-        session.add(AiLatencyMetric(**data))
+async def seed_ai_latency_metrics(session):
+    for data in AI_LATENCY_METRICS_DATA: session.add(AiLatencyMetric(**data))
     print(f"  → {len(AI_LATENCY_METRICS_DATA)} ai_latency_metrics")
 
-async def seed_pose_analysis_snapshots(session: AsyncSession):
-    for data in POSE_ANALYSIS_SNAPSHOTS_DATA:
-        session.add(PoseAnalysisSnapshot(**data))
+async def seed_pose_analysis_snapshots(session):
+    for data in POSE_ANALYSIS_SNAPSHOTS_DATA: session.add(PoseAnalysisSnapshot(**data))
     print(f"  → {len(POSE_ANALYSIS_SNAPSHOTS_DATA)} pose_analysis_snapshots")
 
-async def seed_app_versions(session: AsyncSession):
-    for data in APP_VERSIONS_DATA:
-        session.add(AppVersion(**data))
+async def seed_app_versions(session):
+    for data in APP_VERSIONS_DATA: session.add(AppVersion(**data))
     print(f"  → {len(APP_VERSIONS_DATA)} app_versions")
 
-async def seed_platform_settings(session: AsyncSession):
-    for data in PLATFORM_SETTINGS_DATA:
-        session.add(PlatformSetting(**data))
+async def seed_platform_settings(session):
+    for data in PLATFORM_SETTINGS_DATA: session.add(PlatformSetting(**data))
     print(f"  → {len(PLATFORM_SETTINGS_DATA)} platform_settings")
+
+# ── NUEVAS FUNCIONES DE SEED ────────────────────────────────────────────────
+async def seed_impersonate_audit_log(session):
+    for data in IMPERSONATE_AUDIT_LOG_DATA:
+        session.add(ImpersonateAuditLog(**data))
+    print(f"  → {len(IMPERSONATE_AUDIT_LOG_DATA)} impersonate_audit_log")
+
+async def seed_needs_attention_items(session):
+    for data in NEEDS_ATTENTION_ITEMS_DATA:
+        session.add(NeedsAttentionItem(**data))
+    print(f"  → {len(NEEDS_ATTENTION_ITEMS_DATA)} needs_attention_items")
+
+async def seed_infrastructure_cost_snapshots(session):
+    for data in INFRASTRUCTURE_COST_SNAPSHOTS_DATA:
+        session.add(InfrastructureCostSnapshot(**data))
+    print(f"  → {len(INFRASTRUCTURE_COST_SNAPSHOTS_DATA)} infrastructure_cost_snapshots")
+
+async def seed_infra_nodes(session):
+    for data in INFRA_NODES_DATA:
+        session.add(InfraNode(**data))
+    print(f"  → {len(INFRA_NODES_DATA)} infra_nodes")
 
 
 async def run_seed():
@@ -479,7 +781,6 @@ async def run_seed():
 
     async with AsyncSessionLocal() as session:
         from sqlalchemy import text
-        # SE AGREGARON LAS 16 TABLAS NUEVAS AL TRUNCATE CASCADE
         await session.execute(text(
             "TRUNCATE TABLE alerts, notifications, jobs, admin_users, scheduled_changes, "
             "clinic_plans, plan_features, plans, features, clinics, "
@@ -487,7 +788,8 @@ async def run_seed():
             "invoices, clinic_usage_metrics, servers, background_processes, "
             "mrr_snapshots, churn_risk_regions, app_usage_stats, feature_adoption, "
             "adherence_snapshots, cohort_retention, soap_quality_metrics, ai_cost_snapshots, "
-            "ai_latency_metrics, pose_analysis_snapshots, app_versions, platform_settings "
+            "ai_latency_metrics, pose_analysis_snapshots, app_versions, platform_settings, "
+            "impersonate_audit_log, needs_attention_items, infrastructure_cost_snapshots, infra_nodes "
             "RESTART IDENTITY CASCADE"
         ))
         await session.commit()
@@ -507,8 +809,6 @@ async def run_seed():
         await seed_admin_users(session)
         await seed_kpi_snapshots(session)
         await seed_app_metrics(session)
-        
-        # LLAMADAS A LAS 16 FUNCIONES NUEVAS
         await seed_invoices(session)
         await seed_clinic_usage_metrics(session)
         await seed_servers(session)
@@ -525,10 +825,15 @@ async def run_seed():
         await seed_pose_analysis_snapshots(session)
         await seed_app_versions(session)
         await seed_platform_settings(session)
-        
+        # ── NUEVOS LLAMADOS ──────────────────────────────────────────────
+        await seed_impersonate_audit_log(session)
+        await seed_needs_attention_items(session)
+        await seed_infrastructure_cost_snapshots(session)
+        await seed_infra_nodes(session)
+
         await session.commit()
 
-    print("\n✅ Seed completado. Todas las 28 tablas tienen datos en Neon.\n")
+    print("\n✅ Seed completado. Todas las tablas tienen datos en Neon.\n")
     await engine.dispose()
 
 

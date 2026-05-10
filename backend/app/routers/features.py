@@ -9,7 +9,8 @@ router = APIRouter(prefix="/api/features", tags=["Catálogo de Funcionalidades (
 
 def _serialize_feature(f):
     return {
-        "id": f.id,
+        "id": f.feature_id,        # ← cambiado
+        "featureId": f.feature_id, # ← línea nueva
         "name": f.name,
         "category": getattr(f, "category", None),
         "unit": getattr(f, "unit", None),
