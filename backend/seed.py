@@ -50,6 +50,7 @@ CLINICS_DATA = [
         "patients_used": 1500, "patients_limit": 5000,
         "health_score": 87,
         "last_login": datetime(2026, 4, 25, 14, 30, 0),
+        "created_at": datetime(2026, 1, 15),                     # ← YTD
         "mrr": 1999.0,
         "contact_name": "Juan Pérez", "contact_email": "admin@clinicasanjose.com",
         "contact_phone": "+56911111111",
@@ -63,7 +64,8 @@ CLINICS_DATA = [
         "tier": "smb", "status": "active",
         "patients_used": 340, "patients_limit": 500,
         "health_score": 62,
-        "last_login": datetime(2026, 4, 23, 9, 15, 0),
+        "last_login": datetime(2026, 3, 20, 9, 15, 0),   # ← dormido (>30d)
+        "created_at": datetime(2026, 4, 20),                     # ← 30D
         "mrr": 299.0,
         "contact_name": "María González", "contact_email": "hola@centromedico.com",
         "contact_phone": "+56922222222",
@@ -79,6 +81,7 @@ CLINICS_DATA = [
         "patients_used": 412, "patients_limit": 500,
         "health_score": 54,
         "last_login": datetime(2026, 5, 1, 8, 45, 0),
+        "created_at": datetime(2026, 5, 10, 6, 0, 0),            # ← 24H (hoy)
         "mrr": 299.0,
         "contact_name": "Pedro Alarcón", "contact_email": "pedro@kinesur.cl",
         "contact_phone": "+56933333333",
@@ -93,6 +96,7 @@ CLINICS_DATA = [
         "patients_used": 3800, "patients_limit": 5000,
         "health_score": 91,
         "last_login": datetime(2026, 5, 2, 10, 20, 0),
+        "created_at": datetime(2026, 5, 5, 12, 0, 0),            # ← 7D
         "mrr": 1999.0,
         "contact_name": "Carolina Muñoz", "contact_email": "carolina@fisioclinicanorte.cl",
         "contact_phone": "+56944444444",
@@ -107,6 +111,7 @@ CLINICS_DATA = [
         "patients_used": 30, "patients_limit": 50,
         "health_score": 88,
         "last_login": datetime(2026, 5, 3, 16, 0, 0),
+        "created_at": datetime(2026, 5, 1, 8, 0, 0),             # ← 30D (fuera de 7D)
         "mrr": 0.0,
         "contact_name": "Andrés Soto", "contact_email": "info@rehabcentro.cl",
         "contact_phone": "+56955555555",
@@ -120,7 +125,8 @@ CLINICS_DATA = [
         "tier": "smb", "status": "warning",
         "patients_used": 490, "patients_limit": 500,
         "health_score": 41,
-        "last_login": datetime(2026, 4, 15, 12, 30, 0),
+        "last_login": datetime(2026, 2, 10, 12, 30, 0),  # ← dormido (>90d)
+        "created_at": datetime(2026, 3, 1),                     # ← antigua (>30d)
         "mrr": 299.0,
         "contact_name": "Ignacio Rojas", "contact_email": "irojas@deporte.cl",
         "contact_phone": "+56966666666",
@@ -503,16 +509,26 @@ SOAP_QUALITY_METRICS_DATA = [
 ]
 
 AI_COST_SNAPSHOTS_DATA = [
-    {"period": "current_month", "currency": "USD", "total_cost": 3450.0, "breakdown": json.dumps({"OpenAI (SOAP)": 1200, "GCP Vertex (Pose)": 2250}), "projected_eom_cost": 4200.0},
+    {"period": "last_month", "currency": "USD", "total_cost": 3200.0,
+     "breakdown": json.dumps({"OpenAI (SOAP)": 1100, "GCP Vertex (Pose)": 2100}),
+     "projected_eom_cost": 3800.0},
+    {"period": "current_month", "currency": "USD", "total_cost": 3450.0,
+     "breakdown": json.dumps({"OpenAI (SOAP)": 1200, "GCP Vertex (Pose)": 2250}),
+     "projected_eom_cost": 4200.0},
+]
+
+POSE_ANALYSIS_SNAPSHOTS_DATA = [
+    {"period": "last_month", "total_sessions_analyzed": 7800,
+     "overall_success_rate_percentage": 97.5,
+     "failure_reasons": json.dumps({"Poor Lighting": 50, "Subject out of frame": 45, "Unknown Error": 20})},
+    {"period": "last_7_days", "total_sessions_analyzed": 8500,
+     "overall_success_rate_percentage": 98.2,
+     "failure_reasons": json.dumps({"Poor Lighting": 45, "Subject out of frame": 40, "Unknown Error": 15})},
 ]
 
 AI_LATENCY_METRICS_DATA = [
     {"service": "soap_generation",        "period": "last_24_hours", "average_latency_ms": 1200, "p95_latency_ms": 2500, "status": "healthy"},
     {"service": "pose_estimation_realtime","period": "last_24_hours", "average_latency_ms": 150,  "p95_latency_ms": 300,  "status": "healthy"},
-]
-
-POSE_ANALYSIS_SNAPSHOTS_DATA = [
-    {"period": "last_7_days", "total_sessions_analyzed": 8500, "overall_success_rate_percentage": 98.2, "failure_reasons": json.dumps({"Poor Lighting": 45, "Subject out of frame": 40, "Unknown Error": 15})},
 ]
 
 APP_VERSIONS_DATA = [

@@ -183,10 +183,11 @@ const AppUsageBreakdown = ({ appStats }) => {
   );
 };
 
-// ─── Sub-views ────────────────────────────────────────────────────────────────
+// ─── Business Health Tab ──────────────────────────────────────────────────────
 const BusinessHealthTab = ({
   loading, kpiArr, kpiClinics, kpiPatients, kpiNrr,
-  mrrData, churnRegions, apiAlerts, onAcknowledgeAlert, fmtArr,
+  mrrData, churnRegions, apiAlerts, onAcknowledgeAlert,
+  onRegionClick, fmtArr,
 }) => {
   const arrSpark = kpiArr?.trend_graph?.map((t) => t.value) ?? [0, 0, 0, 0, 0, 0];
 
@@ -234,14 +235,18 @@ const BusinessHealthTab = ({
           trend={kpiNrr?.nrr_percentage >= 100 ? 'up' : 'down'}
           trendValue={kpiNrr ? `Exp: $${kpiNrr.expansion_mrr?.toLocaleString()}` : '+0%'}
           sparkData={[0, 0, 0, 0, 0, kpiNrr?.nrr_percentage ?? 0]}
-          subtitle={kpiNrr?.status === 'healthy' ? 'Esperando datos...' : 'Esperando base de datos'}
+          subtitle={kpiNrr ? `Churn MRR: $${kpiNrr.churn_mrr?.toLocaleString()}` : 'Esperando base de datos'}
           loading={loading}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-6">
         <MRRChart />
-        <ChurnHeatmap apiRegions={churnRegions} />
+        {/* onRegionClick: por ahora loguea la región; reemplazá con tu modal/drawer */}
+        <ChurnHeatmap
+          apiRegions={churnRegions}
+          onRegionClick={onRegionClick}
+        />
       </div>
 
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
@@ -309,7 +314,7 @@ const BusinessHealthTab = ({
   );
 };
 
-// ── OperationalStatusTab ──────────────────────────────────────────────────────
+// ─── Operational Status Tab ───────────────────────────────────────────────────
 const OperationalStatusTab = ({
   apiServers, apiProcesses,
   kpiSystemHealth, kpiActiveNow, kpiDownloads, kpiDormant,
@@ -413,7 +418,6 @@ const OperationalStatusTab = ({
         </div>
       </div>
 
-      {/* Background Processes + App Usage Breakdown lado a lado */}
       <div className="grid grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
           <h3 className="font-semibold text-slate-900 mb-4">Background Processes</h3>
@@ -438,22 +442,30 @@ const OperationalStatusTab = ({
           </div>
         </div>
 
-        {/* ── NUEVO: App Usage Breakdown ── */}
         <AppUsageBreakdown appStats={appStats} />
       </div>
     </div>
   );
 };
 
-// ─── Main export ─────────────────────────────────────────────────────────────
+// ─── Main export ──────────────────────────────────────────────────────────────
 export const OverviewView = ({
   loading, kpiArr, kpiClinics, kpiPatients, kpiNrr,
   mrrData, churnRegions, apiAlerts, onAcknowledgeAlert,
   apiServers, apiProcesses, fmtArr,
   kpiSystemHealth, kpiActiveNow, kpiDownloads, kpiDormant,
-  appStats, // ── NUEVO
+  appStats,
 }) => {
   const [tab, setTab] = React.useState('business');
+
+  // Handler para click en región del heatmap.
+  // Por ahora loguea — reemplazá con tu modal/drawer/navigate cuando lo tengas.
+  const handleRegionClick = (region) => {
+    console.log('[ChurnHeatmap] región seleccionada:', region);
+    // Ejemplo futuro:
+    // navigate(`/clinic-management?region=${encodeURIComponent(region.name)}&risk=${region.risk}`);
+    // o: setSelectedRegion(region); setModalOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -487,6 +499,7 @@ export const OverviewView = ({
           churnRegions={churnRegions}
           apiAlerts={apiAlerts}
           onAcknowledgeAlert={onAcknowledgeAlert}
+          onRegionClick={handleRegionClick}
           fmtArr={fmtArr}
         />
       )}

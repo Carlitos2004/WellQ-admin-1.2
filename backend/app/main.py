@@ -19,7 +19,8 @@ from app.routers import (
     auth, dashboard, clinics, platform, financials,
     alerts, search, infrastructure, analytics, users,
     notifications, jobs, settings as settings_router,
-    features, plans, clinic_plans, kpis,
+    features, plans, clinic_plans,
+    # kpis eliminado: sus endpoints fueron fusionados en dashboard.py
 )
 
 structlog.configure(
@@ -71,13 +72,13 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(dashboard.router)
+app.include_router(dashboard.router)       # ← único owner de /api/kpis/*
 app.include_router(clinics.router)
 app.include_router(platform.router)
 app.include_router(notifications.router)
 app.include_router(jobs.router)
 app.include_router(financials.router)
-app.include_router(kpis.router)
+# kpis.router eliminado — no agregar de nuevo
 app.include_router(alerts.router)
 app.include_router(search.router)
 app.include_router(infrastructure.router)
@@ -92,8 +93,8 @@ app.include_router(clinic_plans.router)
 @app.get("/health", tags=["Sistema"])
 async def health_check() -> dict:
     return {
-        "status": "ok",
-        "version": "1.0.0",
+        "status":      "ok",
+        "version":     "1.0.0",
         "environment": settings.app_env,
-        "database": "neon_connected" if settings.database_url else "not_configured",
+        "database":    "neon_connected" if settings.database_url else "not_configured",
     }
