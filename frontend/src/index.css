@@ -1,6 +1,28 @@
+/* Fuentes corporativas */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* Forzar Tailwind v4 a usar la clase .dark del HTML */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 🎨 Registro de la paleta y tipografía de WellQ */
+@theme {
+  /* Colores corporativos */
+  --color-wellq-dark:    #444f5a;
+  --color-wellq-gray:    #8c9299;
+  --color-wellq-cyan:    #16f8f9;
+  --color-wellq-green:   #1fed92;
+  --color-wellq-blue:    #2cb7e4;
+  --color-wellq-black:   #000000;
+
+  /* Tipografía principal */
+  --font-sans: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif; /* opcional */
+}
+
+/* Si quieres mantener la regla del body por cualquier otro motivo, 
+   puedes dejarla, pero Tailwind ya aplicará font-sans automáticamente. */
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Poppins', 'Inter', sans-serif; /* ← actualizada a Poppins */
 }

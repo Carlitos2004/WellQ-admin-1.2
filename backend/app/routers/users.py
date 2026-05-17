@@ -132,6 +132,8 @@ async def update_user(user_id: str = Path(...), payload: UserUpdate = Body(...),
 
 
 # 47b. PATCH /users/{user_id}/role (mantenido por compatibilidad)
+# IMPORTANTE: esta ruta debe ir ANTES de PATCH /{user_id} para que FastAPI
+# no interprete "role" como un user_id
 @router.patch("/{user_id}/role", summary="Actualizar solo el rol")
 async def update_user_role(user_id: str = Path(...), body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AdminUser).where(AdminUser.user_id == user_id))
@@ -149,6 +151,39 @@ async def update_user_role(user_id: str = Path(...), body: dict = Body(...), db:
     await db.commit()
 
     return {"status": "success", "message": f"Rol de {user_id} actualizado a {new_role}"}
+
+
+# 47c. PATCH /users/{user_id} — FIX: el frontend mandaba PATCH pero solo existía PUT
+# Esto resuelve el HTTP 405 en /api/users/USR-VIEW-003
+@router.patch("/{user_id}", summary="Actualizar usuario (parcial)")
+async def patch_user(
+    user_id: str = Path(...),
+    payload: UserUpdate = Body(...),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(AdminUser).where(AdminUser.user_id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    update_data = payload.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(user, field, value)
+    if hasattr(user, "updated_at"):
+        user.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "status": "success",
+        "message": f"Usuario {user_id} actualizado",
+        "data": {
+            "user_id": user.user_id,
+            "email": user.email,
+            "role": user.role,
+            "status": user.status,
+        }
+    }
 
 
 # 48. DELETE /users/{user_id}

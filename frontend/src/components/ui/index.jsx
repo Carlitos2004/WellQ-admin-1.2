@@ -28,7 +28,7 @@ export const Sparkline = ({ data, color = '#10b981', height = 24 }) => {
 
 export const Skeleton = ({ className }) => (
   <div
-    className={`animate-pulse bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%] rounded ${className}`}
+    className={`animate-pulse bg-gradient-to-r from-wellq-gray/20 via-wellq-gray/10 to-wellq-gray/20 bg-[length:200%_100%] rounded ${className}`}
     style={{ animation: 'shimmer 1.5s infinite' }}
   />
 );
@@ -37,7 +37,7 @@ export const KPICard = ({ title, value, trend, trendValue, sparkData, subtitle, 
   const isPositive = trend === 'up';
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+      <div className="bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-wellq-gray/30">
         <Skeleton className="h-4 w-24 mb-4" />
         <Skeleton className="h-10 w-32 mb-3" />
         <Skeleton className="h-3 w-20" />
@@ -45,30 +45,30 @@ export const KPICard = ({ title, value, trend, trendValue, sparkData, subtitle, 
     );
   }
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all duration-300 group">
+    <div className="bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-wellq-gray/30 hover:shadow-md hover:border-wellq-cyan/30 dark:hover:border-wellq-cyan/40 transition-all duration-300 group">
       <div className="flex items-start justify-between mb-2">
-        <span className="text-sm font-medium text-slate-500 tracking-wide">{title}</span>
-        <Sparkline data={sparkData} color={isPositive ? '#10b981' : '#ef4444'} />
+        <span className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/80 tracking-wide">{title}</span>
+        <Sparkline data={sparkData} color={isPositive ? '#1fed92' : '#ef4444'} />
       </div>
       <div className="flex items-baseline gap-3 mb-1">
-        <span className="text-3xl font-bold text-slate-900 tracking-tight">{value}</span>
+        <span className="text-3xl font-bold text-wellq-dark dark:text-white tracking-tight">{value}</span>
         <span
           className={`flex items-center gap-1 text-sm font-semibold ${
-            isPositive ? 'text-emerald-600' : 'text-red-500'
+            isPositive ? 'text-wellq-green' : 'text-red-500'
           }`}
         >
           {isPositive ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
           {trendValue}
         </span>
       </div>
-      <span className="text-xs text-slate-400">{subtitle}</span>
+      <span className="text-xs text-wellq-gray dark:text-wellq-gray/80">{subtitle}</span>
     </div>
   );
 };
 
 export const HealthBadge = ({ score }) => {
   const getColor = (s) => {
-    if (s >= 80) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    if (s >= 80) return 'bg-wellq-green/10 text-wellq-green border-wellq-green/20';
     if (s >= 50) return 'bg-amber-100 text-amber-700 border-amber-200';
     return 'bg-red-100 text-red-700 border-red-200';
   };
@@ -83,13 +83,13 @@ export const HealthBadge = ({ score }) => {
 
 export const StatusBadge = ({ status }) => {
   const styles = {
-    Active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    Active: 'bg-wellq-green/10 text-wellq-green border-wellq-green/20',
+    active: 'bg-wellq-green/10 text-wellq-green border-wellq-green/20',
     Delinquent: 'bg-red-50 text-red-700 border-red-200',
-    Onboarding: 'bg-blue-50 text-blue-700 border-blue-200',
-    onboarding: 'bg-blue-50 text-blue-700 border-blue-200',
+    Onboarding: 'bg-wellq-cyan/10 text-wellq-cyan border-wellq-cyan/20',
+    onboarding: 'bg-wellq-cyan/10 text-wellq-cyan border-wellq-cyan/20',
     Trial: 'bg-purple-50 text-purple-700 border-purple-200',
-    'Esperando...': 'bg-slate-50 text-slate-700 border-slate-200',
+    'Esperando...': 'bg-wellq-gray/10 text-wellq-dark dark:text-white border-wellq-gray/20',
   };
   return (
     <span
@@ -105,16 +105,16 @@ export const StatusBadge = ({ status }) => {
 export const UtilizationBar = ({ used, total }) => {
   const pct = total > 0 ? (used / total) * 100 : 0;
   const color =
-    pct >= 90 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-emerald-500';
+    pct >= 90 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-wellq-green';
   return (
     <div className="flex items-center gap-3">
-      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-wellq-gray/10 dark:bg-wellq-dark/50 rounded-full overflow-hidden">
         <div
           className={`h-full ${color} rounded-full transition-all duration-500`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+      <span className="text-xs text-wellq-gray dark:text-wellq-gray/80 font-medium whitespace-nowrap">
         {(used ?? 0).toLocaleString()}/{(total ?? 0).toLocaleString()}
       </span>
     </div>
@@ -122,15 +122,15 @@ export const UtilizationBar = ({ used, total }) => {
 };
 
 export const SegmentedControl = ({ options, selected, onChange }) => (
-  <div className="inline-flex p-1 bg-slate-100 rounded-lg">
+  <div className="inline-flex p-1 bg-wellq-gray/10 dark:bg-wellq-dark/60 rounded-lg">
     {options.map((opt) => (
       <button
         key={opt}
         onClick={() => onChange(opt)}
         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
           selected === opt
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'
+            ? 'bg-white dark:bg-wellq-dark/80 text-wellq-dark dark:text-white shadow-sm'
+            : 'text-wellq-gray dark:text-wellq-gray/80 hover:text-wellq-dark dark:hover:text-white'
         }`}
       >
         {opt}
@@ -141,12 +141,12 @@ export const SegmentedControl = ({ options, selected, onChange }) => (
 
 export const AlertItem = ({ icon: Icon, message, severity, title }) => {
   const colors = {
-    critical: 'border-l-red-500 bg-red-50/50',
-    high: 'border-l-red-500 bg-red-50/50',
-    warning: 'border-l-amber-500 bg-amber-50/50',
-    medium: 'border-l-amber-500 bg-amber-50/50',
-    info: 'border-l-blue-500 bg-blue-50/50',
-    low: 'border-l-blue-500 bg-blue-50/50',
+    critical: 'border-l-red-500 bg-red-50/50 dark:bg-red-900/20',
+    high: 'border-l-red-500 bg-red-50/50 dark:bg-red-900/20',
+    warning: 'border-l-amber-500 bg-amber-50/50 dark:bg-amber-900/20',
+    medium: 'border-l-amber-500 bg-amber-50/50 dark:bg-amber-900/20',
+    info: 'border-l-blue-500 bg-blue-50/50 dark:bg-blue-900/20',
+    low: 'border-l-blue-500 bg-blue-50/50 dark:bg-blue-900/20',
   };
   const iconColors = {
     critical: 'text-red-500',
@@ -165,11 +165,11 @@ export const AlertItem = ({ icon: Icon, message, severity, title }) => {
       <Icon size={18} className={iconColors[severity] ?? iconColors.info} />
       <div className="flex-1">
         {title && (
-          <div className="text-xs font-semibold text-slate-600 mb-0.5">{title}</div>
+          <div className="text-xs font-semibold text-wellq-dark dark:text-white mb-0.5">{title}</div>
         )}
-        <span className="text-sm text-slate-900">{message}</span>
+        <span className="text-sm text-wellq-dark dark:text-white">{message}</span>
       </div>
-      <ChevronRight size={16} className="text-slate-400" />
+      <ChevronRight size={16} className="text-wellq-gray dark:text-wellq-gray/80" />
     </div>
   );
 };

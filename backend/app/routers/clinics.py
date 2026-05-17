@@ -204,31 +204,65 @@ async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 17. PATCH /clinics/{clinic_id} — Actualizar campos de una clínica
+# FIX: mapeo explícito de campos para garantizar que name/tier/status se guarden
 # ─────────────────────────────────────────────────────────────────────────────
 @router.patch("/{clinic_id}", summary="Actualizar campos de una clínica")
 async def update_clinic(
-    clinic_id: str = Path(...), 
+    clinic_id: str = Path(...),
     updates: dict = Body(...),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
-    
+
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
-    # Mapeo dinámico de campos
+    # Mapeo explícito: frontend manda name/tier/status → campos reales del modelo
+    field_map = {
+        "name":   "name",
+        "tier":   "tier",
+        "status": "status",
+    }
+
+    updated = []
     for key, value in updates.items():
-        if hasattr(clinic, key):
-            setattr(clinic, key, value)
-            
+        model_field = field_map.get(key, key)
+        if hasattr(clinic, model_field):
+            setattr(clinic, model_field, value)
+            updated.append(key)
+
     clinic.updated_at = datetime.utcnow()
     await db.commit()
 
     return {
         "status": "success",
         "message": f"Clínica {clinic_id} actualizada correctamente",
-        "updated_fields": list(updates.keys())
+        "updated_fields": updated
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 17b. DELETE /clinics/{clinic_id} — Eliminar clínica
+# FIX: endpoint nuevo — el frontend llamaba DELETE pero no existía (404/405)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.delete("/{clinic_id}", summary="Eliminar clínica del sistema")
+async def delete_clinic(
+    clinic_id: str = Path(...),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
+    clinic = result.scalar_one_or_none()
+
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clínica no encontrada")
+
+    await db.delete(clinic)
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Clínica {clinic_id} eliminada correctamente"
     }
 
 
@@ -288,7 +322,7 @@ async def get_clinic_subscription(clinic_id: str = Path(...), db: AsyncSession =
             "currency": plan_data.get("currency", "USD"),
             "started_at": plan_assignment.effective_from.isoformat(),
             "renews_at": plan_assignment.effective_to.isoformat() if plan_assignment.effective_to else None,
-            "features_enabled": ["custom_branding", "api_access", "priority_support"] # Se puede expandir con PlanFeature si es necesario
+            "features_enabled": ["custom_branding", "api_access", "priority_support"]
         }
     }
 

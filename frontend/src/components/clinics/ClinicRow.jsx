@@ -1,31 +1,33 @@
 import React from 'react';
-import { Settings, DollarSign, Eye } from 'lucide-react';
+import { Settings, DollarSign, Eye, Trash2 } from 'lucide-react';
 import { StatusBadge, UtilizationBar, HealthBadge } from '../ui';
 
-export const ClinicRow = ({ clinic, onSelect, selected, onImpersonate, onSettings, onInvoices }) => (
+export const ClinicRow = ({ clinic, onSelect, selected, onImpersonate, onSettings, onInvoices, onDelete, checked, onCheck }) => (
   <tr
-    className={`border-b border-slate-50 hover:bg-slate-50/80 transition-colors cursor-pointer ${
-      selected ? 'bg-indigo-50/50' : ''
+    className={`border-b border-wellq-gray/10 dark:border-wellq-gray/30 hover:bg-wellq-gray/5 dark:hover:bg-wellq-dark/50 transition-colors cursor-pointer ${
+      selected ? 'bg-wellq-cyan/5 dark:bg-wellq-cyan/10' : ''
     }`}
     onClick={() => onSelect(clinic)}
   >
     <td className="py-4 px-4">
       <input
         type="checkbox"
-        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+        checked={!!checked}
+        onChange={(e) => { e.stopPropagation(); onCheck && onCheck(clinic, e.target.checked); }}
+        className="rounded border-wellq-gray/30 dark:border-wellq-gray/40 text-wellq-cyan focus:ring-wellq-cyan"
         onClick={(e) => e.stopPropagation()}
       />
     </td>
     <td className="py-4 px-4">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
+        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center text-white text-sm font-bold">
           {(clinic.name ?? '?').charAt(0)}
         </div>
         <div>
-          <div className="font-semibold text-slate-900">
+          <div className="font-semibold text-wellq-dark dark:text-white">
             {clinic.name ?? ''}
           </div>
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-wellq-gray">
             {clinic.clinic_id ?? clinic.id ?? ''}
           </div>
         </div>
@@ -36,10 +38,10 @@ export const ClinicRow = ({ clinic, onSelect, selected, onImpersonate, onSetting
         <span
           className={`px-2.5 py-1 rounded-md text-xs font-medium ${
             clinic.tier === 'Enterprise' || clinic.tier === 'enterprise'
-              ? 'bg-purple-100 text-purple-700'
+              ? 'bg-wellq-cyan/10 text-wellq-cyan'
               : clinic.tier === 'SMB' || clinic.tier === 'pro'
-              ? 'bg-blue-100 text-blue-700'
-              : 'bg-slate-100 text-slate-600'
+              ? 'bg-wellq-blue/10 text-wellq-blue'
+              : 'bg-wellq-gray/10 text-wellq-dark dark:text-white'
           }`}
         >
           {clinic.tier}
@@ -58,36 +60,47 @@ export const ClinicRow = ({ clinic, onSelect, selected, onImpersonate, onSetting
     <td className="py-4 px-4">
       <HealthBadge score={clinic.healthScore ?? 0} />
     </td>
-    <td className="py-4 px-4 text-sm text-slate-900">
+    <td className="py-4 px-4 text-sm text-wellq-dark dark:text-white">
       {clinic.lastLogin ?? ''}
     </td>
     <td className="py-4 px-4">
       <div className="flex items-center gap-1">
         <button
-          className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 rounded-lg transition-colors"
           title="Manage"
           onClick={(e) => { e.stopPropagation(); onSettings && onSettings(clinic); }}
         >
-          <Settings size={16} className="text-slate-400" />
+          <Settings size={16} className="text-wellq-gray dark:text-wellq-gray/80" />
         </button>
         <button
-          className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 rounded-lg transition-colors"
           title="View Invoices"
           onClick={(e) => { e.stopPropagation(); onInvoices && onInvoices(clinic); }}
         >
-          <DollarSign size={16} className="text-slate-400" />
+          <DollarSign size={16} className="text-wellq-gray dark:text-wellq-gray/80" />
         </button>
+        {/* ── Ojo → abre overview en drawer ── */}
         <button
-          className="p-2 hover:bg-indigo-50 rounded-lg transition-colors group/imp"
-          title="Impersonate"
+          className="p-2 hover:bg-wellq-cyan/10 dark:hover:bg-wellq-cyan/20 rounded-lg transition-colors group/imp"
+          title="Ver overview"
           onClick={(e) => {
             e.stopPropagation();
-            onImpersonate && onImpersonate(clinic);
+            onSelect && onSelect(clinic);
           }}
         >
           <Eye
             size={16}
-            className="text-slate-400 group-hover/imp:text-indigo-500 transition-colors"
+            className="text-wellq-gray dark:text-wellq-gray/80 group-hover/imp:text-wellq-cyan transition-colors"
+          />
+        </button>
+        <button
+          className="p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors group/del"
+          title="Eliminar clínica"
+          onClick={(e) => { e.stopPropagation(); onDelete && onDelete(clinic); }}
+        >
+          <Trash2
+            size={16}
+            className="text-wellq-gray dark:text-wellq-gray/80 group-hover/del:text-red-500 transition-colors"
           />
         </button>
       </div>

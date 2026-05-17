@@ -5,6 +5,11 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '../components/ui';
 import { apiFetch } from '../api/client';
+import { toast } from 'sonner';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+// 🌐🌙 Contextos
+import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const SettingsView = ({
   globalSettings,
@@ -17,10 +22,12 @@ export const SettingsView = ({
   // ── Tabs ─────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('general');
 
-  // ── General: local settings, theme, language ─────────────────────────────
+  // 🌐🌙 Usar contextos en lugar de estados locales
+  const { theme, toggleTheme } = useTheme();
+  const { t, locale, setLanguage } = useLanguage();
+
+  // ── General: local settings (se mantiene igual) ──────────────────────────
   const [localSettings, setLocalSettings] = useState({});
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
-  const [language, setLanguage] = useState(() => localStorage.getItem('lang') || 'es');
   const hasChanges = Object.keys(localSettings).length > 0;
 
   // ── Backend Server Status ────────────────────────────────────────────────
@@ -36,7 +43,7 @@ export const SettingsView = ({
     (async () => {
       try {
         const health = await apiFetch('/health');
-        const latencyMs = Math.floor(Math.random() * 20 + 5); // simula latencia
+        const latencyMs = Math.floor(Math.random() * 20 + 5);
         setServerStatus({
           status: health.status === 'ok' ? 'Online' : 'Degraded',
           version: health.version,
@@ -61,19 +68,6 @@ export const SettingsView = ({
       ...prev,
       [key]: !(localSettings[key] ?? globalSettings?.[key]),
     }));
-
-  const handleThemeToggle = () => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    localStorage.setItem('theme', next);
-    document.documentElement.classList.toggle('dark', next === 'dark');
-  };
-
-  const handleLanguageChange = (e) => {
-    const lang = e.target.value;
-    setLanguage(lang);
-    localStorage.setItem('lang', lang);
-  };
 
   // ── API Keys ─────────────────────────────────────────────────────────────
   const [apiKey, setApiKey] = useState('');
@@ -127,6 +121,9 @@ export const SettingsView = ({
   });
   const [savingUser, setSavingUser] = useState(false);
   const [userError, setUserError] = useState('');
+
+  // ── ConfirmDialog para eliminar usuario ──────────────────────────────────
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, userId: null });
 
   useEffect(() => {
     setUsers(initialUsers || []);
@@ -184,13 +181,20 @@ export const SettingsView = ({
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+  // ── Reemplaza window.confirm + alert ─────────────────────────────────────
+  const handleDeleteUser = (userId) => {
+    setConfirmDelete({ open: true, userId });
+  };
+
+  const doDeleteUser = async () => {
+    const userId = confirmDelete.userId;
+    setConfirmDelete({ open: false, userId: null });
     try {
       await apiFetch(`/api/users/${userId}`, { method: 'DELETE' });
+      toast.success('Usuario eliminado correctamente');
       if (onRefreshUsers) onRefreshUsers();
     } catch (err) {
-      alert('Error deleting user');
+      toast.error('Error al eliminar el usuario');
     }
   };
 
@@ -198,29 +202,29 @@ export const SettingsView = ({
   const renderTab = () => {
     if (activeTab === 'api_keys') {
       return (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-wellq-gray/30">
           <div className="flex items-center gap-3 mb-6">
-            <Key size={20} className="text-amber-500" />
-            <h3 className="font-semibold text-slate-900">GCP Service Account Key</h3>
+            <Key size={20} className="text-wellq-cyan" />
+            <h3 className="font-semibold text-wellq-dark dark:text-white">GCP Service Account Key</h3>
           </div>
           {keyLoading ? (
             <div className="flex justify-center py-8">
-              <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-wellq-cyan border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-wellq-gray dark:text-wellq-gray/80 mb-1">
                   API Key (JSON or Base64)
                 </label>
                 <textarea
                   rows={6}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full px-3 py-2 border border-wellq-gray/30 dark:border-wellq-gray/30 rounded-lg text-sm font-mono focus:ring-2 focus:ring-wellq-cyan focus:outline-none dark:bg-wellq-dark/50 dark:text-white"
                   placeholder="Paste your GCP service account key..."
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-wellq-gray/70 dark:text-wellq-gray/60">
                   Used for Vertex AI and Cloud Storage.
                 </p>
               </div>
@@ -228,10 +232,10 @@ export const SettingsView = ({
                 <button
                   onClick={handleSaveKey}
                   disabled={savingKey || apiKey === savedKey}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {savingKey ? (
-                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
+                    <><div className="w-4 h-4 border-2 border-wellq-black border-t-transparent rounded-full animate-spin" /> Saving...</>
                   ) : keySuccess ? (
                     <><Check size={16} /> Saved!</>
                   ) : (
@@ -239,7 +243,7 @@ export const SettingsView = ({
                   )}
                 </button>
                 {apiKey && !keySuccess && (
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-wellq-gray dark:text-wellq-gray/70">
                     {apiKey === savedKey ? 'No changes' : 'Unsaved changes'}
                   </span>
                 )}
@@ -252,15 +256,15 @@ export const SettingsView = ({
 
     if (activeTab === 'team') {
       return (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-wellq-gray/30">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <Shield size={20} className="text-indigo-500" />
-              <h3 className="font-semibold text-slate-900">Team Management</h3>
+              <Shield size={20} className="text-wellq-blue" />
+              <h3 className="font-semibold text-wellq-dark dark:text-white">{t('settings.team')}</h3>
             </div>
             <button
               onClick={openNew}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/90 transition-colors"
             >
               <UserPlus size={16} /> New User
             </button>
@@ -268,34 +272,34 @@ export const SettingsView = ({
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="text-left py-2 px-3 font-medium text-slate-500">Name</th>
-                  <th className="text-left py-2 px-3 font-medium text-slate-500">Email</th>
-                  <th className="text-left py-2 px-3 font-medium text-slate-500">Role</th>
-                  <th className="text-left py-2 px-3 font-medium text-slate-500">Status</th>
-                  <th className="text-right py-2 px-3 font-medium text-slate-500">Actions</th>
+                <tr className="border-b border-wellq-gray/20 dark:border-wellq-gray/30">
+                  <th className="text-left py-2 px-3 font-medium text-wellq-gray dark:text-wellq-gray/80">Name</th>
+                  <th className="text-left py-2 px-3 font-medium text-wellq-gray dark:text-wellq-gray/80">Email</th>
+                  <th className="text-left py-2 px-3 font-medium text-wellq-gray dark:text-wellq-gray/80">Role</th>
+                  <th className="text-left py-2 px-3 font-medium text-wellq-gray dark:text-wellq-gray/80">Status</th>
+                  <th className="text-right py-2 px-3 font-medium text-wellq-gray dark:text-wellq-gray/80">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.user_id} className="border-b border-slate-50 hover:bg-slate-50">
-                    <td className="py-2 px-3">{u.full_name}</td>
-                    <td className="py-2 px-3 text-slate-500">{u.email}</td>
-                    <td className="py-2 px-3 capitalize">
+                  <tr key={u.user_id} className="border-b border-wellq-gray/10 dark:border-wellq-gray/30 hover:bg-wellq-gray/5 dark:hover:bg-wellq-dark/50">
+                    <td className="py-2 px-3 text-wellq-dark dark:text-white">{u.full_name}</td>
+                    <td className="py-2 px-3 text-wellq-gray dark:text-wellq-gray/80">{u.email}</td>
+                    <td className="py-2 px-3 capitalize text-wellq-dark dark:text-white">
                       {u.role === 'super_admin' ? 'Super Admin' : u.role === 'viewer' ? 'Viewer' : 'Admin'}
                     </td>
                     <td className="py-2 px-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        u.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                        u.status === 'active' ? 'bg-wellq-green/20 text-wellq-green' : 'bg-wellq-gray/10 text-wellq-gray dark:bg-wellq-gray/20 dark:text-wellq-gray/80'
                       }`}>
                         {u.status === 'active' ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="py-2 px-3 text-right">
-                      <button onClick={() => openEdit(u)} className="p-1 hover:bg-slate-200 rounded mr-1">
-                        <Pencil size={15} className="text-slate-600" />
+                      <button onClick={() => openEdit(u)} className="p-1 hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 rounded mr-1">
+                        <Pencil size={15} className="text-wellq-gray dark:text-wellq-gray/80" />
                       </button>
-                      <button onClick={() => handleDeleteUser(u.user_id)} className="p-1 hover:bg-red-100 rounded">
+                      <button onClick={() => handleDeleteUser(u.user_id)} className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
                         <Trash2 size={15} className="text-red-500" />
                       </button>
                     </td>
@@ -303,7 +307,7 @@ export const SettingsView = ({
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">No users yet.</td>
+                    <td colSpan={5} className="py-8 text-center text-wellq-gray dark:text-wellq-gray/70">No users yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -312,48 +316,48 @@ export const SettingsView = ({
           {showModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center">
               <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={closeModal} />
-              <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
-                <button onClick={closeModal} className="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded">
-                  <X size={18} className="text-slate-400" />
+              <div className="relative bg-white dark:bg-wellq-dark rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 border border-wellq-gray/20 dark:border-wellq-gray/30">
+                <button onClick={closeModal} className="absolute top-4 right-4 p-1 hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 rounded">
+                  <X size={18} className="text-wellq-gray dark:text-wellq-gray/80" />
                 </button>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                <h3 className="text-lg font-semibold text-wellq-dark dark:text-white mb-4">
                   {editUser ? 'Edit User' : 'New User'}
                 </h3>
                 <form onSubmit={handleUserSubmit} className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">User ID</label>
+                    <label className="block text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 mb-1">User ID</label>
                     <input
                       required
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      className="w-full px-3 py-2 border border-wellq-gray/30 dark:border-wellq-gray/30 rounded-lg text-sm dark:bg-wellq-dark/50 dark:text-white"
                       value={form.user_id}
                       disabled={!!editUser}
                       onChange={(e) => setForm({ ...form, user_id: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
+                    <label className="block text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 mb-1">Full Name</label>
                     <input
                       required
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      className="w-full px-3 py-2 border border-wellq-gray/30 dark:border-wellq-gray/30 rounded-lg text-sm dark:bg-wellq-dark/50 dark:text-white"
                       value={form.full_name}
                       onChange={(e) => setForm({ ...form, full_name: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                    <label className="block text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 mb-1">Email</label>
                     <input
                       required
                       type="email"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      className="w-full px-3 py-2 border border-wellq-gray/30 dark:border-wellq-gray/30 rounded-lg text-sm dark:bg-wellq-dark/50 dark:text-white"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Role</label>
+                      <label className="block text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 mb-1">Role</label>
                       <select
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                        className="w-full px-3 py-2 border border-wellq-gray/30 dark:border-wellq-gray/30 rounded-lg text-sm dark:bg-wellq-dark/50 dark:text-white"
                         value={form.role}
                         onChange={(e) => setForm({ ...form, role: e.target.value })}
                       >
@@ -363,9 +367,9 @@ export const SettingsView = ({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+                      <label className="block text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 mb-1">Status</label>
                       <select
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                        className="w-full px-3 py-2 border border-wellq-gray/30 dark:border-wellq-gray/30 rounded-lg text-sm dark:bg-wellq-dark/50 dark:text-white"
                         value={form.status}
                         onChange={(e) => setForm({ ...form, status: e.target.value })}
                       >
@@ -379,14 +383,14 @@ export const SettingsView = ({
                     <button
                       type="button"
                       onClick={closeModal}
-                      className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
+                      className="px-4 py-2 text-sm text-wellq-gray dark:text-wellq-gray/80 hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 rounded-lg"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={savingUser}
-                      className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      className="px-4 py-2 bg-wellq-cyan text-wellq-black text-sm font-medium rounded-lg hover:bg-wellq-cyan/90 disabled:opacity-50"
                     >
                       {savingUser ? 'Saving...' : 'Save'}
                     </button>
@@ -403,43 +407,43 @@ export const SettingsView = ({
     return (
       <div className="space-y-6">
         {/* Global Settings */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-          <h3 className="font-semibold text-slate-900 mb-6">Global Platform Configuration</h3>
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-wellq-gray/30">
+          <h3 className="font-semibold text-wellq-dark dark:text-white mb-6">Global Platform Configuration</h3>
           {loading ? (
             <Skeleton className="h-32 w-full" />
           ) : (
             <div className="space-y-4">
               {[
-                { key: 'maintenance_mode', label: 'Maintenance Mode', desc: 'Blocks clinic access to the system' },
-                { key: 'enforce_2fa', label: 'Enforce 2FA', desc: 'Requires two-factor auth for all admins' },
+                { key: 'maintenance_mode', label: t('settings.maintenanceMode'), desc: 'Blocks clinic access to the system' },
+                { key: 'enforce_2fa', label: t('settings.enforce2FA'), desc: 'Requires two-factor auth for all admins' },
               ].map(({ key, label, desc }) => {
                 const val = localSettings[key] ?? globalSettings?.[key] ?? false;
                 return (
-                  <div key={key} className="flex items-center justify-between p-4 rounded-xl bg-slate-50">
+                  <div key={key} className="flex items-center justify-between p-4 rounded-xl bg-wellq-gray/5 dark:bg-wellq-dark/50">
                     <div>
-                      <div className="text-sm font-medium text-slate-900">{label}</div>
-                      <div className="text-xs text-slate-500">{desc}</div>
+                      <div className="text-sm font-medium text-wellq-dark dark:text-white">{label}</div>
+                      <div className="text-xs text-wellq-gray dark:text-wellq-gray/80">{desc}</div>
                     </div>
                     <button onClick={() => toggleSetting(key)}>
-                      {val ? <ToggleRight size={32} className="text-indigo-600" /> : <ToggleLeft size={32} className="text-slate-300" />}
+                      {val ? <ToggleRight size={32} className="text-wellq-cyan" /> : <ToggleLeft size={32} className="text-wellq-gray/40" />}
                     </button>
                   </div>
                 );
               })}
 
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-wellq-gray/5 dark:bg-wellq-dark/50">
                 <div>
-                  <div className="text-sm font-medium text-slate-900">API Version</div>
-                  <div className="text-xs text-slate-500">Current backend version</div>
+                  <div className="text-sm font-medium text-wellq-dark dark:text-white">API Version</div>
+                  <div className="text-xs text-wellq-gray dark:text-wellq-gray/80">Current backend version</div>
                 </div>
-                <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+                <span className="px-2.5 py-1 bg-wellq-cyan/20 text-wellq-cyan text-xs font-semibold rounded-full">
                   {globalSettings?.api_version ?? '0.0.0'}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50">
-                <div className="text-sm font-medium text-slate-900">Support Email</div>
-                <span className="text-sm font-medium text-indigo-600">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-wellq-gray/5 dark:bg-wellq-dark/50">
+                <div className="text-sm font-medium text-wellq-dark dark:text-white">Support Email</div>
+                <span className="text-sm font-medium text-wellq-cyan">
                   {globalSettings?.support_email ?? 'ops@wellq.co'}
                 </span>
               </div>
@@ -447,9 +451,9 @@ export const SettingsView = ({
               {hasChanges && (
                 <button
                   onClick={() => { onSaveSettings(localSettings); setLocalSettings({}); }}
-                  className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors"
+                  className="w-full py-2.5 bg-wellq-cyan text-wellq-black rounded-xl font-medium hover:bg-wellq-cyan/90 transition-colors"
                 >
-                  Save Changes
+                  {t('settings.saveChanges')}
                 </button>
               )}
             </div>
@@ -458,29 +462,29 @@ export const SettingsView = ({
 
         {/* Appearance & Language */}
         <div className="grid grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-wellq-gray/30">
             <div className="flex items-center gap-3 mb-4">
-              {theme === 'dark' ? <Moon size={20} className="text-indigo-500" /> : <Sun size={20} className="text-amber-500" />}
-              <h3 className="font-semibold text-slate-900">Appearance</h3>
+              {theme === 'dark' ? <Moon size={20} className="text-wellq-cyan" /> : <Sun size={20} className="text-wellq-cyan" />}
+              <h3 className="font-semibold text-wellq-dark dark:text-white">{t('settings.appearance')}</h3>
             </div>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50">
-              <span className="text-sm font-medium text-slate-900">Dark Mode</span>
-              <button onClick={handleThemeToggle}>
-                {theme === 'dark' ? <ToggleRight size={32} className="text-indigo-600" /> : <ToggleLeft size={32} className="text-slate-300" />}
+            <div className="flex items-center justify-between p-4 rounded-xl bg-wellq-gray/5 dark:bg-wellq-dark/50">
+              <span className="text-sm font-medium text-wellq-dark dark:text-white">{t('settings.darkMode')}</span>
+              <button onClick={toggleTheme}>
+                {theme === 'dark' ? <ToggleRight size={32} className="text-wellq-cyan" /> : <ToggleLeft size={32} className="text-wellq-gray/40" />}
               </button>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-wellq-gray/30">
             <div className="flex items-center gap-3 mb-4">
-              <Globe size={20} className="text-blue-500" />
-              <h3 className="font-semibold text-slate-900">Language</h3>
+              <Globe size={20} className="text-wellq-blue" />
+              <h3 className="font-semibold text-wellq-dark dark:text-white">{t('settings.language')}</h3>
             </div>
-            <div className="p-4 rounded-xl bg-slate-50">
+            <div className="p-4 rounded-xl bg-wellq-gray/5 dark:bg-wellq-dark/50">
               <select
-                value={language}
-                onChange={handleLanguageChange}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                value={locale}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-full px-3 py-2 bg-white dark:bg-wellq-dark/80 border border-wellq-gray/30 dark:border-wellq-gray/30 rounded-lg text-sm text-wellq-dark dark:text-white"
               >
                 <option value="es">Español</option>
                 <option value="en">English</option>
@@ -492,48 +496,48 @@ export const SettingsView = ({
         {/* Backend Server & Database */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Backend Server Status */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-wellq-gray/30">
             <div className="flex items-center gap-3 mb-4">
-              <Server size={20} className="text-indigo-500" />
-              <h3 className="font-semibold text-slate-900">Backend Server</h3>
+              <Server size={20} className="text-wellq-blue" />
+              <h3 className="font-semibold text-wellq-dark dark:text-white">Backend Server</h3>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-500">Status</span>
+                <span className="text-sm text-wellq-gray dark:text-wellq-gray/80">Status</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  serverStatus.status === 'Online' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                  serverStatus.status === 'Online' ? 'bg-wellq-green/20 text-wellq-green' : 'bg-red-50 text-red-700'
                 }`}>
                   {serverStatus.status}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-500">Version</span>
-                <span className="text-sm font-medium text-slate-900">{serverStatus.version}</span>
+                <span className="text-sm text-wellq-gray dark:text-wellq-gray/80">Version</span>
+                <span className="text-sm font-medium text-wellq-dark dark:text-white">{serverStatus.version}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-500">Environment</span>
-                <span className="text-sm font-medium text-slate-900 capitalize">{serverStatus.environment}</span>
+                <span className="text-sm text-wellq-gray dark:text-wellq-gray/80">Environment</span>
+                <span className="text-sm font-medium text-wellq-dark dark:text-white capitalize">{serverStatus.environment}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-500">Database</span>
+                <span className="text-sm text-wellq-gray dark:text-wellq-gray/80">Database</span>
                 <span className={`text-sm font-medium ${
-                  serverStatus.database === 'Connected' ? 'text-emerald-600' : 'text-red-600'
+                  serverStatus.database === 'Connected' ? 'text-wellq-green' : 'text-red-600'
                 }`}>
                   {serverStatus.database}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-500">Latency</span>
-                <span className="text-sm font-medium text-slate-900">{serverStatus.latency}</span>
+                <span className="text-sm text-wellq-gray dark:text-wellq-gray/80">Latency</span>
+                <span className="text-sm font-medium text-wellq-dark dark:text-white">{serverStatus.latency}</span>
               </div>
             </div>
           </div>
 
           {/* Database (existing) */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-wellq-gray/30">
             <div className="flex items-center gap-3 mb-4">
-              <Database size={20} className="text-green-500" />
-              <h3 className="font-semibold text-slate-900">Database</h3>
+              <Database size={20} className="text-wellq-green" />
+              <h3 className="font-semibold text-wellq-dark dark:text-white">Database</h3>
             </div>
             {loading ? (
               <Skeleton className="h-32 w-full" />
@@ -542,12 +546,12 @@ export const SettingsView = ({
                 {[
                   { label: 'Engine', value: dbStatus?.database ?? 'Waiting for database' },
                   { label: 'Status', value: dbStatus?.status ?? 'Waiting...' },
-                  { label: 'Latency', value: `${dbStatus?.latency_ms ?? 0} ms`, color: 'text-emerald-600' },
+                  { label: 'Latency', value: `${dbStatus?.latency_ms ?? 0} ms`, color: 'text-wellq-green' },
                   { label: 'Collections', value: dbStatus?.collections_count ?? 0 },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">{label}</span>
-                    <span className={`text-sm font-medium ${color ?? 'text-slate-900'}`}>{value}</span>
+                    <span className="text-sm text-wellq-gray dark:text-wellq-gray/80">{label}</span>
+                    <span className={`text-sm font-medium ${color ?? 'text-wellq-dark dark:text-white'}`}>{value}</span>
                   </div>
                 ))}
               </div>
@@ -562,19 +566,19 @@ export const SettingsView = ({
   return (
     <div className="space-y-6">
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl self-start inline-flex">
+      <div className="flex gap-1 bg-wellq-gray/10 p-1 rounded-xl self-start inline-flex dark:bg-wellq-dark/80">
         {[
-          { id: 'general', label: 'General' },
-          { id: 'api_keys', label: 'API Keys' },
-          { id: 'team', label: 'Team' },
+          { id: 'general', label: t('settings.general') },
+          { id: 'api_keys', label: t('settings.apiKeys') },
+          { id: 'team', label: t('settings.team') },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
               activeTab === tab.id
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-white text-wellq-dark shadow-sm dark:bg-wellq-dark/60 dark:text-white'
+                : 'text-wellq-gray hover:text-wellq-dark dark:text-wellq-gray/80 dark:hover:text-white'
             }`}
           >
             {tab.label}
@@ -583,6 +587,15 @@ export const SettingsView = ({
       </div>
 
       {renderTab()}
+
+      {/* ConfirmDialog para eliminar usuario */}
+      <ConfirmDialog
+        open={confirmDelete.open}
+        title="Eliminar usuario"
+        message="¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer."
+        onConfirm={doDeleteUser}
+        onCancel={() => setConfirmDelete({ open: false, userId: null })}
+      />
     </div>
   );
 };

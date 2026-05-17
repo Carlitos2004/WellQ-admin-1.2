@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   LayoutDashboard, Building2, DollarSign, BarChart3,
   Settings, Server, Package, Bell, Search, ChevronDown,
   Activity, RefreshCw, PanelLeftClose, PanelLeftOpen,
   Trash2, X, Megaphone, Mail, Smartphone, CheckCircle, Clock,
+  LogOut, Moon, Sun,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { apiFetch, API_BASE } from './api/client';
 import { OverviewView }    from './views/OverviewView';
@@ -15,35 +17,29 @@ import { AnalyticsView }   from './views/AnalyticsView';
 import { PlansView }       from './views/PlansView';
 import { SettingsView }    from './views/SettingsView';
 
+// 🌐 i18n
+import { useLanguage } from './contexts/LanguageContext';
+import { useTheme }    from './contexts/ThemeContext';
+
 const SIDEBAR_W   = 256;
 const SIDEBAR_COL = 64;
 
-const NAV = [
-  { id: 'overview',   label: 'Overview',          icon: LayoutDashboard },
-  { id: 'clinics',    label: 'Clinic Management',  icon: Building2 },
-  { id: 'plans',      label: 'Plans & Pricing',    icon: Package },
-  { id: 'financials', label: 'Financials',         icon: DollarSign },
-  { id: 'platform',   label: 'Platform Ops',       icon: Server },
-  { id: 'analytics',  label: 'Product Analytics',  icon: BarChart3 },
-  { id: 'settings',   label: 'Settings',           icon: Settings },
+const NAV_KEYS = [
+  { id: 'overview',   key: 'overview',   icon: LayoutDashboard },
+  { id: 'clinics',    key: 'clinics',    icon: Building2 },
+  { id: 'plans',      key: 'plans',      icon: Package },
+  { id: 'financials', key: 'financials', icon: DollarSign },
+  { id: 'platform',   key: 'platform',   icon: Server },
+  { id: 'analytics',  key: 'analytics',  icon: BarChart3 },
+  { id: 'settings',   key: 'settings',   icon: Settings },
 ];
-
-const NAV_FULL_LABELS = {
-  overview:   'Overview',
-  clinics:    'Clinic Management',
-  plans:      'Plans & Pricing',
-  financials: 'Financials',
-  platform:   'Platform Ops',
-  analytics:  'Product Analytics',
-  settings:   'Settings',
-};
 
 const VIEWS_WITH_DATERANGE = ['overview', 'clinics', 'financials', 'platform', 'analytics'];
 
-// ========== NUEVA FUNCIÓN: Convierte el rango (24H,7D,30D,QTD,YTD) a fechas ==========
+// ========== Convierte el rango (24H,7D,30D,QTD,YTD) a fechas ==========
 const getDateRangeFromPeriod = (period) => {
   const now = new Date();
-  const end = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const end = now.toISOString().split('T')[0];
   let start = new Date();
 
   switch (period) {
@@ -151,19 +147,19 @@ const NotificationPanel = ({ onClose }) => {
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-2 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-slate-100 dark:border-gray-700 z-50 overflow-hidden"
       style={{ maxHeight: '520px', display: 'flex', flexDirection: 'column' }}
     >
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-gray-700">
         <div>
-          <h3 className="font-semibold text-slate-900 text-sm">Notificaciones</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Notificaciones</h3>
           <p className="text-xs text-slate-400 mt-0.5">Historial de mensajes enviados</p>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+          className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
         >
-          <X size={16} className="text-slate-400" />
+          <X size={16} className="text-slate-400 dark:text-gray-500" />
         </button>
       </div>
 
@@ -181,8 +177,8 @@ const NotificationPanel = ({ onClose }) => {
 
         {!loading && !error && notifications.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
-            <Bell size={28} className="text-slate-200" />
-            <p className="text-sm text-slate-400">Sin notificaciones</p>
+            <Bell size={28} className="text-slate-200 dark:text-gray-600" />
+            <p className="text-sm text-slate-400 dark:text-gray-500">Sin notificaciones</p>
           </div>
         )}
 
@@ -194,19 +190,19 @@ const NotificationPanel = ({ onClose }) => {
           return (
             <div
               key={n.id}
-              className="flex gap-3 px-5 py-3.5 border-b border-slate-50 hover:bg-slate-50 transition-colors group"
+              className="flex gap-3 px-5 py-3.5 border-b border-slate-50 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors group"
             >
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <ChannelIcon size={15} className="text-indigo-500" />
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <ChannelIcon size={15} className="text-indigo-500 dark:text-indigo-400" />
               </div>
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-slate-900 truncate">{n.title}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{n.title}</p>
                   <button
                     onClick={() => handleDelete(n.id)}
                     disabled={deletingId === n.id}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded-md transition-all flex-shrink-0"
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all flex-shrink-0"
                     title="Eliminar"
                   >
                     {deletingId === n.id
@@ -215,18 +211,18 @@ const NotificationPanel = ({ onClose }) => {
                     }
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
+                <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5 line-clamp-2">{n.message}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className={`flex items-center gap-1 text-xs font-medium ${statusStyle.color} ${statusStyle.bg} px-1.5 py-0.5 rounded-md`}>
                     <StatusIcon size={10} />
                     {n.status}
                   </span>
-                  <span className="text-xs text-slate-300">·</span>
-                  <span className="text-xs text-slate-400">{fmtDate(n.createdAt)}</span>
+                  <span className="text-xs text-slate-300 dark:text-gray-600">·</span>
+                  <span className="text-xs text-slate-400 dark:text-gray-500">{fmtDate(n.createdAt)}</span>
                   {n.recipientClinicId && n.recipientClinicId !== 'all' && (
                     <>
-                      <span className="text-xs text-slate-300">·</span>
-                      <span className="text-xs text-slate-400 truncate max-w-[80px]">{n.recipientClinicId}</span>
+                      <span className="text-xs text-slate-300 dark:text-gray-600">·</span>
+                      <span className="text-xs text-slate-400 dark:text-gray-500 truncate max-w-[80px]">{n.recipientClinicId}</span>
                     </>
                   )}
                 </div>
@@ -237,8 +233,8 @@ const NotificationPanel = ({ onClose }) => {
       </div>
 
       {!loading && !error && notifications.length > 0 && (
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
-          <p className="text-xs text-slate-400 text-center">
+        <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-800">
+          <p className="text-xs text-slate-400 dark:text-gray-500 text-center">
             {notifications.length} notificación{notifications.length !== 1 ? 'es' : ''}
           </p>
         </div>
@@ -247,13 +243,106 @@ const NotificationPanel = ({ onClose }) => {
   );
 };
 
+// ── ProfileDropdown ──────────────────────────────────────────────────────────
+const ProfileDropdown = ({ onGoSettings, onClose, theme, toggleTheme, above = false }) => {
+  const dropRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const posStyle = above
+    ? { position: 'absolute', bottom: '100%', left: 0, marginBottom: 8 }
+    : { position: 'absolute', top: '100%', right: 0, marginTop: 8 };
+
+  const btnBase = {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 16px',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 500,
+    textAlign: 'left',
+  };
+
+  return (
+    <div
+      ref={dropRef}
+      style={{
+        ...posStyle,
+        width: 210,
+        background: '#1e293b',
+        borderRadius: 12,
+        border: '1px solid #334155',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+        zIndex: 9999,
+        overflow: 'hidden',
+        paddingTop: 4,
+        paddingBottom: 4,
+      }}
+    >
+      <button
+        onClick={() => { onGoSettings(); onClose(); }}
+        style={{ ...btnBase, color: '#cbd5e1' }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <Settings size={15} style={{ color: '#64748b', flexShrink: 0 }} />
+        Settings
+      </button>
+      <button
+        onClick={() => { toggleTheme(); onClose(); }}
+        style={{ ...btnBase, color: '#cbd5e1' }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        {theme === 'dark'
+          ? <Sun size={15} style={{ color: '#64748b', flexShrink: 0 }} />
+          : <Moon size={15} style={{ color: '#64748b', flexShrink: 0 }} />
+        }
+        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      </button>
+      <div style={{ height: 1, background: '#334155', margin: '4px 0' }} />
+      <button
+        onClick={() => { toast.success('Sesión cerrada'); onClose(); }}
+        style={{ ...btnBase, color: '#f87171' }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <LogOut size={15} style={{ color: '#f87171', flexShrink: 0 }} />
+        Log out
+      </button>
+    </div>
+  );
+};
+
 export default function App() {
+  // 🌐 i18n + tema
+  const { t } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
+
+  // 🌐 Traducción de la barra lateral
+  const NAV = useMemo(() => NAV_KEYS.map(item => ({
+    ...item,
+    label: t(`sidebar.${item.key}`),
+  })), [t]);
+
   const [view,        setView]       = useState('overview');
   const [open,        setOpen]       = useState(true);
   const [loading,     setLoading]    = useState(true);
   const [refreshing,  setRefreshing] = useState(false);
   const [dateRange,   setDateRange]  = useState('30D');
   const [bellOpen,    setBellOpen]   = useState(false);
+  // ── Estado del dropdown de perfil: null | 'sidebar' | 'topbar' ───────────
+  const [profileOpen, setProfileOpen] = useState(null);
 
   const [tooltip, setTooltip] = useState({ id: null, top: 0 });
 
@@ -282,13 +371,12 @@ export default function App() {
   const [dbStatus,        setDbStatus]        = useState(null);
   const [systemUsers,     setSystemUsers]     = useState([]);
 
-  // Estados para las 4 cards de Operational Status
   const [kpiSystemHealth, setKpiSystemHealth] = useState(null);
   const [kpiActiveNow,    setKpiActiveNow]    = useState(null);
   const [kpiDownloads,    setKpiDownloads]    = useState(null);
   const [kpiDormant,      setKpiDormant]      = useState(null);
 
-  // ─── Fetch (ahora acepta un rango y agrega fechas a endpoints específicos) ───
+  // ─── Fetch ─────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async (range = dateRange) => {
     setRefreshing(true);
     const { start_date, end_date } = getDateRangeFromPeriod(range);
@@ -302,8 +390,8 @@ export default function App() {
       safe(apiFetch(withDates('/api/kpis/nrr'))),                               // 3
       safe(apiFetch(withDates('/api/financials/mrr/breakdown'))),               // 4
       safe(apiFetch(withDates('/api/financials/churn-risk/by-region'))),        // 5
-      safe(apiFetch('/api/alerts')),                                            // 6 (sin fechas)
-      safe(apiFetch('/api/clinics')),                                           // 7 (sin fechas)
+      safe(apiFetch('/api/alerts')),                                            // 6
+      safe(apiFetch('/api/clinics')),                                           // 7
       safe(apiFetch('/api/infrastructure/servers')),                            // 8
       safe(apiFetch('/api/infrastructure/processes')),                          // 9
       safe(apiFetch('/api/platform/ai/costs')),                                 // 10
@@ -366,35 +454,24 @@ export default function App() {
     setRefreshing(false);
   }, [dateRange]);
 
-  // Carga inicial (solo una vez, con el rango por defecto)
   useEffect(() => {
     fetchAll(dateRange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // El array vacío asegura que solo se ejecute al montar
+  }, []);
 
-  // Cuando el usuario cambie el rango, recargar los datos (si no es la carga inicial)
   useEffect(() => {
-    if (!loading) { // Evita llamar mientras aún está cargando la primera vez
+    if (!loading) {
       fetchAll(dateRange);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
-  const handleImpersonate = async (clinic) => {
-    const id     = clinic.clinic_id ?? clinic.id;
-    const reason = window.prompt(`Razón para acceder a ${clinic.name} (mín. 10 caracteres):`);
-    if (!reason || reason.length < 10) return;
-    try {
-      const res  = await fetch(`${API_BASE}/api/clinics/${id}/impersonate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      });
-      const data = await res.json();
-      if (data.success) alert(`✅ Sesión iniciada.\nExpira: ${data.expires_at}`);
-    } catch (_) {}
-  };
+const handleImpersonate = async (clinic, data) => {
+  if (data?.success) {
+    toast.success(`✅ Sesión iniciada en ${clinic.name}`);
+  }
+};
 
   const handleAckAlert = (alertId) => {
     fetch(`${API_BASE}/api/alerts/${alertId}/acknowledge`, { method: 'POST' })
@@ -443,9 +520,10 @@ export default function App() {
       <div style={{
         display:      'flex',
         alignItems:   'center',
-        padding:      '20px 16px',
+        padding:      '0 16px',
         borderBottom: '1px solid #1e293b',
-        minHeight:    72,
+        height:       '72px',
+        boxSizing:    'border-box',
       }}>
         <div style={{
           maxWidth:   open ? '200px' : '0px',
@@ -593,48 +671,82 @@ export default function App() {
         })}
       </nav>
 
+      {/* ── Footer con ProfileDropdown ──────────────────────────────────── */}
       <div style={{
-        padding:     '16px 12px',
-        borderTop:   '1px solid #1e293b',
-        display:     'flex',
-        alignItems:  'center',
-        marginTop:   'auto',
+        padding:    '16px 12px',
+        borderTop:  '1px solid #1e293b',
+        marginTop:  'auto',
+        position:   'relative',
       }}>
-        <div style={{
-          width:          38,
-          height:         38,
-          borderRadius:   '50%',
-          flexShrink:     0,
-          background:     'linear-gradient(135deg,#34d399,#14b8a6)',
-          display:        'flex',
-          alignItems:     'center',
-          justifyContent: 'center',
-          color:          'white',
-          fontSize:       13,
-          fontWeight:     700,
-        }}>
-          JD
-        </div>
+        {/* Dropdown posicionado encima del footer */}
+        {profileOpen === 'sidebar' && (
+          <ProfileDropdown
+            onGoSettings={() => { setView('settings'); }}
+            onClose={() => setProfileOpen(null)}
+            theme={theme}
+            toggleTheme={toggleTheme}
+            above={true}
+          />
+        )}
 
-        <div style={{
-          display:        'flex',
-          alignItems:     'center',
-          justifyContent: 'space-between',
-          flex:           open ? 1 : 0,
-          maxWidth:       open ? '200px' : '0px',
-          opacity:        open ? 1 : 0,
-          overflow:       'hidden',
-          transition:     'all 300ms cubic-bezier(0.4,0,0.2,1)',
-          whiteSpace:     'nowrap',
-          marginLeft:     open ? 12 : 0,
-          minWidth:       0,
-        }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>John Doe</p>
-            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Super Admin</p>
+        <button
+          onClick={() => setProfileOpen((p) => p === 'sidebar' ? null : 'sidebar')}
+          style={{
+            width:          '100%',
+            display:        'flex',
+            alignItems:     'center',
+            background:     'transparent',
+            border:         'none',
+            cursor:         'pointer',
+            padding:        0,
+            borderRadius:   8,
+          }}
+        >
+          <div style={{
+            width:          38,
+            height:         38,
+            borderRadius:   '50%',
+            flexShrink:     0,
+            background:     'linear-gradient(135deg,#34d399,#14b8a6)',
+            display:        'flex',
+            alignItems:     'center',
+            justifyContent: 'center',
+            color:          'white',
+            fontSize:       13,
+            fontWeight:     700,
+          }}>
+            JD
           </div>
-          <ChevronDown size={16} color="#64748b" style={{ flexShrink: 0, marginLeft: 12 }} />
-        </div>
+
+          <div style={{
+            display:        'flex',
+            alignItems:     'center',
+            justifyContent: 'space-between',
+            flex:           open ? 1 : 0,
+            maxWidth:       open ? '200px' : '0px',
+            opacity:        open ? 1 : 0,
+            overflow:       'hidden',
+            transition:     'all 300ms cubic-bezier(0.4,0,0.2,1)',
+            whiteSpace:     'nowrap',
+            marginLeft:     open ? 12 : 0,
+            minWidth:       0,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>John Doe</p>
+              <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Super Admin</p>
+            </div>
+            <ChevronDown
+              size={16}
+              color="#64748b"
+              style={{
+                flexShrink:  0,
+                marginLeft:  12,
+                transform:   profileOpen === 'sidebar' ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition:  'transform 200ms',
+              }}
+            />
+          </div>
+        </button>
       </div>
 
       {!open && tooltip.id && (
@@ -678,22 +790,22 @@ export default function App() {
   const Topbar = () => {
     const showDateRange = VIEWS_WITH_DATERANGE.includes(view);
     return (
-      <header className="bg-white border-b border-slate-200 z-40 flex-shrink-0">
-        <div className="flex items-center justify-between px-8 py-4 gap-4">
-          <h1 className="text-xl font-bold text-slate-900 whitespace-nowrap">
-            {NAV_FULL_LABELS[view]}
+      <header className="h-[72px] bg-white border-b border-slate-200 z-40 flex-shrink-0 dark:bg-gray-900 dark:border-gray-700">
+        <div className="flex items-center justify-between px-8 h-full gap-4">
+          <h1 className="text-xl font-bold text-slate-900 whitespace-nowrap dark:text-white">
+            {t(`sidebar.${view}`)}
           </h1>
           <div className="flex items-center gap-3">
             {showDateRange && (
-              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 dark:bg-gray-800">
                 {['24H', '7D', '30D', 'QTD', 'YTD'].map((r) => (
                   <button
                     key={r}
                     onClick={() => setDateRange(r)}
                     className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                       dateRange === r
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-gray-700 dark:text-white'
+                        : 'text-slate-500 hover:text-slate-700 dark:text-gray-400 dark:hover:text-gray-200'
                     }`}
                   >
                     {r}
@@ -702,41 +814,63 @@ export default function App() {
               </div>
             )}
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-gray-500" />
               <input
                 type="text"
-                placeholder="Buscar clínicas, facturas..."
-                className="pl-9 pr-4 py-2 bg-slate-100 rounded-lg text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                placeholder={t('topbar.searchPlaceholder')}
+                className="pl-9 pr-4 py-2 bg-slate-100 rounded-lg text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all dark:bg-gray-800 dark:text-white dark:focus:bg-gray-700"
               />
             </div>
             <button
-              onClick={() => fetchAll(dateRange)} // Ahora pasa el rango actual
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              title="Actualizar datos"
+              onClick={() => {
+                fetchAll(dateRange);
+                toast.success('Datos actualizados');
+              }}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors dark:hover:bg-gray-800"
+              title={t('topbar.refresh')}
             >
-              <RefreshCw size={18} className={`text-slate-600 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw size={18} className={`text-slate-600 dark:text-gray-300 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
 
             <div className="relative">
               <button
                 onClick={() => setBellOpen((o) => !o)}
-                className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                title="Notificaciones"
+                className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors dark:hover:bg-gray-800"
+                title={t('topbar.notifications')}
               >
-                <Bell size={18} className="text-slate-600" />
+                <Bell size={18} className="text-slate-600 dark:text-gray-300" />
                 {unreadAlerts > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" />
                 )}
               </button>
               {bellOpen && <NotificationPanel onClose={() => setBellOpen(false)} />}
             </div>
 
-            <button className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold">
-                JD
-              </div>
-              <ChevronDown size={14} className="text-slate-500" />
-            </button>
+            {/* ── Botón JD con ProfileDropdown ────────────────────────── */}
+            <div className="relative">
+              <button
+                onClick={() => setProfileOpen((p) => p === 'topbar' ? null : 'topbar')}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors dark:hover:bg-gray-800"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold">
+                  JD
+                </div>
+                <ChevronDown
+                  size={14}
+                  className="text-slate-500 dark:text-gray-400 transition-transform"
+                  style={{ transform: profileOpen === 'topbar' ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                />
+              </button>
+              {profileOpen === 'topbar' && (
+                <ProfileDropdown
+                  onGoSettings={() => { setView('settings'); }}
+                  onClose={() => setProfileOpen(null)}
+                  theme={theme}
+                  toggleTheme={toggleTheme}
+                  above={false}
+                />
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -769,13 +903,17 @@ export default function App() {
           />
         );
       case 'clinics':
-        return (
-          <ClinicsView
-            apiClinics={apiClinics}
-            clinicsLoading={clinicsLoading}
-            onImpersonate={handleImpersonate}
-          />
-        );
+  return (
+    <ClinicsView
+      apiClinics={apiClinics}
+      clinicsLoading={clinicsLoading}
+      onImpersonate={handleImpersonate}
+      onRefreshClinics={async () => {        // ← agrega esto
+        const res = await apiFetch('/api/clinics');
+        if (res?.data) setApiClinics(res.data);
+      }}
+    />
+  );
       case 'financials':
         return <FinancialsView mrrData={mrrData} churnRegions={churnRegions} />;
       case 'platform':
@@ -821,7 +959,7 @@ export default function App() {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div
-      className="flex h-screen w-full bg-slate-50 overflow-hidden"
+      className="flex h-screen w-full bg-slate-50 overflow-hidden dark:bg-gray-950"
       style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
     >
       <style>{`
@@ -831,7 +969,7 @@ export default function App() {
 
       <Sidebar />
 
-      <div className="flex-1 flex flex-col min-w-0 relative bg-slate-50 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 relative bg-slate-50 overflow-hidden dark:bg-gray-950">
         <Topbar />
         <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
           <div className="p-8">
