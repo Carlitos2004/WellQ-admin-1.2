@@ -1,5 +1,8 @@
 import json
+from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Path, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.db.neon import get_db
@@ -9,7 +12,8 @@ from app.models_db import (
     AdherenceSnapshot,
     CohortRetention,
     SoapQualityMetric,
-    AppVersion
+    AppVersion,
+    ForceUpdateConfig,
 )
 
 router = APIRouter(prefix="/api/analytics", tags=["Analítica de Producto y App"])
@@ -213,5 +217,69 @@ async def get_app_versions(db: AsyncSession = Depends(get_db)):
                 "percentage": v.percentage
             }
             for v in versions
+        ]
+    }
+
+# ── POST /api/analytics/versions/force-update ─────────────────────────────────
+class ForceUpdatePayload(BaseModel):
+    appType: str
+    minVersion: str
+    updatedBy: Optional[str] = None
+
+@router.post("/versions/force-update", summary="Configura versión mínima obligatoria por app")
+async def set_force_update(payload: ForceUpdatePayload, db: AsyncSession = Depends(get_db)):
+    app_type = payload.appType.lower().strip()
+    min_version = payload.minVersion.strip()
+
+    if not app_type or not min_version:
+        raise HTTPException(status_code=422, detail="appType y minVersion son requeridos")
+
+    # Upsert: buscar registro existente o crear uno nuevo
+    result = await db.execute(
+        select(ForceUpdateConfig).where(ForceUpdateConfig.app_type == app_type)
+    )
+    config = result.scalars().first()
+
+    if config:
+        config.min_version = min_version
+        config.updated_at  = datetime.utcnow()
+        config.updated_by  = payload.updatedBy
+    else:
+        config = ForceUpdateConfig(
+            app_type   = app_type,
+            min_version = min_version,
+            updated_by  = payload.updatedBy,
+        )
+        db.add(config)
+
+    await db.commit()
+    await db.refresh(config)
+
+    return {
+        "status": "success",
+        "data": {
+            "app_type":    config.app_type,
+            "min_version": config.min_version,
+            "updated_at":  config.updated_at.isoformat(),
+            "updated_by":  config.updated_by,
+        }
+    }
+
+
+# ── GET /api/analytics/versions/force-update ──────────────────────────────────
+@router.get("/versions/force-update", summary="Obtiene la configuración actual de force update")
+async def get_force_update_config(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ForceUpdateConfig))
+    configs = result.scalars().all()
+    return {
+        "status": "success",
+        "data": [
+            {
+                "app_type":    c.app_type,
+                "min_version": c.min_version,
+                "updated_at":  c.updated_at.isoformat(),
+                "updated_by":  c.updated_by,
+            }
+            for c in configs
         ]
     }

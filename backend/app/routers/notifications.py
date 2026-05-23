@@ -14,7 +14,7 @@ async def send_notification(body: dict, db: AsyncSession = Depends(get_db)):
     channel = body.get("channel", "in_app")
     
     new_notification = Notification(
-        id=new_id,
+        notification_id=new_id,
         title=body.get("title", "Sin título"),
         message=body.get("message", ""),
         channel=channel,
@@ -27,10 +27,11 @@ async def send_notification(body: dict, db: AsyncSession = Depends(get_db)):
     
     db.add(new_notification)
     await db.commit()
+    await db.refresh(new_notification)
     
     return {
         "message": "Notificación encolada para 1 clínica(s).",
-        "notificationIds": [new_id],
+        "notificationIds": [new_notification.notification_id],
         "channel": channel
     }
  
@@ -53,6 +54,7 @@ async def list_notifications(page: int = 1, limit: int = 20, db: AsyncSession = 
         "data": [
             {
                 "id": n.id,
+                "notificationId": getattr(n, "notification_id", None),
                 "title": n.title,
                 "message": n.message,
                 "channel": getattr(n, "channel", "in_app"),
@@ -84,6 +86,7 @@ async def get_notification(notification_id: str, db: AsyncSession = Depends(get_
         
     return {
         "id": notification.id,
+        "notificationId": getattr(notification, "notification_id", None),
         "title": notification.title,
         "message": notification.message,
         "channel": getattr(notification, "channel", "in_app"),
@@ -116,4 +119,4 @@ async def delete_notification(notification_id: str, db: AsyncSession = Depends(g
         "message": f"Notificación {notification_id} eliminada correctamente.",
         "deleted_id": notification_id
     }
- 
+

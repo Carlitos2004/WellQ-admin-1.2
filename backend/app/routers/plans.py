@@ -266,11 +266,19 @@ async def duplicate_plan(
     new_plan_id = f"plan-copy-{uuid.uuid4().hex[:8]}"
 
     effective_date_val = plan.effective_date
+    if isinstance(effective_date_val, str):
+        try:
+            effective_date_val = datetime.fromisoformat(effective_date_val)  # ← agrega esto
+        except ValueError:
+            effective_date_val = datetime.utcnow() # ← agrega esto
     if body.get("effectiveDate"):
         try:
             effective_date_val = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
         except ValueError:
-            pass
+            pass  
+
+
+
 
     duplicated = Plan(
         plan_id=new_plan_id,
@@ -346,3 +354,29 @@ async def restore_plan(planId: str = Path(...), db: AsyncSession = Depends(get_d
         "id": planId,
         "restoredAt": now.isoformat() + "Z",
     }
+
+
+# ─── DELETE /api/plans/{planId} ───────────────────────────────────────────────
+@router.delete("/{planId}", summary="Eliminar un plan permanentemente")
+async def delete_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Plan).where(Plan.plan_id == planId))
+    plan = result.scalars().first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    # Bloquear si tiene clínicas activas
+    active_clinics = await _get_active_clinics_count(db, planId)
+    if active_clinics > 0:
+        return {
+            "error": {
+                "code": "PLAN_HAS_ACTIVE_CLINICS",
+                "message": f"No se puede eliminar: el plan tiene {active_clinics} clínica(s) activa(s). Archívalo primero."
+            }
+        }
+
+    # Eliminar features primero (FK), luego el plan
+    await db.execute(delete(PlanFeature).where(PlanFeature.plan_id == planId))
+    await db.execute(delete(Plan).where(Plan.plan_id == planId))
+    await db.commit()
+
+    return {"status": "success", "id": planId, "deletedAt": datetime.utcnow().isoformat() + "Z"}

@@ -115,7 +115,8 @@ async def update_user(user_id: str = Path(...), payload: UserUpdate = Body(...),
     update_data = payload.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(user, field, value)
-    user.updated_at = datetime.utcnow()
+    if hasattr(user, "updated_at"):
+        user.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(user)
 

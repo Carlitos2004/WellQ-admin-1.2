@@ -3,6 +3,17 @@ models_db.py — Modelos SQLModel para WellQ Admin Console
 =========================================================
 Tablas en Neon (PostgreSQL). El backend las crea automáticamente al arrancar.
 Para poblar con datos mock: python seed.py
+
+Tablas #33–35 nuevas (sincronizadas desde MongoDB de la empresa):
+  - clinician_summaries      → fuente: clinicians (agregado por clínica)
+  - patient_health_summaries → fuente: patients.status (COUNT GROUP BY clínica)
+  - support_tickets          → fuente: ticket (mapeo casi 1:1)
+
+Campos nuevos en tablas existentes:
+  - clinics.mongo_clinic_id            → _id de MongoDB para joins en sync
+  - clinic_usage_metrics.appointments_this_month → fuente: appointments
+  - clinic_usage_metrics.notes_generated         → fuente: clinical_notes
+  - clinic_usage_metrics.exercises_assigned      → fuente: patient_programs
 """
 
 from sqlmodel import SQLModel, Field
@@ -39,6 +50,10 @@ class Clinic(SQLModel, table=True):
     internal_notes: Optional[str]  = Field(default=None, sa_column=Column(Text))
     created_at: datetime           = Field(default_factory=datetime.utcnow)
     updated_at: datetime           = Field(default_factory=datetime.utcnow)
+    # ── NUEVO: ID de MongoDB para joins en sync ────────────────────────────────
+    # Referencia a clinics._id en MongoDB Atlas. Permite hacer lookup directo
+    # al sincronizar clinician_summaries y patient_health_summaries.
+    mongo_clinic_id: Optional[str] = Field(default=None, index=True)
 
 
 # ── 2. FEATURES ────────────────────────────────────────────────────────────────
@@ -142,6 +157,11 @@ class Alert(SQLModel, table=True):
     type: str                           = Field()
     title: str                          = Field()
     message: str                        = Field(sa_column=Column(Text))
+    # i18n: el frontend usa estas keys para traducir título y mensaje
+    # message_params es JSON string con valores dinámicos, ej: {"clinic":"X","days":30}
+    title_key: Optional[str]            = Field(default=None)
+    message_key: Optional[str]          = Field(default=None)
+    message_params: Optional[str]       = Field(default=None, sa_column=Column(Text))
     severity: str                       = Field()                  # "high" | "medium" | "low"
     related_type: Optional[str]         = Field(default=None)
     related_id: Optional[str]           = Field(default=None)
@@ -192,26 +212,39 @@ class AdminUser(SQLModel, table=True):
     user_id: str                   = Field(unique=True, index=True)
     full_name: str                 = Field()
     email: str                     = Field(unique=True, index=True)
-    role: str                      = Field()                       # "super_admin" | "admin" | "viewer"
-    status: str                    = Field(default="active")       # "active" | "inactive"
+    role: str                      = Field()
+    status: str                    = Field(default="active")
+    password_hash: Optional[str]   = Field(default=None)     # ⬅️ SÓLO AGREGA ESTA LÍNEA
     last_login: Optional[datetime] = Field(default=None)
     created_at: datetime           = Field(default_factory=datetime.utcnow)
-
 
 # ── 11. KPI_SNAPSHOTS ──────────────────────────────────────────────────────────
 class KpiSnapshot(SQLModel, table=True):
     __tablename__ = "kpi_snapshots"
 
-    id: Optional[int]     = Field(default=None, primary_key=True)
-    month: str            = Field()
-    year: int             = Field()
-    arr: float            = Field(default=0.0)
-    mrr: float            = Field(default=0.0)
-    nrr_percentage: float = Field(default=0.0)
-    expansion_mrr: float  = Field(default=0.0)
-    churn_mrr: float      = Field(default=0.0)
-    nrr_status: str       = Field(default="healthy")
-    created_at: datetime  = Field(default_factory=datetime.utcnow)
+    id: Optional[int]       = Field(default=None, primary_key=True)
+    month: str              = Field()
+    year: int               = Field()
+    arr: float              = Field(default=0.0)
+    mrr: float              = Field(default=0.0)
+    nrr_percentage: float   = Field(default=0.0)
+    expansion_mrr: float    = Field(default=0.0)
+    churn_mrr: float        = Field(default=0.0)
+    nrr_status: str         = Field(default="healthy")
+    # ── NUEVO: campos para filtros de período (24h / 7d / 30d / qtd / ytd) ────
+    # period = None  → snapshot mensual histórico (para gráficos)
+    # period = "24h" → métricas de las últimas 24 horas
+    # period = "7d"  → métricas de los últimos 7 días
+    # period = "30d" → métricas de los últimos 30 días
+    # period = "qtd" → métricas del trimestre actual (Q to date)
+    # period = "ytd" → métricas del año actual (Y to date)
+    period: Optional[str]   = Field(default=None, index=True)
+    total_patients: int     = Field(default=0)   # total acumulado en el período
+    patients_delta: int     = Field(default=0)   # nuevos pacientes en el período
+    active_clinics: int     = Field(default=0)   # clínicas activas al cierre del período
+    clinics_delta: int      = Field(default=0)   # clínicas onboarded en el período
+    in_treatment: int       = Field(default=0)   # pacientes en tratamiento activo
+    created_at: datetime    = Field(default_factory=datetime.utcnow)
 
 
 # ── 12. APP_METRICS ────────────────────────────────────────────────────────────
@@ -251,6 +284,16 @@ class ClinicUsageMetric(SQLModel, table=True):
     ai_processing_minutes: int         = Field(default=0)
     api_calls: int                     = Field(default=0)
     recorded_at: datetime              = Field(default_factory=datetime.utcnow)
+    # ── NUEVOS: métricas con fuente real en MongoDB ────────────────────────────
+    # appointments_this_month → COUNT appointments WHERE clinic_id = X
+    #   AND start_time >= inicio_mes_actual
+    # notes_generated         → COUNT clinical_notes WHERE provider en clinic X
+    #   AND created_at >= inicio_mes_actual (join: provider_id → clinicians.clinic_ids[])
+    # exercises_assigned      → COUNT patient_programs WHERE patient en clinic X
+    #   AND active_until = null (programas activos)
+    appointments_this_month: int       = Field(default=0)
+    notes_generated: int               = Field(default=0)
+    exercises_assigned: int            = Field(default=0)
 
 
 # ── 15. SERVERS ────────────────────────────────────────────────────────────────
@@ -512,3 +555,139 @@ class InfraNode(SQLModel, table=True):
     region: Optional[str]      = Field(default=None)
     metrics: Optional[str]     = Field(default=None, sa_column=Column(Text))  # JSON libre
     updated_at: datetime       = Field(default_factory=datetime.utcnow)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLAS NUEVAS — SINCRONIZADAS DESDE MONGODB DE LA EMPRESA
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 33. CLINICIAN_SUMMARIES ────────────────────────────────────────────────────
+class ClinicianSummary(SQLModel, table=True):
+    """
+    Resumen agregado de clínicos por clínica.
+
+    Fuente MongoDB: colección `clinicians`
+    Lógica de sync:
+      - clinic_id        → clinicians.clinic_id (mapeado como string)
+      - total_clinicians → COUNT(docs) agrupado por clinic_id
+      - active_clinicians → COUNT WHERE state = "active"
+      - specialties      → specialties[] serializado como JSON string
+      - recorded_at      → timestamp del momento de sync
+
+    Nota: los campos individuales (first_name, last_name, contact, ids,
+    metadata) se ignoran — esta tabla guarda el agregado, no replica
+    cada clínico.
+    """
+    __tablename__ = "clinician_summaries"
+
+    id: Optional[int]           = Field(default=None, primary_key=True)
+    clinic_id: str              = Field(index=True)          # → clinics.clinic_id (también se puede join por mongo_clinic_id)
+    total_clinicians: int       = Field(default=0)           # COUNT total de docs en clinicians con ese clinic_id
+    active_clinicians: int      = Field(default=0)           # COUNT WHERE state = "active"
+    specialties: Optional[str]  = Field(default=None)        # JSON array: '["Kinesiología","Traumatología"]'
+    recorded_at: datetime       = Field(default_factory=datetime.utcnow)  # timestamp de sync
+
+
+# ── 34. PATIENT_HEALTH_SUMMARIES ───────────────────────────────────────────────
+class PatientHealthSummary(SQLModel, table=True):
+    """
+    Resumen de salud clínica de pacientes agrupado por clínica.
+
+    Fuente MongoDB: colección `patients` campo `status`
+    Valores posibles de status: stable | declining | at_risk | improving
+    (también disponible en historial_medico.estado_act.est_act_nom como fuente alternativa)
+
+    Lógica de sync (aggregation pipeline):
+      db.patients.aggregate([
+        { $match: { clinic_ids: ObjectId(mongo_clinic_id) } },
+        { $group: {
+            _id: None,
+            total_patients: { $sum: 1 },
+            at_risk:   { $sum: { $cond: [{ $eq: ["$status","at_risk"]   }, 1, 0] } },
+            declining: { $sum: { $cond: [{ $eq: ["$status","declining"] }, 1, 0] } },
+            stable:    { $sum: { $cond: [{ $eq: ["$status","stable"]    }, 1, 0] } },
+            improving: { $sum: { $cond: [{ $eq: ["$status","improving"] }, 1, 0] } },
+        }}
+      ])
+
+    Nota: patients.clinic_ids es un array → se usa $match con igualdad directa
+    (MongoDB evalúa automáticamente si el valor está en el array).
+    Los totales (at_risk + declining + stable + improving) deben coincidir
+    con total_patients y con patients_used en clinics.
+    """
+    __tablename__ = "patient_health_summaries"
+
+    id: Optional[int]      = Field(default=None, primary_key=True)
+    clinic_id: str         = Field(index=True)    # → clinics.clinic_id
+    total_patients: int    = Field(default=0)     # debe coincidir con clinics.patients_used
+    at_risk: int           = Field(default=0)     # patients.status = "at_risk"
+    declining: int         = Field(default=0)     # patients.status = "declining"
+    stable: int            = Field(default=0)     # patients.status = "stable"
+    improving: int         = Field(default=0)     # patients.status = "improving"
+    recorded_at: datetime  = Field(default_factory=datetime.utcnow)  # timestamp de sync
+
+
+# ── 35. SUPPORT_TICKETS ────────────────────────────────────────────────────────
+class SupportTicket(SQLModel, table=True):
+    """
+    Tickets de soporte. Mapeo casi 1:1 desde la colección `ticket` de MongoDB.
+
+    Fuente MongoDB: colección `ticket`
+    Campos mapeados directamente: title, description, status, reported_at,
+      closed_at, category, solution
+    Campos aplanados: reporter (dict) → reporter_name, reporter_email
+    Campos resueltos: responder_id → responder.name → responder_name
+    Campo inferido: clinic_id — NO existe en la colección `ticket`.
+      Estrategia de inferencia preferida (en orden):
+        1. Pedirle a la empresa que lo incluyan en el payload de sync (ideal)
+        2. reporter.email → users.email → users.clinician_id
+           → clinicians.clinic_id
+        3. Tabla de mapeo manual reporter_email → clinic_id como fallback
+    Campos ignorados: incident_type, images, metadata, communication_channel
+    """
+    __tablename__ = "support_tickets"
+
+    id: Optional[int]                  = Field(default=None, primary_key=True)
+    ticket_id: str                     = Field(unique=True, index=True)  # ObjectId de Mongo como string
+    clinic_id: str                     = Field(index=True)               # inferido (ver docstring)
+    title: str                         = Field()
+    description: Optional[str]         = Field(default=None, sa_column=Column(Text))
+    status: str                        = Field(index=True)               # "Open" | "Closed" | "Sent"
+    reported_at: datetime              = Field()
+    closed_at: Optional[datetime]      = Field(default=None)
+    category: Optional[str]            = Field(default=None, index=True) # "Bug" | "Billing" | "Feature" | "Request"
+    solution: Optional[str]            = Field(default=None, sa_column=Column(Text))
+    reporter_name: Optional[str]       = Field(default=None)             # aplanado de reporter.name
+    reporter_email: Optional[str]      = Field(default=None, index=True) # aplanado de reporter.email (útil para inferir clinic_id)
+    responder_name: Optional[str]      = Field(default=None)             # resuelto desde responder_id → responder.name
+    recorded_at: datetime              = Field(default_factory=datetime.utcnow)  # timestamp de sync
+
+
+# ── FORCE UPDATE CONFIG ────────────────────────────────────────────────────────
+class ForceUpdateConfig(SQLModel, table=True):
+    """
+    Configuración de versión mínima obligatoria por tipo de app.
+    Un registro por app_type (patients, tablet, web).
+    Si min_version está definida, los usuarios con versiones anteriores
+    son forzados a actualizar antes de poder continuar usando la app.
+    """
+    __tablename__ = "force_update_config"
+
+    id: Optional[int]       = Field(default=None, primary_key=True)
+    app_type: str           = Field(unique=True, index=True)   # "patients" | "tablet" | "web"
+    min_version: str        = Field()                          # e.g. "2.1.0"
+    updated_at: datetime    = Field(default_factory=datetime.utcnow)
+    updated_by: Optional[str] = Field(default=None)           # email del admin que lo configuró
+
+class PasswordResetToken(SQLModel, table=True):
+    __tablename__ = "password_reset_tokens"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    reset_id: str = Field(unique=True, index=True)
+    user_id: str = Field(index=True)
+    email: str = Field(index=True)
+    code_hash: str = Field()
+    attempts: int = Field(default=0)
+    expires_at: datetime = Field(index=True)
+    used_at: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)

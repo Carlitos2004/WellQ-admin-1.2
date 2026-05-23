@@ -151,33 +151,262 @@ async def bulk_email(body: dict = Body(...), db: AsyncSession = Depends(get_db))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 25. GET /clinics/export — Exportación de lista de clínicas
+# 25. GET /clinics/export — Exportación real de clínicas como XLSX con estilos
 # ─────────────────────────────────────────────────────────────────────────────
-@router.get("/export", summary="Exportación de lista de clínicas")
-async def export_clinics(format: str = Query("csv"), db: AsyncSession = Depends(get_db)):
-    # Generamos un registro en la tabla Jobs simulando el proceso de exportación
-    job_id = f"job-{uuid.uuid4().hex[:8]}"
-    file_url = f"https://storage.wellq.co/exports/clinics_{datetime.utcnow().strftime('%Y%m%d')}.{format}"
-    
-    new_job = Job(
-        job_id=job_id,
-        job_type="export_clinics",
-        status="completed",
-        progress=100,
-        created_by="system",
-        result_url=file_url,
-        completed_at=datetime.utcnow()
-    )
-    
-    db.add(new_job)
-    await db.commit()
+@router.get("/export", summary="Exportación de lista de clínicas en XLSX con colores")
+async def export_clinics(
+    status_param: str | None = Query(None, alias="status"),
+    tier: str | None = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from fastapi.responses import StreamingResponse
 
-    return {
-        "status": "success",
-        "download_url": file_url,
-        "expires_in": "3600s",
-        "job_id": job_id
+    # — Colores del frontend WellQ —
+    C_DARK    = "1A1A2E"
+    C_WHITE   = "FFFFFF"
+    C_TEAL    = "0D9488"
+    C_ALT_ROW = "E6FAFA"
+
+    STATUS_COLORS = {
+        "active":    ("D1FAE5", "065F46"),
+        "warning":   ("FEF3C7", "92400E"),
+        "critical":  ("FEE2E2", "991B1B"),
+        "churned":   ("F3F4F6", "374151"),
+        "trial":     ("EDE9FE", "5B21B6"),
+        "onboarding":("DBEAFE", "1E40AF"),
     }
+    TIER_COLORS = {
+        "enterprise": ("1A1A2E", "FFFFFF"),
+        "smb":        ("E0F2FE", "075985"),
+        "trial":      ("F3E8FF", "6B21A8"),
+    }
+
+    def fill(hex_color):
+        return PatternFill("solid", fgColor=hex_color)
+
+    def border():
+        s = Side(style='thin', color='E5E7EB')
+        return Border(left=s, right=s, top=s, bottom=s)
+
+    # — Traer datos reales de la DB —
+    query = select(Clinic)
+    if status_param:
+        query = query.where(Clinic.status == status_param)
+    if tier:
+        query = query.where(Clinic.tier == tier)
+    query = query.order_by(asc(Clinic.name))
+    result = await db.execute(query)
+    clinics = result.scalars().all()
+
+    data = [{
+        "clinic_id": c.clinic_id,
+        "name": c.name,
+        "tier": c.tier,
+        "status": c.status,
+        "patientsUsed": c.patients_used,
+        "patientsLimit": c.patients_limit,
+        "healthScore": c.health_score,
+        "mrr": c.mrr,
+        "lastLogin": c.last_login.isoformat() if c.last_login else "",
+        "location": c.location or "",
+    } for c in clinics]
+
+    wb = Workbook()
+
+    # ══ HOJA 1 — Todas las clínicas ══
+    ws = wb.active
+    ws.title = "Clínicas"
+    ws.sheet_view.showGridLines = False
+    ws.freeze_panes = "A3"
+
+    ws.merge_cells("A1:K1")
+    t = ws["A1"]
+    t.value = f"WellQ — Reporte de Clínicas   |   {datetime.utcnow().strftime('%d/%m/%Y %H:%M')} UTC"
+    t.font = Font(name="Arial", bold=True, size=13, color=C_WHITE)
+    t.fill = fill(C_DARK)
+    t.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[1].height = 32
+
+    headers    = ["ID", "Nombre Clínica", "Tier", "Estado", "Pacientes", "Límite", "Uso %", "Health", "MRR (USD)", "Último Login", "Ciudad"]
+    col_widths = [12,   28,               13,     12,       11,          10,       9,       10,      13,          22,             16]
+
+    for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
+        cell = ws.cell(row=2, column=ci, value=h)
+        cell.font      = Font(name="Arial", bold=True, size=10, color=C_WHITE)
+        cell.fill      = fill(C_TEAL)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border    = border()
+        ws.column_dimensions[get_column_letter(ci)].width = w
+    ws.row_dimensions[2].height = 22
+
+    for ri, c in enumerate(data, 3):
+        bg   = C_ALT_ROW if ri % 2 == 0 else C_WHITE
+        uso  = round((c["patientsUsed"] / c["patientsLimit"]) * 100, 1) if c["patientsLimit"] > 0 else 0
+        login_str = ""
+        if c["lastLogin"]:
+            try: login_str = datetime.fromisoformat(c["lastLogin"].replace("Z","")).strftime("%d/%m/%Y %H:%M")
+            except: login_str = c["lastLogin"]
+
+        vals = [c["clinic_id"], c["name"], c["tier"].upper(), c["status"].capitalize(),
+                c["patientsUsed"], c["patientsLimit"], uso / 100, c["healthScore"],
+                c["mrr"], login_str, c["location"]]
+
+        for ci, val in enumerate(vals, 1):
+            cell = ws.cell(row=ri, column=ci, value=val)
+            cell.font      = Font(name="Arial", size=10, color="1F2937")
+            cell.fill      = fill(bg)
+            cell.border    = border()
+            cell.alignment = Alignment(vertical="center")
+
+        # Tier badge (col 3)
+        tbg, tfg = TIER_COLORS.get(c["tier"].lower(), ("E5E7EB", "374151"))
+        tc = ws.cell(row=ri, column=3)
+        tc.fill = fill(tbg); tc.font = Font(name="Arial", size=10, bold=True, color=tfg)
+        tc.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Status badge (col 4)
+        sbg, sfg = STATUS_COLORS.get(c["status"].lower(), ("F3F4F6", "374151"))
+        sc = ws.cell(row=ri, column=4)
+        sc.fill = fill(sbg); sc.font = Font(name="Arial", size=10, bold=True, color=sfg)
+        sc.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Uso % con color semáforo (col 7)
+        pc = ws.cell(row=ri, column=7)
+        pc.number_format = "0.0%"
+        pc.alignment = Alignment(horizontal="center", vertical="center")
+        if uso >= 90:   pc.fill = fill("FEE2E2"); pc.font = Font(name="Arial", size=10, bold=True, color="991B1B")
+        elif uso >= 70: pc.fill = fill("FEF3C7"); pc.font = Font(name="Arial", size=10, bold=True, color="92400E")
+        else:           pc.fill = fill("D1FAE5"); pc.font = Font(name="Arial", size=10, color="065F46")
+
+        # Health Score con color (col 8)
+        hs = c["healthScore"]
+        hc = ws.cell(row=ri, column=8)
+        hbg, hfg = ("F0FDF4","065F46") if hs>=80 else ("FFFBEB","92400E") if hs>=60 else ("FFF1F2","991B1B") if hs>0 else ("F9FAFB","9CA3AF")
+        hc.fill = fill(hbg); hc.font = Font(name="Arial", size=10, bold=True, color=hfg)
+        hc.alignment = Alignment(horizontal="center", vertical="center")
+
+        # MRR formato moneda (col 9)
+        ws.cell(row=ri, column=9).number_format = '"$"#,##0.00'
+        ws.cell(row=ri, column=9).alignment = Alignment(horizontal="right", vertical="center")
+        ws.cell(row=ri, column=10).alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[ri].height = 20
+
+    last_row = 2 + len(data)
+
+    # Fila totales
+    tr = last_row + 1
+    ws.merge_cells(f"A{tr}:B{tr}")
+    for ci in range(1, 12):
+        ws.cell(row=tr, column=ci).fill = fill(C_TEAL)
+    tot = ws.cell(row=tr, column=1, value="TOTALES / PROMEDIOS")
+    tot.font = Font(name="Arial", bold=True, size=10, color=C_WHITE)
+    tot.alignment = Alignment(horizontal="center", vertical="center")
+    for ci, formula, fmt in [
+        (5,  f"=SUM(E3:E{last_row})",       "General"),
+        (6,  f"=SUM(F3:F{last_row})",       "General"),
+        (8,  f"=AVERAGE(H3:H{last_row})",   "0.0"),
+        (9,  f"=SUM(I3:I{last_row})",       '"$"#,##0.00'),
+    ]:
+        cell = ws.cell(row=tr, column=ci, value=formula)
+        cell.font = Font(name="Arial", bold=True, color=C_WHITE)
+        cell.fill = fill(C_TEAL)
+        cell.number_format = fmt
+        cell.alignment = Alignment(horizontal="center" if ci != 9 else "right", vertical="center")
+    ws.row_dimensions[tr].height = 22
+
+    # ══ HOJA 2 — Por Estado ══
+    ws2 = wb.create_sheet("Por Estado")
+    ws2.sheet_view.showGridLines = False
+    mini_headers = ["ID", "Nombre", "Tier", "Pacientes", "Límite", "Health", "MRR (USD)", "Ciudad"]
+    mini_widths  = [12, 28, 13, 11, 10, 10, 14, 16]
+    for ci, w in enumerate(mini_widths, 1):
+        ws2.column_dimensions[get_column_letter(ci)].width = w
+
+    cr = 1
+    for status_key in ["active", "warning", "critical", "trial", "churned", "onboarding"]:
+        group = [c for c in data if c["status"].lower() == status_key]
+        if not group: continue
+        sbg, sfg = STATUS_COLORS.get(status_key, ("F3F4F6", "374151"))
+        ws2.merge_cells(f"A{cr}:H{cr}")
+        gh = ws2.cell(row=cr, column=1, value=f"  {status_key.upper()}  ({len(group)} clínica{'s' if len(group)!=1 else ''})")
+        gh.font = Font(name="Arial", bold=True, size=11, color=sfg)
+        gh.fill = fill(sbg); gh.alignment = Alignment(vertical="center", indent=1)
+        ws2.row_dimensions[cr].height = 24; cr += 1
+        for ci, h in enumerate(mini_headers, 1):
+            cell = ws2.cell(row=cr, column=ci, value=h)
+            cell.font = Font(name="Arial", bold=True, size=9, color=C_WHITE)
+            cell.fill = fill("374151"); cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = border()
+        ws2.row_dimensions[cr].height = 18; cr += 1
+        for ri2, c in enumerate(group):
+            bg = "F9FAFB" if ri2 % 2 == 0 else C_WHITE
+            for ci, val in enumerate([c["clinic_id"], c["name"], c["tier"].upper(),
+                                       c["patientsUsed"], c["patientsLimit"],
+                                       c["healthScore"], c["mrr"], c["location"]], 1):
+                cell = ws2.cell(row=cr, column=ci, value=val)
+                cell.font = Font(name="Arial", size=9, color="1F2937")
+                cell.fill = fill(bg); cell.border = border()
+                cell.alignment = Alignment(vertical="center")
+            ws2.cell(row=cr, column=7).number_format = '"$"#,##0.00'
+            ws2.cell(row=cr, column=7).alignment = Alignment(horizontal="right", vertical="center")
+            ws2.row_dimensions[cr].height = 18; cr += 1
+        cr += 1
+
+    # ══ HOJA 3 — Por Tier ══
+    ws3 = wb.create_sheet("Por Tier")
+    ws3.sheet_view.showGridLines = False
+    for ci, w in enumerate(mini_widths, 1):
+        ws3.column_dimensions[get_column_letter(ci)].width = w
+
+    cr = 1
+    for tier_key in ["enterprise", "smb", "trial"]:
+        group = [c for c in data if c["tier"].lower() == tier_key]
+        if not group: continue
+        tbg, tfg = TIER_COLORS.get(tier_key, ("E5E7EB", "374151"))
+        ws3.merge_cells(f"A{cr}:H{cr}")
+        gh = ws3.cell(row=cr, column=1, value=f"  {tier_key.upper()}  ({len(group)} clínica{'s' if len(group)!=1 else ''})")
+        gh.font = Font(name="Arial", bold=True, size=11, color=tfg)
+        gh.fill = fill(tbg); gh.alignment = Alignment(vertical="center", indent=1)
+        ws3.row_dimensions[cr].height = 24; cr += 1
+        for ci, h in enumerate(mini_headers, 1):
+            cell = ws3.cell(row=cr, column=ci, value=h)
+            cell.font = Font(name="Arial", bold=True, size=9, color=C_WHITE)
+            cell.fill = fill("374151"); cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = border()
+        ws3.row_dimensions[cr].height = 18; cr += 1
+        for ri3, c in enumerate(group):
+            bg = "F9FAFB" if ri3 % 2 == 0 else C_WHITE
+            sbg2, sfg2 = STATUS_COLORS.get(c["status"].lower(), ("F3F4F6","374151"))
+            for ci, val in enumerate([c["clinic_id"], c["name"], c["status"].capitalize(),
+                                       c["patientsUsed"], c["patientsLimit"],
+                                       c["healthScore"], c["mrr"], c["location"]], 1):
+                cell = ws3.cell(row=cr, column=ci, value=val)
+                cell.font = Font(name="Arial", size=9, color="1F2937")
+                cell.fill = fill(bg); cell.border = border()
+                cell.alignment = Alignment(vertical="center")
+            sc2 = ws3.cell(row=cr, column=3)
+            sc2.fill = fill(sbg2); sc2.font = Font(name="Arial", size=9, bold=True, color=sfg2)
+            sc2.alignment = Alignment(horizontal="center", vertical="center")
+            ws3.cell(row=cr, column=7).number_format = '"$"#,##0.00'
+            ws3.cell(row=cr, column=7).alignment = Alignment(horizontal="right", vertical="center")
+            ws3.row_dimensions[cr].height = 18; cr += 1
+        cr += 1
+
+    # — Serializar y devolver como descarga —
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = f"clinicas_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

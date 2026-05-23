@@ -15,14 +15,15 @@ export function LanguageProvider({ children }) {
     localStorage.setItem('lang', lang);
   };
 
-  const t = useCallback((key) => {
-    const keys = key.split('.');
-    let result = translations[locale];
-    for (const k of keys) {
-      result = result?.[k];
-    }
-    return result ?? key;
-  }, [locale]);
+  const t = useCallback((key, params = {}) => {
+  const keys = key.split('.');
+  let result = translations[locale];
+  for (const k of keys) {
+    result = result?.[k];
+  }
+  if (result == null) return key;
+  return result.replace(/\{\{(\w+)\}\}/g, (_, k) => params[k] ?? `{{${k}}}`);
+}, [locale]);
 
   const tVal = useCallback((value) => {
     if (!value) return value;

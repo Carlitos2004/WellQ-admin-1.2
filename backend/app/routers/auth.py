@@ -1,105 +1,243 @@
+import uuid
+from datetime import datetime, timedelta
+
+import bcrypt as _bcrypt
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
 from app.db.neon import get_db
 from app.models_db import AdminUser
 
-# Se comentan las dependencias reales para evitar errores de validación de tokens
-# from app.auth.dependencies import get_current_user, CurrentUser
+# ── Configuración ──────────────────────────────────────────────────────────────
+# Cambia JWT_SECRET por una cadena larga y aleatoria en tu .env
+# Ejemplo: openssl rand -hex 32
+JWT_SECRET      = "CAMBIA_ESTO_POR_UN_SECRET_LARGO_Y_SEGURO"
+JWT_ALGORITHM   = "HS256"
+ACCESS_EXPIRES  = timedelta(hours=1)
+REFRESH_EXPIRES = timedelta(days=7)
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticación y Seguridad"])
 
-# 1. POST /auth/login
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+# Se usa bcrypt directo (sin passlib) para evitar el error:
+#   ValueError: password cannot be longer than 72 bytes
+# que ocurre porque passlib >= 1.7.4 con bcrypt >= 4.x tiene un bug interno
+# al detectar el "wrap bug" usando una contraseña de prueba sin truncar.
+
+def hash_password(password: str) -> str:
+    """Genera hash bcrypt. Trunca a 72 bytes (límite real de bcrypt)."""
+    return _bcrypt.hashpw(password[:72].encode(), _bcrypt.gensalt(12)).decode()
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verifica contraseña contra hash bcrypt. Retorna False si hash es None/vacío."""
+    if not hashed:
+        return False
+    return _bcrypt.checkpw(plain[:72].encode(), hashed.encode())
+
+
+def create_token(data: dict, expires_delta: timedelta) -> str:
+    payload = data.copy()
+    payload["exp"] = datetime.utcnow() + expires_delta
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decode_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado"
+        )
+
+
+def user_payload(user: AdminUser) -> dict:
+    return {
+        "user_id": user.user_id,
+        "email":   user.email,
+        "role":    user.role,
+    }
+
+
+# ── 1. POST /api/auth/register ─────────────────────────────────────────────────
 @router.post(
-    "/login", 
-    summary="Valida usuario y contraseña; entrega token de sesión (JWT)",
-    status_code=status.HTTP_200_OK
+    "/register",
+    summary="Crear nuevo usuario administrador",
+    status_code=status.HTTP_201_CREATED,
+)
+async def register(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    email     = body.get("email", "").strip().lower()
+    password  = body.get("password", "")
+    full_name = body.get("full_name", "")
+    role      = body.get("role", "admin")   # "super_admin" | "admin" | "viewer"
+
+    if not email or not password or not full_name:
+        raise HTTPException(status_code=400, detail="email, password y full_name son requeridos")
+
+    # Verificar que no exista
+    result = await db.execute(select(AdminUser).where(AdminUser.email == email))
+    if result.scalars().first():
+        raise HTTPException(status_code=409, detail="Ya existe un usuario con ese email")
+
+    new_user = AdminUser(
+        user_id       = f"usr-{uuid.uuid4().hex[:8]}",
+        full_name     = full_name,
+        email         = email,
+        role          = role,
+        status        = "active",
+        password_hash = hash_password(password),
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+
+    return {
+        "status":  "success",
+        "message": "Usuario creado correctamente",
+        "data": {
+            "user_id":   new_user.user_id,
+            "email":     new_user.email,
+            "full_name": new_user.full_name,
+            "role":      new_user.role,
+        }
+    }
+
+
+# ── 2. POST /api/auth/login ────────────────────────────────────────────────────
+@router.post(
+    "/login",
+    summary="Valida usuario y contraseña; entrega token JWT real",
+    status_code=status.HTTP_200_OK,
 )
 async def login(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
-    email = body.get("email", "admin@wellq.co")
-    
-    # Verificamos si el usuario existe en la BD
-    result = await db.execute(select(AdminUser).where(AdminUser.email == email))
-    user = result.scalars().first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="No encontrado")
+    email    = body.get("email", "").strip().lower()
+    password = body.get("password", "")
 
-    # Retornamos los tokens simulados (Keycloak) pero con la data real del usuario de la BD
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="email y password son requeridos")
+
+    result = await db.execute(select(AdminUser).where(AdminUser.email == email))
+    user: AdminUser | None = result.scalars().first()
+
+    if not user or not user.password_hash:
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    if not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="Usuario inactivo")
+
+    # Actualizar last_login
+    user.last_login = datetime.utcnow()
+    db.add(user)
+    await db.commit()
+
+    payload       = user_payload(user)
+    access_token  = create_token({**payload, "type": "access"},  ACCESS_EXPIRES)
+    refresh_token = create_token({**payload, "type": "refresh"}, REFRESH_EXPIRES)
+
     return {
-        "status": "success",
+        "status":  "success",
         "message": "Autenticación exitosa",
         "data": {
-            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMDEifQ.simulado",
-            "refresh_token": "def502002f2324709f1a.simulado",
-            "token_type": "Bearer",
-            "expires_in": 3600,
+            "access_token":  access_token,
+            "refresh_token": refresh_token,
+            "token_type":    "Bearer",
+            "expires_in":    int(ACCESS_EXPIRES.total_seconds()),
             "user": {
-                "auth_id": getattr(user, "auth_id", "b3e1c2d3-4f5g-6h7i-8j9k-0l1m2n3o4p5q"),
-                "email": user.email,
-                "role": getattr(user, "role", "wellq-super-admin")
+                "user_id":   user.user_id,
+                "email":     user.email,
+                "full_name": user.full_name,
+                "role":      user.role,
             }
         }
     }
 
-# 2. POST /auth/logout
+
+# ── 3. POST /api/auth/logout ───────────────────────────────────────────────────
 @router.post(
     "/logout",
     summary="Registrar cierre de sesión",
-    description="Simula el cierre de sesión exitoso.",
-    status_code=status.HTTP_200_OK
+    status_code=status.HTTP_200_OK,
 )
 async def logout():
-    # En un entorno real invalidaríamos el token en la BD o en Redis, 
-    # por ahora mantenemos el contrato que espera el frontend.
+    # JWT es stateless: el frontend elimina el token del lado cliente.
+    # Si en el futuro usas una blocklist (Redis), agrégala aquí.
     return {
-        "status": "success",
+        "status":  "success",
         "message": "Sesión cerrada correctamente en el servidor.",
-        "action": "clear_local_storage"
+        "action":  "clear_local_storage"
     }
 
-# 3. POST /auth/refresh
+
+# ── 4. POST /api/auth/refresh ──────────────────────────────────────────────────
 @router.post(
-    "/refresh", 
-    summary="Renueva el token de sesión expirado automáticamente",
-    status_code=status.HTTP_200_OK
+    "/refresh",
+    summary="Renueva el access token usando el refresh token",
+    status_code=status.HTTP_200_OK,
 )
-async def refresh_token(body: dict = Body(...)):
-    # Al ser solo emisión de token simulada, mantenemos la estructura
+async def refresh_token(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    token = body.get("refresh_token", "")
+    if not token:
+        raise HTTPException(status_code=400, detail="refresh_token es requerido")
+
+    payload = decode_token(token)   # lanza 401 si es inválido
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    # Verificar que el usuario sigue activo en BD
+    result = await db.execute(select(AdminUser).where(AdminUser.email == payload["email"]))
+    user: AdminUser | None = result.scalars().first()
+
+    if not user or user.status != "active":
+        raise HTTPException(status_code=401, detail="Usuario no encontrado o inactivo")
+
+    new_access = create_token({**user_payload(user), "type": "access"}, ACCESS_EXPIRES)
+
     return {
-        "status": "success",
+        "status":  "success",
         "message": "Token de sesión renovado",
         "data": {
-            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.NEW_TOKEN_GENERATED.simulado",
-            "token_type": "Bearer",
-            "expires_in": 3600
+            "access_token": new_access,
+            "token_type":   "Bearer",
+            "expires_in":   int(ACCESS_EXPIRES.total_seconds()),
         }
     }
 
-# Endpoint Adicional /me
+
+# ── 5. GET /api/auth/me ────────────────────────────────────────────────────────
 @router.get(
     "/me",
-    summary="Obtener perfil del usuario autenticado",
-    description="Retorna el perfil administrativo actual desde la base de datos.",
+    summary="Obtener perfil del usuario autenticado (requiere Bearer token)",
 )
-async def get_me(db: AsyncSession = Depends(get_db)):
-    # Como aún no implementamos get_current_user real, obtenemos el usuario maestro como simulación
-    result = await db.execute(select(AdminUser).where(AdminUser.email == "admin@wellq.co"))
-    user = result.scalars().first()
-    
+async def get_me(
+    token: str = Depends(
+        # Extrae el token del header Authorization: Bearer <token>
+        lambda authorization=Depends(
+            __import__("fastapi.security", fromlist=["HTTPBearer"]).HTTPBearer()
+        ): authorization.credentials
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    payload = decode_token(token)
+
+    result = await db.execute(select(AdminUser).where(AdminUser.email == payload["email"]))
+    user: AdminUser | None = result.scalars().first()
+
     if not user:
-        raise HTTPException(status_code=404, detail="No encontrado")
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     return {
-        "_id": str(getattr(user, "id", "605c72e21234567890user01")),
-        "auth_id": getattr(user, "auth_id", "b3e1c2d3-4f5g-6h7i-8j9k-0l1m2n3o4p5q"),
-        "email": user.email,
-        "full_name": getattr(user, "full_name", getattr(user, "name", "Admin WellQ Master")),
-        "role": getattr(user, "role", "wellq-super-admin"),
-        "clinic_id": getattr(user, "clinic_id", None),
-        "state": getattr(user, "state", "active"),
-        "preferences": getattr(user, "preferences", {
-            "language": "es",
-            "dark_mode": True
-        })
+        "user_id":    user.user_id,
+        "email":      user.email,
+        "full_name":  user.full_name,
+        "role":       user.role,
+        "status":     user.status,
+        "last_login": user.last_login.isoformat() if user.last_login else None,
     }
+

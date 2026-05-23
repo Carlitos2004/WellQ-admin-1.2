@@ -27,7 +27,10 @@ class Settings(BaseSettings):
     app_port: int = 8000               # Puerto del servidor
     debug: bool = False                # Modo debug (habilita docs automáticos en /docs)
     allowed_origins: str = "http://localhost:5173"  # CORS: orígenes permitidos
-
+    
+    resend_api_key: str = ""
+    resend_from_email: str = "WellQ Admin <onboarding@resend.dev>"
+    
     # ── Keycloak (Autenticación OIDC) ──────────────────────────────────────────
     keycloak_url: str                  # URL base del servidor Keycloak
     keycloak_realm: str = "wellq"      # Realm donde están registrados los clientes
@@ -50,6 +53,17 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,      # Variables de entorno son case-insensitive
     )
+
+        
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_app_password: str = ""
+    smtp_from_name: str = "WellQ Admin"
+    smtp_from_email: str = ""
+
+
+
 
     @property
     def cors_origins(self) -> list[str]:

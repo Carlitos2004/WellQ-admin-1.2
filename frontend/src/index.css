@@ -9,7 +9,15 @@
 /* 🎨 Registro de la paleta y tipografía de WellQ */
 @theme {
   /* Colores corporativos */
-  --color-wellq-dark:    #444f5a;
+
+
+  /* antes */
+  /*--color-wellq-dark:    #444f5a;*/
+  
+
+  /* después */
+  --color-wellq-dark: #0b1017;
+
   --color-wellq-gray:    #8c9299;
   --color-wellq-cyan:    #16f8f9;
   --color-wellq-green:   #1fed92;

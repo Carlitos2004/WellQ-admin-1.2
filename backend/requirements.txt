@@ -19,10 +19,12 @@ asyncpg==0.29.0
 # SQLAlchemy async engine (incluido con sqlmodel, pero lo fijamos)
 sqlalchemy==2.0.30
 
-# ── Autenticación: Keycloak ───────────────────────────────────────────────────
-python-keycloak==3.9.1
+# ── Autenticación (Local JWT) ─────────────────────────────────────────────────
 PyJWT==2.8.0
 cryptography==42.0.7
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.9
 
 # ── Base de datos: Google Firestore (opcional) ────────────────────────────────
 firebase-admin==6.5.0
@@ -37,3 +39,6 @@ python-dateutil==2.9.0
 
 # ── Logging estructurado ──────────────────────────────────────────────────────
 structlog==24.1.0
+
+# ── Email transaccional ───────────────────────────────────────────────────────
+resend==2.13.0

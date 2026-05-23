@@ -24,12 +24,16 @@ async def get_alerts(db: AsyncSession = Depends(get_db)):
         "unread_count": unread_count,
         "data": [
             {
-                "alert_id": getattr(a, "id", ""),
+                "alert_id": getattr(a, "alert_id", ""),
                 "type": getattr(a, "type", ""),
                 "title": getattr(a, "title", ""),
                 "message": getattr(a, "message", ""),
+                "title_key": getattr(a, "title_key", None),
+                "message_key": getattr(a, "message_key", None),
+                "message_params": getattr(a, "message_params", None),
                 "severity": getattr(a, "severity", "medium"),
-                "related_entity": getattr(a, "related_entity", {}),
+                "related_type": getattr(a, "related_type", None),
+                "related_id": getattr(a, "related_id", None),
                 "created_at": a.created_at.isoformat() + "Z" if getattr(a, "created_at", None) else None
             }
             for a in alerts
