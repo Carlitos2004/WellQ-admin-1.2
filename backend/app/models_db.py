@@ -231,19 +231,6 @@ class KpiSnapshot(SQLModel, table=True):
     expansion_mrr: float    = Field(default=0.0)
     churn_mrr: float        = Field(default=0.0)
     nrr_status: str         = Field(default="healthy")
-    # ── NUEVO: campos para filtros de período (24h / 7d / 30d / qtd / ytd) ────
-    # period = None  → snapshot mensual histórico (para gráficos)
-    # period = "24h" → métricas de las últimas 24 horas
-    # period = "7d"  → métricas de los últimos 7 días
-    # period = "30d" → métricas de los últimos 30 días
-    # period = "qtd" → métricas del trimestre actual (Q to date)
-    # period = "ytd" → métricas del año actual (Y to date)
-    period: Optional[str]   = Field(default=None, index=True)
-    total_patients: int     = Field(default=0)   # total acumulado en el período
-    patients_delta: int     = Field(default=0)   # nuevos pacientes en el período
-    active_clinics: int     = Field(default=0)   # clínicas activas al cierre del período
-    clinics_delta: int      = Field(default=0)   # clínicas onboarded en el período
-    in_treatment: int       = Field(default=0)   # pacientes en tratamiento activo
     created_at: datetime    = Field(default_factory=datetime.utcnow)
 
 

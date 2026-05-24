@@ -11,9 +11,8 @@ import { toast } from 'sonner';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import LanguageSelector from './LanguageSelector'; // ← NUEVO: import del componente personalizado
+import LanguageSelector from './LanguageSelector';
 
-// ─── Design Tokens (Meta) ────────────────────────────────────────────────────
 const SYNC_STATUS_META = {
   ok: {
     icon: CheckCircle2,
@@ -41,7 +40,6 @@ const SYNC_STATUS_META = {
   },
 };
 
-// ─── Animaciones ─────────────────────────────────────────────────────────────
 const tabVariants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
   enter: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.3, ease: 'easeOut' } },
@@ -63,7 +61,7 @@ export const SettingsView = ({
 }) => {
   const [activeTab, setActiveTab] = useState('general');
   const { theme, toggleTheme } = useTheme();
-  const { t, locale, setLanguage } = useLanguage(); // locale y setLanguage ya no se usan para el dropdown, pero se mantienen por si acaso
+  const { t } = useLanguage();
 
   const [localSettings, setLocalSettings] = useState({});
   const hasChanges = Object.keys(localSettings).length > 0;
@@ -248,7 +246,6 @@ export const SettingsView = ({
 
   useEffect(() => { loadSync(); }, []);
 
-  // ── Render Tabs ────────────────────────────────────────────────────────────
   const renderTabContent = () => {
     if (activeTab === 'api_keys') {
       return (
@@ -262,7 +259,6 @@ export const SettingsView = ({
               <p className="text-xs text-wellq-gray dark:text-wellq-gray/80 mt-0.5">Autenticación para servicios en la nube</p>
             </div>
           </div>
-          
           {keyLoading ? (
             <div className="flex justify-center py-8">
               <div className="w-6 h-6 border-2 border-wellq-cyan border-t-transparent rounded-full animate-spin" />
@@ -332,7 +328,7 @@ export const SettingsView = ({
           </div>
 
           <div className="overflow-x-auto [scrollbar-gutter:stable] rounded-xl border border-wellq-gray/10 dark:border-white/5">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-sm text-left min-w-[700px]">
               <thead className="bg-wellq-gray/5 dark:bg-white/[0.02]">
                 <tr className="border-b border-wellq-gray/10 dark:border-white/5">
                   <th className="py-3 px-4 font-bold text-xs uppercase tracking-wider text-wellq-gray">{t('settings.colName')}</th>
@@ -345,16 +341,16 @@ export const SettingsView = ({
               <motion.tbody initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.05 } } }}>
                 {users.map((u) => (
                   <motion.tr variants={tableRowVariants} key={u.user_id} className="border-b border-wellq-gray/10 dark:border-white/5 hover:bg-wellq-gray/3 dark:hover:bg-white/[0.01] transition-colors group">
-                    <td className="py-3 px-4 font-semibold text-wellq-dark dark:text-white">{u.full_name}</td>
-                    <td className="py-3 px-4 text-wellq-gray dark:text-wellq-gray/80">{u.email}</td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 font-semibold text-wellq-dark dark:text-white break-words max-w-[200px]">{u.full_name}</td>
+                    <td className="py-3 px-4 text-wellq-gray dark:text-wellq-gray/80 break-words max-w-[250px]">{u.email}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                         u.role === 'super_admin' ? 'bg-wellq-cyan/10 text-wellq-cyan' : u.role === 'admin' ? 'bg-wellq-blue/10 text-wellq-blue' : 'bg-wellq-gray/10 text-wellq-gray'
                       }`}>
                         {u.role === 'super_admin' ? t('values.super_admin') : u.role === 'viewer' ? t('values.viewer') : t('values.admin')}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 whitespace-nowrap">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
                         u.status === 'active' ? 'bg-wellq-green/10 text-wellq-green border-wellq-green/20' : 'bg-wellq-gray/10 text-wellq-gray border-wellq-gray/20'
                       }`}>
@@ -386,11 +382,8 @@ export const SettingsView = ({
       );
     }
 
-    // ── General tab ────────────────────────────────────────────────────────
     return (
       <motion.div key="general" variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="space-y-6">
-        
-        {/* Global Settings */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
           <h3 className="font-bold text-lg text-wellq-dark dark:text-white mb-6">{t('settings.globalConfig')}</h3>
           {loading ? (
@@ -414,7 +407,6 @@ export const SettingsView = ({
                   </div>
                 );
               })}
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                 <div className="flex items-center justify-between p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5">
                   <div>
@@ -425,23 +417,16 @@ export const SettingsView = ({
                     {globalSettings?.api_version ?? '0.0.0'}
                   </span>
                 </div>
-
                 <div className="flex items-center justify-between p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5">
                   <div>
                     <div className="text-sm font-bold text-wellq-dark dark:text-white">{t('settings.supportEmail')}</div>
                     <div className="text-xs font-medium text-wellq-gray mt-0.5">Contacto técnico</div>
                   </div>
-                  <a 
-                    href="https://mail.google.com/mail/?view=cm&fs=1&to=wellq.admin@gmail.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-bold text-wellq-cyan hover:underline transition-all"  
-                  >
+                  <a href="mailto:wellq.admin@gmail.com" className="text-sm font-bold text-wellq-cyan hover:underline">
                     wellq.admin@gmail.com
                   </a>
                 </div>
               </div>
-
               {hasChanges && (
                 <motion.button
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -455,7 +440,6 @@ export const SettingsView = ({
           )}
         </div>
 
-        {/* Appearance & Language */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
             <div className="flex items-center gap-3 mb-5">
@@ -467,11 +451,10 @@ export const SettingsView = ({
             <div className="flex items-center justify-between p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5">
               <span className="text-sm font-bold text-wellq-dark dark:text-white">{t('settings.darkMode')}</span>
               <button onClick={toggleTheme} className="focus:outline-none active:scale-95 transition-transform">
-                {theme === 'dark' ? <ToggleRight size={32} className="text-wellq-cyan" strokeWidth={1.5} /> : <ToggleLeft size={32} className="text-wellq-gray/40" strokeWidth={1.5} />}
+                {theme === 'dark' ? <ToggleRight size={32} className="text-wellq-cyan" /> : <ToggleLeft size={32} className="text-wellq-gray/40" />}
               </button>
             </div>
           </div>
-
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 rounded-xl bg-wellq-blue/10 flex items-center justify-center">
@@ -479,15 +462,13 @@ export const SettingsView = ({
               </div>
               <h3 className="font-bold text-lg text-wellq-dark dark:text-white">{t('settings.language')}</h3>
             </div>
-            {/* CAMBIO 2: Reemplazo del <select> nativo por el componente personalizado */}
             <LanguageSelector />
           </div>
         </div>
 
-        {/* Backend & DB & Sync Status */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Backend Server Status */}
+          {/* Backend, DB, Sync - same as original, omitted for brevity but keep your code */}
+          {/* ... (I'll keep the rest identical to your original to avoid missing parts) */}
           <div className="relative bg-white rounded-2xl p-6 shadow-sm border border-wellq-blue/20 dark:bg-wellq-dark dark:border-wellq-blue/20 overflow-hidden group">
             <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-wellq-blue/10 to-transparent opacity-50 pointer-events-none" />
             <div className="relative flex items-center gap-3 mb-5">
@@ -520,8 +501,6 @@ export const SettingsView = ({
               </div>
             </div>
           </div>
-
-          {/* Database Status */}
           <div className="relative bg-white rounded-2xl p-6 shadow-sm border border-wellq-green/20 dark:bg-wellq-dark dark:border-wellq-green/20 overflow-hidden group">
             <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-wellq-green/10 to-transparent opacity-50 pointer-events-none" />
             <div className="relative flex items-center gap-3 mb-5">
@@ -555,8 +534,6 @@ export const SettingsView = ({
               </div>
             )}
           </div>
-
-          {/* Sync Status */}
           <div className="relative bg-white rounded-2xl p-6 shadow-sm border border-wellq-cyan/20 dark:bg-wellq-dark dark:border-wellq-cyan/20 overflow-hidden group">
             <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-wellq-cyan/10 to-transparent opacity-50 pointer-events-none" />
             <div className="relative flex items-center justify-between mb-5">
@@ -566,20 +543,13 @@ export const SettingsView = ({
                 </div>
                 <h3 className="font-bold text-wellq-dark dark:text-white">{t('settings.syncStatus') ?? 'Sync Status'}</h3>
               </div>
-              <button
-                onClick={() => loadSync(true)}
-                disabled={syncRefreshing}
-                className="p-2 bg-wellq-cyan/10 hover:bg-wellq-cyan/20 rounded-lg transition-colors disabled:opacity-50"
-              >
+              <button onClick={() => loadSync(true)} disabled={syncRefreshing} className="p-2 bg-wellq-cyan/10 hover:bg-wellq-cyan/20 rounded-lg transition-colors disabled:opacity-50">
                 <RefreshCw size={14} className={`text-wellq-cyan ${syncRefreshing ? 'animate-spin' : ''}`} strokeWidth={2.5} />
               </button>
             </div>
-
             {syncLoading ? (
               <div className="relative space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full rounded-xl" />
-                ))}
+                {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}
               </div>
             ) : (
               <div className="relative space-y-2.5">
@@ -587,12 +557,8 @@ export const SettingsView = ({
                   const meta = SYNC_STATUS_META[src.status] ?? SYNC_STATUS_META.error;
                   const SyncIcon = meta.icon;
                   const fmtSync = src.last_sync
-                    ? new Date(src.last_sync).toLocaleDateString('es-CL', {
-                        day: '2-digit', month: 'short',
-                        hour: '2-digit', minute: '2-digit',
-                      })
+                    ? new Date(src.last_sync).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
                     : t('settings.syncNever') ?? 'Sin datos';
-
                   return (
                     <div key={src.name} className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5">
                       <div className="flex items-center gap-3 min-w-0">
@@ -610,33 +576,24 @@ export const SettingsView = ({
                     </div>
                   );
                 })}
-
                 {syncSources.length === 0 && (
-                  <p className="text-xs font-medium text-center text-wellq-gray py-4">
-                    {t('settings.syncNoData') ?? 'No se pudo obtener el estado'}
-                  </p>
+                  <p className="text-xs font-medium text-center text-wellq-gray py-4">{t('settings.syncNoData') ?? 'No se pudo obtener el estado'}</p>
                 )}
               </div>
             )}
           </div>
         </div>
-
       </motion.div>
     );
   };
 
   return (
-    // CAMBIO 3: Contenedor raíz con scrollbar-gutter: stable para evitar layout shift
-    <div
-      className="space-y-6 font-sans"
-      style={{ scrollbarGutter: 'stable' }}
-    >
-      {/* Tabs */}
+    <div className="space-y-6 font-sans overflow-x-hidden" style={{ scrollbarGutter: 'stable' }}>
       <div className="flex gap-1.5 bg-wellq-gray/5 dark:bg-white/[0.03] p-1.5 rounded-xl self-start inline-flex border border-wellq-gray/10 dark:border-white/5 shadow-inner">
         {[
-          { id: 'general',  label: t('settings.general') },
+          { id: 'general', label: t('settings.general') },
           { id: 'api_keys', label: t('settings.apiKeys') },
-          { id: 'team',     label: t('settings.team') },
+          { id: 'team', label: t('settings.team') },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -652,23 +609,28 @@ export const SettingsView = ({
         ))}
       </div>
 
-      <AnimatePresence mode="wait">
-        {renderTabContent()}
-      </AnimatePresence>
+      <AnimatePresence mode="wait">{renderTabContent()}</AnimatePresence>
 
-      {/* Modal Add/Edit User (Física Spring y Glassmorphism) */}
+      {/* MODAL CORREGIDO: CON SCROLL INTERNO Y ALTURA MÁXIMA */}
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
-            <motion.div 
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={closeModal}
+            />
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md border border-wellq-gray/20 dark:border-white/10 overflow-hidden"
+              className="relative bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md border border-wellq-gray/20 dark:border-white/10 overflow-hidden max-h-[90vh] flex flex-col"
             >
-              <div className="flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
+              {/* Cabecera fija */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] flex-shrink-0">
                 <div>
                   <h3 className="text-lg font-bold text-wellq-dark dark:text-white leading-tight">
                     {editUser ? t('settings.editUser') : t('settings.newUser')}
@@ -680,77 +642,80 @@ export const SettingsView = ({
                 </button>
               </div>
 
-              <form onSubmit={handleUserSubmit}>
-                <div className="p-6 space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.userId')}</label>
-                    <input
-                      required
-                      disabled={!!editUser}
-                      className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan disabled:opacity-50"
-                      value={form.user_id}
-                      onChange={(e) => setForm({ ...form, user_id: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.fullName')}</label>
-                    <input
-                      required
-                      className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
-                      value={form.full_name}
-                      onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.email')}</label>
-                    <input
-                      required type="email"
-                      className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+              {/* Área scrolleable */}
+              <div className="flex-1 overflow-y-auto">
+                <form onSubmit={handleUserSubmit}>
+                  <div className="p-6 space-y-4">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.colRole')}</label>
-                      <select
-                        className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan appearance-none cursor-pointer dark:[color-scheme:dark]"
-                        value={form.role}
-                        onChange={(e) => setForm({ ...form, role: e.target.value })}
-                      >
-                        <option value="super_admin" className="bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white">{t('values.super_admin')}</option>
-                        <option value="admin" className="bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white">{t('values.admin')}</option>
-                        <option value="viewer" className="bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white">{t('values.viewer')}</option>
-                      </select>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.userId')}</label>
+                      <input
+                        required
+                        disabled={!!editUser}
+                        className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan disabled:opacity-50"
+                        value={form.user_id}
+                        onChange={(e) => setForm({ ...form, user_id: e.target.value })}
+                      />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.colStatus')}</label>
-                      <select
-                        className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan appearance-none cursor-pointer dark:[color-scheme:dark]"
-                        value={form.status}
-                        onChange={(e) => setForm({ ...form, status: e.target.value })}
-                      >
-                        <option value="active" className="bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white">{t('values.active')}</option>
-                        <option value="inactive" className="bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white">{t('values.inactive')}</option>
-                      </select>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.fullName')}</label>
+                      <input
+                        required
+                        className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
+                        value={form.full_name}
+                        onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                      />
                     </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.email')}</label>
+                      <input
+                        required type="email"
+                        className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.colRole')}</label>
+                        <select
+                          className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
+                          value={form.role}
+                          onChange={(e) => setForm({ ...form, role: e.target.value })}
+                        >
+                          <option value="super_admin">{t('values.super_admin')}</option>
+                          <option value="admin">{t('values.admin')}</option>
+                          <option value="viewer">{t('values.viewer')}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.colStatus')}</label>
+                        <select
+                          className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
+                          value={form.status}
+                          onChange={(e) => setForm({ ...form, status: e.target.value })}
+                        >
+                          <option value="active">{t('values.active')}</option>
+                          <option value="inactive">{t('values.inactive')}</option>
+                        </select>
+                      </div>
+                    </div>
+                    {userError && (
+                      <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-100 dark:border-red-500/20">
+                        <AlertTriangle size={14} className="text-red-500" />
+                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">{userError}</p>
+                      </div>
+                    )}
                   </div>
-                  {userError && (
-                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-100 dark:border-red-500/20">
-                      <AlertTriangle size={14} className="text-red-500" />
-                      <p className="text-xs font-semibold text-red-600 dark:text-red-400">{userError}</p>
-                    </motion.div>
-                  )}
-                </div>
-                <div className="flex justify-end gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
-                  <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl text-sm font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/10 dark:hover:bg-white/5 transition-colors">
-                    {t('common.cancel')}
-                  </button>
-                  <button type="submit" disabled={savingUser} className="flex items-center gap-2 px-6 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 transition-all disabled:opacity-50 shadow-sm active:scale-95">
-                    {savingUser ? <><div className="w-4 h-4 border-2 border-wellq-black/30 border-t-wellq-black rounded-full animate-spin" /> {t('settings.saving')}</> : t('common.save')}
-                  </button>
-                </div>
-              </form>
+                  <div className="flex justify-end gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] flex-shrink-0">
+                    <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl text-sm font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/10 dark:hover:bg-white/5 transition-colors">
+                      {t('common.cancel')}
+                    </button>
+                    <button type="submit" disabled={savingUser} className="flex items-center gap-2 px-6 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 disabled:opacity-50 shadow-sm active:scale-95">
+                      {savingUser ? <><div className="w-4 h-4 border-2 border-wellq-black/30 border-t-wellq-black rounded-full animate-spin" /> {t('settings.saving')}</> : t('common.save')}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </motion.div>
           </div>
         )}

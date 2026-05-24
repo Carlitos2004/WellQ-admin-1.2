@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   X, Mail, Settings as SettingsIcon, Receipt, Download,
   Loader2, CheckCircle, User, Phone, CreditCard,
@@ -511,99 +511,339 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
     }
   };
 
-  // ── Exportar todas las facturas como Excel con pestañas ──────────────────
-  const handleExportExcel = () => {
+  // ── Exportar todas las facturas como Excel con colores y pestañas ──────────
+  const handleExportExcel = async () => {
     if (!invoices.length) return;
 
     const safeName = (clinic.name ?? 'clinica').replace(/\s+/g, '-').toLowerCase();
     const date     = new Date().toISOString().split('T')[0];
     const clinicId = clinic.clinic_id ?? clinic.id ?? '';
 
-    // ── Formatea fecha legible ────────────────────────────────────────────────
+    // ── Helpers de formato ────────────────────────────────────────────────────
     const fmtDate = (val) => {
       if (!val) return '—';
       const d = new Date(val);
       return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
     };
-
-    // ── Extrae monto numérico ─────────────────────────────────────────────────
+    const fmtMonth = (val) => {
+      if (!val) return '—';
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '—';
+      const str = d.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    };
     const toNum = (val) =>
       typeof val === 'number' ? val : parseFloat(String(val ?? '0').replace(/[^0-9.]/g, '')) || 0;
-
-    // ── Etiqueta de estado en español ─────────────────────────────────────────
+    const fmt$ = (n) => `$${n.toLocaleString('es-CL', { minimumFractionDigits: 2 })} USD`;
     const fmtStatus = (s) => {
       const m = { paid: 'Pagada', pending: 'Pendiente', overdue: 'Vencida' };
       return m[(s ?? '').toLowerCase()] ?? s ?? '—';
     };
+    const total = (filter) => invoices.filter(filter).reduce((acc, i) => acc + toNum(i.amount), 0);
 
-    // ── Convierte lista a filas con orden y formato limpios ───────────────────
-    const toRows = (list) => list.map((inv) => ({
-      'N° Factura':  inv.id ?? inv.invoice_id ?? '—',
-      'Fecha':       fmtDate(inv.date ?? inv.issued_at),
-      'Clínica':     clinic.name ?? '—',
-      'ID Clínica':  clinicId,
-      'Plan':        clinic.tier?.toUpperCase() ?? '—',
-      'Monto (USD)': toNum(inv.amount),
-      'Estado':      fmtStatus(inv.status),
-    }));
-
-    // ── Aplica ancho automático + freeze de cabecera ──────────────────────────
-    const styleSheet = (ws, rows) => {
-      if (!rows.length) return;
-      const cols = Object.keys(rows[0]);
-      ws['!cols'] = cols.map((key) => ({
-        wch: Math.max(key.length + 2, ...rows.map((r) => String(r[key] ?? '').length)) + 1,
-      }));
-      ws['!freeze'] = { xSplit: 0, ySplit: 1 }; // congela primera fila
+    // ── Paleta de colores WellQ ───────────────────────────────────────────────
+    const C = {
+      darkBg:      '0B1017', // Fondo oscuro principal
+      darkMid:     '1A2535', // Fondo oscuro secundario
+      cyan:        '16F8F9', // Cyan WellQ
+      white:       'FFFFFF',
+      green:       '10B981', // Pagada
+      greenBg:     'ECFDF5',
+      amber:       'F59E0B', // Pendiente
+      amberBg:     'FFFBEB',
+      red:         'EF4444', // Vencida
+      redBg:       'FEF2F2',
+      rowAlt:      'F8FAFC', // Fila alternada suave
+      rowWhite:    'FFFFFF',
+      headerText:  '0F172A', // Texto oscuro para headers de sección
+      subText:     '64748B', // Texto secundario gris
+      borderColor: 'E2E8F0', // Borde suave
     };
 
-    const wb = XLSX.utils.book_new();
+    // ── Estilos reutilizables ─────────────────────────────────────────────────
 
-    // ── Hoja 1: Todas ────────────────────────────────────────────────────────
-    const allRows = toRows(invoices);
-    const wsAll   = XLSX.utils.json_to_sheet(allRows);
-    styleSheet(wsAll, allRows);
-    XLSX.utils.book_append_sheet(wb, wsAll, 'Todas');
+    // Cabecera principal de columnas (fondo oscuro, texto cyan)
+    const colHeaderStyle = {
+      font:      { bold: true, color: { argb: `FF${C.white}` }, size: 10 },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkBg}` } },
+      alignment: { vertical: 'middle', horizontal: 'center', wrapText: false },
+      border: {
+        bottom: { style: 'medium', color: { argb: `FF${C.cyan}` } },
+        top:    { style: 'thin',   color: { argb: `FF${C.darkMid}` } },
+        left:   { style: 'thin',   color: { argb: `FF${C.darkMid}` } },
+        right:  { style: 'thin',   color: { argb: `FF${C.darkMid}` } },
+      },
+    };
 
-    // ── Hoja 2: Pagadas ──────────────────────────────────────────────────────
-    const paidRows = toRows(invoices.filter((i) => (i.status ?? '').toLowerCase() === 'paid'));
-    const wsPaid   = XLSX.utils.json_to_sheet(paidRows.length ? paidRows : [{ Nota: 'Sin facturas pagadas' }]);
-    styleSheet(wsPaid, paidRows);
-    XLSX.utils.book_append_sheet(wb, wsPaid, 'Pagadas');
+    // Estilo de celda de datos (normal, con borde suave)
+    const cellStyle = (isAlt = false) => ({
+      font:      { size: 10, color: { argb: `FF${C.headerText}` } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
+      alignment: { vertical: 'middle', horizontal: 'left' },
+      border: {
+        bottom: { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        top:    { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        left:   { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        right:  { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+      },
+    });
 
-    // ── Hoja 3: Pendientes ───────────────────────────────────────────────────
-    const pendingRows = toRows(invoices.filter((i) => (i.status ?? '').toLowerCase() === 'pending'));
-    const wsPending   = XLSX.utils.json_to_sheet(pendingRows.length ? pendingRows : [{ Nota: 'Sin facturas pendientes' }]);
-    styleSheet(wsPending, pendingRows);
-    XLSX.utils.book_append_sheet(wb, wsPending, 'Pendientes');
+    // Estilo de chip de estado por valor
+    const statusStyle = (statusRaw) => {
+      const map = {
+        paid:    { fg: C.green,  bg: C.greenBg },
+        pending: { fg: C.amber,  bg: C.amberBg },
+        overdue: { fg: C.red,    bg: C.redBg   },
+      };
+      const { fg, bg } = map[(statusRaw ?? '').toLowerCase()] ?? { fg: C.subText, bg: C.rowAlt };
+      return {
+        font:      { bold: true, color: { argb: `FF${fg}` }, size: 10 },
+        fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${bg}` } },
+        alignment: { vertical: 'middle', horizontal: 'center' },
+        border: {
+          bottom: { style: 'thin', color: { argb: `FF${fg}` } },
+          top:    { style: 'thin', color: { argb: `FF${fg}` } },
+          left:   { style: 'thin', color: { argb: `FF${fg}` } },
+          right:  { style: 'thin', color: { argb: `FF${fg}` } },
+        },
+      };
+    };
 
-    // ── Hoja 4: Vencidas ─────────────────────────────────────────────────────
-    const overdueRows = toRows(invoices.filter((i) => (i.status ?? '').toLowerCase() === 'overdue'));
-    const wsOverdue   = XLSX.utils.json_to_sheet(overdueRows.length ? overdueRows : [{ Nota: 'Sin facturas vencidas' }]);
-    styleSheet(wsOverdue, overdueRows);
-    XLSX.utils.book_append_sheet(wb, wsOverdue, 'Vencidas');
+    // Estilo de título de hoja (mega fila de título)
+    const sheetTitleStyle = (accentColor = C.cyan) => ({
+      font:      { bold: true, color: { argb: `FF${accentColor}` }, size: 13 },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkBg}` } },
+      alignment: { vertical: 'middle', horizontal: 'left' },
+    });
 
-    // ── Hoja 5: Resumen financiero ───────────────────────────────────────────
-    const total    = (filter) => invoices.filter(filter).reduce((acc, i) => acc + toNum(i.amount), 0);
-    const fmt$     = (n) => `$${n.toLocaleString('es-CL', { minimumFractionDigits: 2 })} USD`;
-    const summaryRows = [{
-      'Clínica':           clinic.name ?? '—',
-      'ID Clínica':        clinicId,
-      'Plan':              clinic.tier?.toUpperCase() ?? '—',
-      'Total Facturas':    invoices.length,
-      'Pagadas':           invoices.filter((i) => (i.status ?? '').toLowerCase() === 'paid').length,
-      'Pendientes':        invoices.filter((i) => (i.status ?? '').toLowerCase() === 'pending').length,
-      'Vencidas':          invoices.filter((i) => (i.status ?? '').toLowerCase() === 'overdue').length,
-      'Total Pagado':      fmt$(total((i) => (i.status ?? '').toLowerCase() === 'paid')),
-      'Total Pendiente':   fmt$(total((i) => (i.status ?? '').toLowerCase() === 'pending')),
-      'Total Vencido':     fmt$(total((i) => (i.status ?? '').toLowerCase() === 'overdue')),
-      'Generado el':       new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' }),
-    }];
-    const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-    styleSheet(wsSummary, summaryRows);
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen');
+    // Estilo de fila de sección (ej: ▶ ESTADÍSTICAS)
+    const sectionHeaderStyle = (accentColor = C.cyan) => ({
+      font:      { bold: true, color: { argb: `FF${accentColor}` }, size: 10 },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } },
+      alignment: { vertical: 'middle', horizontal: 'left' },
+    });
 
-    XLSX.writeFile(wb, `facturas-${safeName}-${date}.xlsx`);
+    // Estilo de clave en hoja General
+    const summaryKeyStyle = (isAlt = false) => ({
+      font:      { bold: true, size: 10, color: { argb: `FF${C.headerText}` } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
+      alignment: { vertical: 'middle', horizontal: 'left' },
+      border: {
+        bottom: { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        top:    { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        left:   { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        right:  { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+      },
+    });
+
+    // Estilo de valor en hoja General
+    const summaryValStyle = (isAlt = false, accent = false) => ({
+      font:      { size: 10, color: { argb: `FF${accent ? C.cyan : C.subText}` } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
+      alignment: { vertical: 'middle', horizontal: 'right' },
+      border: {
+        bottom: { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        top:    { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        left:   { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+        right:  { style: 'thin', color: { argb: `FF${C.borderColor}` } },
+      },
+    });
+
+    // ── Función genérica: aplica estilos a una hoja de facturas ──────────────
+    const buildInvoiceSheet = (wb, sheetName, filteredInvoices, accentColor = C.cyan) => {
+      const ws = wb.addWorksheet(sheetName, {
+        views: [{ state: 'frozen', ySplit: 3 }], // Congela 3 filas: título + vacía + cabeceras
+      });
+
+      const COLS = [
+        { header: 'N° Factura',         key: 'id',      width: 20 },
+        { header: 'Fecha de Emisión',   key: 'fecha',   width: 26 },
+        { header: 'Mes Facturación',    key: 'mes',     width: 20 },
+        { header: 'Clínica',            key: 'clinica', width: 30 },
+        { header: 'ID Clínica',         key: 'idClinic',width: 22 },
+        { header: 'Plan',               key: 'plan',    width: 16 },
+        { header: 'Monto (USD)',         key: 'monto',   width: 18 },
+        { header: 'Estado',             key: 'estado',  width: 16 },
+      ];
+      ws.columns = COLS;
+
+      // Fila 1: Título de hoja (fusionada)
+      ws.mergeCells(1, 1, 1, COLS.length);
+      const titleCell = ws.getCell(1, 1);
+      titleCell.value = `WellQ · Facturación — ${clinic.name ?? ''}  |  ${sheetName.toUpperCase()}`;
+      Object.assign(titleCell, sheetTitleStyle(accentColor));
+      ws.getRow(1).height = 28;
+
+      // Fila 2: Separador visual vacío
+      ws.getRow(2).height = 6;
+      for (let c = 1; c <= COLS.length; c++) {
+        ws.getCell(2, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } };
+      }
+
+      // Fila 3: Cabeceras de columnas
+      const headerRow = ws.getRow(3);
+      COLS.forEach((col, idx) => {
+        const cell = headerRow.getCell(idx + 1);
+        cell.value = col.header;
+        Object.assign(cell, colHeaderStyle);
+      });
+      headerRow.height = 22;
+
+      // Filas de datos
+      if (filteredInvoices.length === 0) {
+        const emptyRow = ws.addRow(['Sin registros para esta categoría']);
+        ws.mergeCells(emptyRow.number, 1, emptyRow.number, COLS.length);
+        const ec = emptyRow.getCell(1);
+        ec.font      = { italic: true, color: { argb: `FF${C.subText}` }, size: 10 };
+        ec.alignment = { horizontal: 'center', vertical: 'middle' };
+        emptyRow.height = 20;
+      } else {
+        filteredInvoices.forEach((inv, i) => {
+          const isAlt     = i % 2 === 1;
+          const statusRaw = (inv.status ?? '').toLowerCase();
+          const row = ws.addRow({
+            id:       inv.id ?? inv.invoice_id ?? '—',
+            fecha:    fmtDate(inv.date ?? inv.issued_at),
+            mes:      fmtMonth(inv.date ?? inv.issued_at),
+            clinica:  clinic.name ?? '—',
+            idClinic: clinicId,
+            plan:     clinic.tier?.toUpperCase() ?? '—',
+            monto:    toNum(inv.amount),
+            estado:   fmtStatus(inv.status),
+          });
+          row.height = 20;
+
+          // Aplica estilo base a todas las celdas de la fila
+          row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+            Object.assign(cell, cellStyle(isAlt));
+          });
+
+          // Celda de monto: negrita + alineada a la derecha
+          const montoCell = row.getCell('monto');
+          montoCell.numFmt = '$#,##0.00';
+          montoCell.font      = { bold: true, size: 10, color: { argb: `FF${C.headerText}` } };
+          montoCell.alignment = { horizontal: 'right', vertical: 'middle' };
+          montoCell.fill      = cellStyle(isAlt).fill;
+          montoCell.border    = cellStyle(isAlt).border;
+
+          // Celda de estado: color según valor
+          const estadoCell = row.getCell('estado');
+          Object.assign(estadoCell, statusStyle(statusRaw));
+        });
+      }
+
+      // Autofilter desde fila de cabeceras
+      ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: COLS.length } };
+    };
+
+    // ── Crea el workbook ──────────────────────────────────────────────────────
+    const wb = new ExcelJS.Workbook();
+    wb.creator  = 'WellQ Admin';
+    wb.created  = new Date();
+    wb.modified = new Date();
+
+    // ── HOJA 0: General (Resumen con colores) ─────────────────────────────────
+    const wsSummary = wb.addWorksheet('General', {
+      views: [{ state: 'frozen', ySplit: 2 }],
+    });
+    wsSummary.columns = [
+      { key: 'metrica', width: 36 },
+      { key: 'valor',   width: 40 },
+    ];
+
+    // Título principal de la hoja General
+    wsSummary.mergeCells('A1:B1');
+    const genTitle = wsSummary.getCell('A1');
+    genTitle.value = `WellQ · Resumen de Facturación — ${clinic.name ?? ''}`;
+    Object.assign(genTitle, sheetTitleStyle(C.cyan));
+    wsSummary.getRow(1).height = 28;
+
+    // Separador
+    wsSummary.getRow(2).height = 5;
+    ['A2', 'B2'].forEach((addr) => {
+      wsSummary.getCell(addr).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } };
+    });
+
+    // Datos de resumen con estructura de secciones
+    const summaryData = [
+      { type: 'header',  metrica: '◆  INFORMACIÓN DE LA CLÍNICA',  valor: '',         accent: C.cyan  },
+      { type: 'data',    metrica: 'Nombre de Clínica',              valor: clinic.name ?? '—'         },
+      { type: 'data',    metrica: 'ID de Sistema',                  valor: clinicId                   },
+      { type: 'data',    metrica: 'Plan Contratado',                valor: clinic.tier?.toUpperCase() ?? '—' },
+      { type: 'data',    metrica: 'Fecha de Exportación',           valor: new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' }) },
+      { type: 'spacer'                                                                                  },
+      { type: 'header',  metrica: '◆  ESTADÍSTICAS DE FACTURAS',   valor: '',         accent: C.cyan  },
+      { type: 'data',    metrica: 'Total Facturas Registradas',     valor: invoices.length             },
+      { type: 'dataGreen', metrica: 'Cantidad Pagadas',             valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'paid').length    },
+      { type: 'dataAmber', metrica: 'Cantidad Pendientes',          valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'pending').length },
+      { type: 'dataRed',   metrica: 'Cantidad Vencidas',            valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'overdue').length },
+      { type: 'spacer'                                                                                  },
+      { type: 'header',  metrica: '◆  RESUMEN FINANCIERO',         valor: '',         accent: C.cyan  },
+      { type: 'dataGreen', metrica: 'Total Recaudado (Pagado)',     valor: fmt$(total((i) => (i.status ?? '').toLowerCase() === 'paid'))    },
+      { type: 'dataAmber', metrica: 'Total por Cobrar (Pendiente)', valor: fmt$(total((i) => (i.status ?? '').toLowerCase() === 'pending')) },
+      { type: 'dataRed',   metrica: 'Total en Deuda (Vencido)',     valor: fmt$(total((i) => (i.status ?? '').toLowerCase() === 'overdue')) },
+    ];
+
+    let dataRowCount = 0;
+    summaryData.forEach((item) => {
+      if (item.type === 'spacer') {
+        const r = wsSummary.addRow({ metrica: '', valor: '' });
+        r.height = 8;
+        return;
+      }
+      if (item.type === 'header') {
+        const r = wsSummary.addRow({ metrica: item.metrica, valor: '' });
+        wsSummary.mergeCells(`A${r.number}:B${r.number}`);
+        Object.assign(r.getCell(1), sectionHeaderStyle(item.accent ?? C.cyan));
+        r.height = 20;
+        dataRowCount = 0; // Reset alternado por sección
+        return;
+      }
+
+      const isAlt = dataRowCount % 2 === 1;
+      dataRowCount++;
+
+      // Color de acento para el valor según tipo
+      const valColor = item.type === 'dataGreen' ? C.green
+                     : item.type === 'dataAmber' ? C.amber
+                     : item.type === 'dataRed'   ? C.red
+                     : null;
+
+      const r = wsSummary.addRow({ metrica: item.metrica, valor: item.valor });
+      r.height = 20;
+
+      // Celda clave
+      Object.assign(r.getCell(1), summaryKeyStyle(isAlt));
+
+      // Celda valor
+      const valCell = r.getCell(2);
+      Object.assign(valCell, summaryValStyle(isAlt, !!valColor));
+      if (valColor) {
+        valCell.font = { bold: true, size: 10, color: { argb: `FF${valColor}` } };
+      }
+    });
+
+    // ── HOJA 1: Todas ────────────────────────────────────────────────────────
+    buildInvoiceSheet(wb, 'Todas', invoices, C.cyan);
+
+    // ── HOJA 2: Pagadas ──────────────────────────────────────────────────────
+    buildInvoiceSheet(wb, 'Pagadas',    invoices.filter((i) => (i.status ?? '').toLowerCase() === 'paid'),    C.green);
+
+    // ── HOJA 3: Pendientes ───────────────────────────────────────────────────
+    buildInvoiceSheet(wb, 'Pendientes', invoices.filter((i) => (i.status ?? '').toLowerCase() === 'pending'), C.amber);
+
+    // ── HOJA 4: Vencidas ─────────────────────────────────────────────────────
+    buildInvoiceSheet(wb, 'Vencidas',   invoices.filter((i) => (i.status ?? '').toLowerCase() === 'overdue'), C.red);
+
+    // ── Descarga ──────────────────────────────────────────────────────────────
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    a.download   = `WellQ_Facturacion_${safeName}_${date}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const initials = (clinic.name ?? 'WQ').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
@@ -878,8 +1118,14 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                         <Receipt size={16} className="text-wellq-gray dark:text-white group-hover:text-wellq-cyan transition-colors" />
                       </div>
                       <div>
-                        <p className="text-sm font-black text-wellq-dark dark:text-white tracking-tight">{inv.amount}</p>
-                        <p className="text-[11px] font-bold text-wellq-gray font-mono tracking-wider">{inv.id} · {inv.date}</p>
+                        {/* AQUÍ ESTÁ EL FIX: Muestra fallbacks robustos para ID y Fecha */}
+                        <p className="text-sm font-black text-wellq-dark dark:text-white tracking-tight">
+                          {typeof inv.amount === 'number' ? `$${inv.amount.toLocaleString('es-CL')} USD` : inv.amount ?? '—'}
+                        </p>
+                        <p className="text-[11px] font-bold text-wellq-gray font-mono tracking-wider capitalize">
+                          {inv.id ?? inv.invoice_id ?? 'SIN-ID'}
+                          {(inv.date || inv.issued_at) ? ` · ${new Date(inv.date ?? inv.issued_at).toLocaleDateString('es-CL', { month: 'short', year: 'numeric' })}` : ''}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">

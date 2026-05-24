@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ExcelJS from 'exceljs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Filter, Download, Mail, X, Send, Loader2,
@@ -279,6 +280,349 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
   const atRiskClinics = clinics.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0).length;
   const totalPatients = clinics.reduce((acc, c) => acc + (c.patientsUsed ?? c.patient_count ?? 0), 0);
 
+  // ── Exportar clínicas como Excel con colores ──────────────────────────────
+  const handleExportExcel = async () => {
+    if (!filtered.length) return;
+    setExportState('loading');
+
+    try {
+      const date = new Date().toISOString().split('T')[0];
+
+      // ── Paleta WellQ ──────────────────────────────────────────────────────
+      const C = {
+        darkBg:   '0B1017',
+        darkMid:  '1A2535',
+        cyan:     '16F8F9',
+        white:    'FFFFFF',
+        green:    '10B981',
+        greenBg:  'ECFDF5',
+        amber:    'F59E0B',
+        amberBg:  'FFFBEB',
+        red:      'EF4444',
+        redBg:    'FEF2F2',
+        blue:     '3B82F6',
+        blueBg:   'EFF6FF',
+        rowAlt:   'F8FAFC',
+        rowWhite: 'FFFFFF',
+        textDark: '0F172A',
+        textGray: '64748B',
+        border:   'E2E8F0',
+      };
+
+      // ── Estilos reutilizables ─────────────────────────────────────────────
+      const colHeaderStyle = {
+        font:      { bold: true, color: { argb: `FF${C.white}` }, size: 10 },
+        fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkBg}` } },
+        alignment: { vertical: 'middle', horizontal: 'center' },
+        border: {
+          bottom: { style: 'medium', color: { argb: `FF${C.cyan}` } },
+          top:    { style: 'thin',   color: { argb: `FF${C.darkMid}` } },
+          left:   { style: 'thin',   color: { argb: `FF${C.darkMid}` } },
+          right:  { style: 'thin',   color: { argb: `FF${C.darkMid}` } },
+        },
+      };
+
+      const cellStyle = (isAlt = false) => ({
+        font:      { size: 10, color: { argb: `FF${C.textDark}` } },
+        fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
+        alignment: { vertical: 'middle', horizontal: 'left' },
+        border: {
+          bottom: { style: 'thin', color: { argb: `FF${C.border}` } },
+          top:    { style: 'thin', color: { argb: `FF${C.border}` } },
+          left:   { style: 'thin', color: { argb: `FF${C.border}` } },
+          right:  { style: 'thin', color: { argb: `FF${C.border}` } },
+        },
+      });
+
+      const statusStyle = (statusRaw) => {
+        const s = (statusRaw ?? '').toLowerCase();
+        const map = {
+          active:   { fg: C.green, bg: C.greenBg },
+          warning:  { fg: C.amber, bg: C.amberBg },
+          critical: { fg: C.red,   bg: C.redBg   },
+          churned:  { fg: C.red,   bg: C.redBg   },
+        };
+        const { fg, bg } = map[s] ?? { fg: C.textGray, bg: C.rowAlt };
+        return {
+          font:      { bold: true, color: { argb: `FF${fg}` }, size: 10 },
+          fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${bg}` } },
+          alignment: { vertical: 'middle', horizontal: 'center' },
+          border: {
+            bottom: { style: 'thin', color: { argb: `FF${fg}` } },
+            top:    { style: 'thin', color: { argb: `FF${fg}` } },
+            left:   { style: 'thin', color: { argb: `FF${fg}` } },
+            right:  { style: 'thin', color: { argb: `FF${fg}` } },
+          },
+        };
+      };
+
+      const tierStyle = (tierRaw) => {
+        const t = (tierRaw ?? '').toLowerCase();
+        const map = {
+          enterprise: { fg: C.blue,  bg: C.blueBg  },
+          pro:        { fg: C.cyan,  bg: 'E0FFFE'  },
+          smb:        { fg: C.cyan,  bg: 'E0FFFE'  },
+          trial:      { fg: C.amber, bg: C.amberBg },
+        };
+        const { fg, bg } = map[t] ?? { fg: C.textGray, bg: C.rowAlt };
+        return {
+          font:      { bold: true, color: { argb: `FF${fg}` }, size: 10 },
+          fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${bg}` } },
+          alignment: { vertical: 'middle', horizontal: 'center' },
+          border: {
+            bottom: { style: 'thin', color: { argb: `FF${fg}` } },
+            top:    { style: 'thin', color: { argb: `FF${fg}` } },
+            left:   { style: 'thin', color: { argb: `FF${fg}` } },
+            right:  { style: 'thin', color: { argb: `FF${fg}` } },
+          },
+        };
+      };
+
+      const healthStyle = (score) => {
+        const n = score ?? 0;
+        const fg = n >= 70 ? C.green : n > 0 ? C.amber : C.red;
+        const bg = n >= 70 ? C.greenBg : n > 0 ? C.amberBg : C.redBg;
+        return {
+          font:      { bold: true, color: { argb: `FF${fg}` }, size: 10 },
+          fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${bg}` } },
+          alignment: { vertical: 'middle', horizontal: 'center' },
+          border: {
+            bottom: { style: 'thin', color: { argb: `FF${C.border}` } },
+            top:    { style: 'thin', color: { argb: `FF${C.border}` } },
+            left:   { style: 'thin', color: { argb: `FF${C.border}` } },
+            right:  { style: 'thin', color: { argb: `FF${C.border}` } },
+          },
+        };
+      };
+
+      const sheetTitleStyle = (accentColor = C.cyan) => ({
+        font:      { bold: true, color: { argb: `FF${accentColor}` }, size: 13 },
+        fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkBg}` } },
+        alignment: { vertical: 'middle', horizontal: 'left' },
+      });
+
+      const sectionHeaderStyle = (accentColor = C.cyan) => ({
+        font:      { bold: true, color: { argb: `FF${accentColor}` }, size: 10 },
+        fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } },
+        alignment: { vertical: 'middle', horizontal: 'left' },
+      });
+
+      const summaryKeyStyle = (isAlt = false) => ({
+        font:      { bold: true, size: 10, color: { argb: `FF${C.textDark}` } },
+        fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
+        alignment: { vertical: 'middle', horizontal: 'left' },
+        border: {
+          bottom: { style: 'thin', color: { argb: `FF${C.border}` } },
+          top:    { style: 'thin', color: { argb: `FF${C.border}` } },
+          left:   { style: 'thin', color: { argb: `FF${C.border}` } },
+          right:  { style: 'thin', color: { argb: `FF${C.border}` } },
+        },
+      });
+
+      const summaryValStyle = (isAlt = false, accentColor = null) => ({
+        font:      { bold: !!accentColor, size: 10, color: { argb: `FF${accentColor ?? C.textGray}` } },
+        fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
+        alignment: { vertical: 'middle', horizontal: 'right' },
+        border: {
+          bottom: { style: 'thin', color: { argb: `FF${C.border}` } },
+          top:    { style: 'thin', color: { argb: `FF${C.border}` } },
+          left:   { style: 'thin', color: { argb: `FF${C.border}` } },
+          right:  { style: 'thin', color: { argb: `FF${C.border}` } },
+        },
+      });
+
+      // ── Columnas de tabla ─────────────────────────────────────────────────
+      const COLS = [
+        { header: 'ID',               key: 'id',        width: 20 },
+        { header: 'Nombre Clínica',   key: 'name',      width: 32 },
+        { header: 'Plan',             key: 'tier',      width: 16 },
+        { header: 'Estado',           key: 'status',    width: 16 },
+        { header: 'Pacientes Usados', key: 'used',      width: 20 },
+        { header: 'Límite Pacientes', key: 'limit',     width: 20 },
+        { header: 'Health Score',     key: 'health',    width: 16 },
+        { header: 'Último Login',     key: 'lastLogin', width: 24 },
+      ];
+
+      // ── Función genérica: construye una hoja de clínicas ──────────────────
+      const buildClinicSheet = (wb, sheetName, list, accentColor = C.cyan) => {
+        const ws = wb.addWorksheet(sheetName, {
+          views: [{ state: 'frozen', ySplit: 3 }],
+        });
+        ws.columns = COLS;
+
+        // Fila 1: título fusionado
+        ws.mergeCells(1, 1, 1, COLS.length);
+        const titleCell = ws.getCell(1, 1);
+        titleCell.value = `WellQ · Clínicas — ${sheetName.toUpperCase()}  |  Exportado ${date}`;
+        Object.assign(titleCell, sheetTitleStyle(accentColor));
+        ws.getRow(1).height = 28;
+
+        // Fila 2: separador visual
+        ws.getRow(2).height = 5;
+        for (let c = 1; c <= COLS.length; c++) {
+          ws.getCell(2, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } };
+        }
+
+        // Fila 3: cabeceras
+        const headerRow = ws.getRow(3);
+        COLS.forEach((col, idx) => {
+          const cell = headerRow.getCell(idx + 1);
+          cell.value = col.header;
+          Object.assign(cell, colHeaderStyle);
+        });
+        headerRow.height = 22;
+
+        // Filas de datos
+        if (!list.length) {
+          const emptyRow = ws.addRow(['Sin registros para esta categoría']);
+          ws.mergeCells(emptyRow.number, 1, emptyRow.number, COLS.length);
+          const ec = emptyRow.getCell(1);
+          ec.font      = { italic: true, color: { argb: `FF${C.textGray}` }, size: 10 };
+          ec.alignment = { horizontal: 'center', vertical: 'middle' };
+          emptyRow.height = 20;
+        } else {
+          list.forEach((clinic, i) => {
+            const isAlt     = i % 2 === 1;
+            const statusRaw = clinic.status ?? '';
+            const tierRaw   = clinic.tier   ?? '';
+            const healthNum = clinic.healthScore ?? 0;
+            const used      = clinic.patientsUsed ?? clinic.patient_count ?? 0;
+            const limit     = clinic.patientsLimit ?? '—';
+
+            const row = ws.addRow({
+              id:        clinic.clinic_id ?? clinic.id ?? '—',
+              name:      clinic.name ?? '—',
+              tier:      tierRaw.toUpperCase() || '—',
+              status:    statusRaw,
+              used,
+              limit,
+              health:    healthNum > 0 ? `${healthNum}%` : '—',
+              lastLogin: clinic.lastLogin ?? '—',
+            });
+            row.height = 20;
+
+            row.eachCell({ includeEmpty: true }, (cell) => {
+              Object.assign(cell, cellStyle(isAlt));
+            });
+
+            Object.assign(row.getCell('status'), statusStyle(statusRaw));
+            Object.assign(row.getCell('tier'),   tierStyle(tierRaw));
+            Object.assign(row.getCell('health'), healthStyle(healthNum));
+
+            ['used', 'limit'].forEach((key) => {
+              const c = row.getCell(key);
+              c.alignment = { horizontal: 'right', vertical: 'middle' };
+              c.font      = { bold: true, size: 10, color: { argb: `FF${C.textDark}` } };
+            });
+          });
+        }
+
+        ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: COLS.length } };
+      };
+
+      // ── Crear workbook ────────────────────────────────────────────────────
+      const wb = new ExcelJS.Workbook();
+      wb.creator  = 'WellQ Admin';
+      wb.created  = new Date();
+      wb.modified = new Date();
+
+      // ── HOJA 0: General (Resumen KPI) ─────────────────────────────────────
+      const wsSummary = wb.addWorksheet('General', {
+        views: [{ state: 'frozen', ySplit: 2 }],
+      });
+      wsSummary.columns = [
+        { key: 'metrica', width: 36 },
+        { key: 'valor',   width: 36 },
+      ];
+
+      wsSummary.mergeCells('A1:B1');
+      const genTitle = wsSummary.getCell('A1');
+      genTitle.value = `WellQ · Resumen General de Clínicas  |  ${date}`;
+      Object.assign(genTitle, sheetTitleStyle(C.cyan));
+      wsSummary.getRow(1).height = 28;
+
+      wsSummary.getRow(2).height = 5;
+      ['A2', 'B2'].forEach((addr) => {
+        wsSummary.getCell(addr).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } };
+      });
+
+      const activeClinicsExp  = filtered.filter((c) => (c.status ?? '').toLowerCase() === 'active').length;
+      const atRiskClinicsExp  = filtered.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0).length;
+      const churnedClinicsExp = filtered.filter((c) => (c.status ?? '').toLowerCase() === 'churned').length;
+      const totalPatientsExp  = filtered.reduce((acc, c) => acc + (c.patientsUsed ?? c.patient_count ?? 0), 0);
+      const avgHealthExp      = filtered.length
+        ? Math.round(filtered.reduce((acc, c) => acc + (c.healthScore ?? 0), 0) / filtered.length)
+        : 0;
+
+      const summaryData = [
+        { type: 'header',    metrica: '◆  RESUMEN DE EXPORTACIÓN',  accent: C.cyan  },
+        { type: 'data',      metrica: 'Fecha de Exportación',        valor: new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' }) },
+        { type: 'data',      metrica: 'Filtro Tab Activo',           valor: filter === 'all' ? 'Todas' : filter === 'active' ? 'Activas' : filter === 'at_risk' ? 'En Riesgo' : 'Churned' },
+        { type: 'data',      metrica: 'Filtro Tier',                 valor: filterTier   || 'Sin filtro' },
+        { type: 'data',      metrica: 'Filtro Estado',               valor: filterStatus || 'Sin filtro' },
+        { type: 'spacer' },
+        { type: 'header',    metrica: '◆  KPIs DE CLÍNICAS',         accent: C.cyan  },
+        { type: 'data',      metrica: 'Total Clínicas Exportadas',   valor: filtered.length              },
+        { type: 'dataGreen', metrica: 'Clínicas Activas',            valor: activeClinicsExp             },
+        { type: 'dataAmber', metrica: 'Clínicas En Riesgo',          valor: atRiskClinicsExp             },
+        { type: 'dataRed',   metrica: 'Clínicas Churned',            valor: churnedClinicsExp            },
+        { type: 'spacer' },
+        { type: 'header',    metrica: '◆  MÉTRICAS DE USO',          accent: C.cyan  },
+        { type: 'dataCyan',  metrica: 'Total Pacientes Activos',     valor: totalPatientsExp.toLocaleString('es-CL') },
+        { type: 'dataCyan',  metrica: 'Health Score Promedio',       valor: avgHealthExp > 0 ? `${avgHealthExp}%` : '—' },
+      ];
+
+      let dataRowIdx = 0;
+      summaryData.forEach((item) => {
+        if (item.type === 'spacer') {
+          const r = wsSummary.addRow({ metrica: '', valor: '' });
+          r.height = 8;
+          return;
+        }
+        if (item.type === 'header') {
+          const r = wsSummary.addRow({ metrica: item.metrica, valor: '' });
+          wsSummary.mergeCells(`A${r.number}:B${r.number}`);
+          Object.assign(r.getCell(1), sectionHeaderStyle(item.accent ?? C.cyan));
+          r.height = 20;
+          dataRowIdx = 0;
+          return;
+        }
+        const isAlt = dataRowIdx % 2 === 1;
+        dataRowIdx++;
+        const accentColor = item.type === 'dataGreen' ? C.green
+                          : item.type === 'dataAmber' ? C.amber
+                          : item.type === 'dataRed'   ? C.red
+                          : item.type === 'dataCyan'  ? C.cyan
+                          : null;
+        const r = wsSummary.addRow({ metrica: item.metrica, valor: item.valor });
+        r.height = 20;
+        Object.assign(r.getCell(1), summaryKeyStyle(isAlt));
+        Object.assign(r.getCell(2), summaryValStyle(isAlt, accentColor));
+      });
+
+      // ── Hojas por categoría ───────────────────────────────────────────────
+      buildClinicSheet(wb, 'Todas',     filtered, C.cyan);
+      buildClinicSheet(wb, 'Activas',   filtered.filter((c) => (c.status ?? '').toLowerCase() === 'active'),  C.green);
+      buildClinicSheet(wb, 'En Riesgo', filtered.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0), C.amber);
+      buildClinicSheet(wb, 'Churned',   filtered.filter((c) => (c.status ?? '').toLowerCase() === 'churned'), C.red);
+
+      // ── Descarga ──────────────────────────────────────────────────────────
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url    = URL.createObjectURL(blob);
+      const a      = document.createElement('a');
+      a.href       = url;
+      a.download   = `WellQ_Clinicas_${date}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportState('idle');
+    } catch (err) {
+      console.error('Export error:', err);
+      setExportState('error');
+      setTimeout(() => setExportState('idle'), 3000);
+    }
+  };
+
   return (
     <motion.div
       className="space-y-7 font-sans"
@@ -368,27 +712,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
           <div className="flex items-center gap-2">
             {/* Export */}
             <button
-              onClick={async () => {
-                setExportState('loading');
-                try {
-                  const params = new URLSearchParams();
-                  if (filterTier)   params.set('tier',   filterTier);
-                  if (filterStatus) params.set('status', filterStatus);
-                  const res = await fetch(`${API_BASE}/api/clinics/export?${params}`);
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                  const blob = await res.blob();
-                  const url  = URL.createObjectURL(blob);
-                  const a    = document.createElement('a');
-                  a.href     = url;
-                  a.download = `clinicas_${new Date().toISOString().slice(0, 10)}.xlsx`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  setExportState('idle');
-                } catch {
-                  setExportState('error');
-                  setTimeout(() => setExportState('idle'), 3000);
-                }
-              }}
+              onClick={handleExportExcel}
               disabled={exportState === 'loading'}
               className={`flex items-center gap-2 px-3.5 py-2 border rounded-xl text-sm font-semibold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                 exportState === 'error'

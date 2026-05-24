@@ -394,49 +394,6 @@ KPI_SNAPSHOTS_DATA = [
     {"month": "Abr", "year": 2026, "arr": 542400,  "mrr": 45200, "nrr_percentage": 104.5, "expansion_mrr": 15000, "churn_mrr": 1600, "nrr_status": "healthy"},
     {"month": "May", "year": 2026, "arr": 556800,  "mrr": 46400, "nrr_percentage": 104.8, "expansion_mrr": 15500, "churn_mrr": 1580, "nrr_status": "healthy"},
 
-    # ── PERIOD-TAGGED SNAPSHOTS (para filtros 24H / 7D / 30D / QTD / YTD) ─────
-    # Estos registros son usados por el backend para responder al filtro de período.
-    # Fecha de referencia: May 23, 2026 (hoy).
-    #   24H  → últimas 24 horas   (May 22 → May 23)
-    #   7D   → últimos 7 días     (May 16 → May 23)
-    #   30D  → últimos 30 días    (Apr 23 → May 23)
-    #   qtd  → Q2 2026            (Apr  1 → May 23)
-    #   ytd  → Año 2026           (Ene  1 → May 23)
-    {
-        "period": "24h",  "month": "May", "year": 2026,
-        "arr": 556800,  "mrr": 46400,  "nrr_percentage": 104.8,
-        "expansion_mrr": 516,  "churn_mrr": 53,  "nrr_status": "healthy",
-        "total_patients": 6172, "patients_delta": 120,
-        "active_clinics": 4,   "clinics_delta": 1,  "in_treatment": 5762,
-    },
-    {
-        "period": "7d",   "month": "May", "year": 2026,
-        "arr": 556800,  "mrr": 46400,  "nrr_percentage": 104.8,
-        "expansion_mrr": 3617, "churn_mrr": 369, "nrr_status": "healthy",
-        "total_patients": 6052, "patients_delta": 4212,
-        "active_clinics": 4,   "clinics_delta": 2,  "in_treatment": 5640,
-    },
-    {
-        "period": "30d",  "month": "May", "year": 2026,
-        "arr": 542400,  "mrr": 45200,  "nrr_percentage": 104.5,
-        "expansion_mrr": 15000, "churn_mrr": 1600, "nrr_status": "healthy",
-        "total_patients": 6052, "patients_delta": 4212,
-        "active_clinics": 4,   "clinics_delta": 2,  "in_treatment": 5640,
-    },
-    {
-        "period": "qtd",  "month": "Q2",  "year": 2026,
-        "arr": 549600,  "mrr": 45800,  "nrr_percentage": 104.3,
-        "expansion_mrr": 30500, "churn_mrr": 3180, "nrr_status": "healthy",
-        "total_patients": 6052, "patients_delta": 8750,
-        "active_clinics": 4,   "clinics_delta": 3,  "in_treatment": 5320,
-    },
-    {
-        "period": "ytd",  "month": "YTD", "year": 2026,
-        "arr": 527400,  "mrr": 43950,  "nrr_percentage": 103.8,
-        "expansion_mrr": 68000, "churn_mrr": 8780, "nrr_status": "healthy",
-        "total_patients": 6052, "patients_delta": 14800,
-        "active_clinics": 4,   "clinics_delta": 6,  "in_treatment": 5640,
-    },
 ]
 
 APP_METRICS_DATA = [
@@ -570,21 +527,6 @@ MRR_SNAPSHOTS_DATA = [
     {"period_month": "Abr", "period_year": 2026, "total_mrr": 45200.0, "new_business": 1500.0, "expansion": 15000.0, "contraction": 800.0, "churn": 1600.0, "retained": 43600.0, "monthly_growth_percentage": 2.1},
     {"period_month": "May", "period_year": 2026, "total_mrr": 46400.0, "new_business": 1800.0, "expansion": 15500.0, "contraction": 600.0, "churn": 1580.0, "retained": 44820.0, "monthly_growth_percentage": 2.7},
 
-    # ── PERIOD-TAGGED MRR (para filtros del dashboard Financials) ─────────────
-    # Referencia: May 23, 2026. total_mrr = estado actual; new_business / expansion /
-    # contraction / churn = acumulado dentro de la ventana de tiempo.
-    {"period_month": "24h", "period_year": 2026,
-     "total_mrr": 46400.0, "new_business": 60.0,   "expansion": 516.0,
-     "contraction": 20.0,  "churn": 53.0,   "retained": 46347.0, "monthly_growth_percentage": 0.1},
-    {"period_month": "7d",  "period_year": 2026,
-     "total_mrr": 46400.0, "new_business": 420.0,  "expansion": 3617.0,
-     "contraction": 140.0, "churn": 369.0,  "retained": 45979.0, "monthly_growth_percentage": 0.7},
-    {"period_month": "qtd", "period_year": 2026,
-     "total_mrr": 46400.0, "new_business": 3300.0, "expansion": 31000.0,
-     "contraction": 1400.0,"churn": 3180.0, "retained": 43220.0, "monthly_growth_percentage": 5.3},
-    {"period_month": "ytd", "period_year": 2026,
-     "total_mrr": 46400.0, "new_business": 7650.0, "expansion": 68500.0,
-     "contraction": 2900.0,"churn": 8780.0, "retained": 37620.0, "monthly_growth_percentage": 27.1},
 ]
 
 # ── Churn risk con risk_level siempre definido ─────────────────────────────────

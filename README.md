@@ -53,11 +53,12 @@ npm install
 
 # 3. Instalamos la librería específica para manejar archivos Excel
 npm install xlsx
+npm install xlsx-js-style
+npm install exceljs
 
 # 4. Encendemos la interfaz
 npm run dev
 ```
-
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
