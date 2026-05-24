@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom'; // ← NUEVO
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   DollarSign, Zap, Activity, ArrowDownRight, ArrowUpRight, 
@@ -55,7 +56,7 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 };
 
-// ── ForceUpdateModal (Ahora Animado) ──────────────────────────────────────────
+// ── ForceUpdateModal (CORREGIDO: Portal + scroll interno) ────────────────────
 const ForceUpdateModal = ({ versions, onClose }) => {
   const { t } = useLanguage();
   const [minVersions, setMinVersions] = useState({});
@@ -92,24 +93,26 @@ const ForceUpdateModal = ({ versions, onClose }) => {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      {/* Backdrop Animado */}
+  // Renderizado mediante portal directamente en document.body
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      {/* Backdrop con animación */}
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
         onClick={onClose} 
       />
       
-      {/* Modal Animado */}
+      {/* Modal con altura máxima y scroll interno */}
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="relative bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg border border-wellq-gray/20 dark:border-white/10 overflow-hidden"
+        className="relative bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg border border-wellq-gray/20 dark:border-white/10 overflow-hidden max-h-[90vh] flex flex-col"
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
+        {/* Cabecera fija */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] flex-shrink-0">
           <div>
             <h3 className="font-bold text-lg text-wellq-dark dark:text-white leading-tight">{t('platform.forceUpdateTitle')}</h3>
             <p className="text-xs font-medium text-wellq-gray mt-1">
@@ -124,93 +127,97 @@ const ForceUpdateModal = ({ versions, onClose }) => {
           </button>
         </div>
 
-        <AnimatePresence mode="wait">
-          {saved ? (
-            <motion.div 
-              key="success"
-              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-              className="flex flex-col items-center justify-center py-16 gap-4"
-            >
-              <div className="w-16 h-16 rounded-full bg-wellq-green/10 flex items-center justify-center ring-4 ring-wellq-green/5">
-                <CheckCircle size={32} className="text-wellq-green" />
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-bold text-wellq-dark dark:text-white">{t('platform.forceUpdateSaved')}</p>
-                <p className="text-sm font-medium text-wellq-gray mt-1">{t('platform.forceUpdateSavedSub')}</p>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="p-6 space-y-4">
-                {Object.keys(byAppType).length === 0 ? (
-                  <p className="text-sm font-medium text-wellq-gray text-center py-8">{t('platform.noVersionData')}</p>
-                ) : (
-                  Object.entries(byAppType).map(([appType, appVersions]) => {
-                    const Icon = APP_ICONS[appType.toLowerCase()] ?? Smartphone;
-                    return (
-                      <div
-                        key={appType}
-                        className="flex items-center gap-4 p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5 hover:border-wellq-gray/20 transition-colors"
-                      >
-                        <div className="w-12 h-12 rounded-xl bg-wellq-cyan/10 flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-cyan/20">
-                          <Icon size={20} className="text-wellq-cyan" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-wellq-dark dark:text-white capitalize">{appType}</p>
-                          <p className="text-xs font-medium text-wellq-gray mt-0.5">
-                            {t('platform.activeVersions')}: {appVersions.join(', ')}
-                          </p>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <label className="block text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-1.5">{t('platform.minVersion')}</label>
-                          <select
-                            value={minVersions[appType] || ''}
-                            onChange={(e) => setMinVersions((prev) => ({ ...prev, [appType]: e.target.value }))}
-                            className="px-3 py-2 text-sm font-semibold border border-wellq-gray/20 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-wellq-cyan bg-white dark:bg-wellq-dark dark:text-white cursor-pointer shadow-sm"
-                          >
-                            <option value="">{t('platform.noForce')}</option>
-                            {appVersions.map((v) => (
-                              <option key={v} value={v}>v{v}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-
-                {error && (
-                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 p-3.5 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-100 dark:border-red-500/20">
-                    <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
-                    <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p>
-                  </motion.div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
-                <button
-                  onClick={onClose}
-                  className="px-5 py-2.5 rounded-xl text-sm font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/10 dark:hover:bg-white/5 transition-colors"
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 transition-all disabled:opacity-50 active:scale-[0.98] shadow-sm shadow-wellq-cyan/20"
-                >
-                  {saving ? (
-                    <><div className="w-4 h-4 border-2 border-wellq-black/30 border-t-wellq-black rounded-full animate-spin" /> {t('common.loading')}</>
+        {/* Contenido scrolleable */}
+        <div className="flex-1 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            {saved ? (
+              <motion.div 
+                key="success"
+                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                className="flex flex-col items-center justify-center py-16 gap-4"
+              >
+                <div className="w-16 h-16 rounded-full bg-wellq-green/10 flex items-center justify-center ring-4 ring-wellq-green/5">
+                  <CheckCircle size={32} className="text-wellq-green" />
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-wellq-dark dark:text-white">{t('platform.forceUpdateSaved')}</p>
+                  <p className="text-sm font-medium text-wellq-gray mt-1">{t('platform.forceUpdateSavedSub')}</p>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <div className="p-6 space-y-4">
+                  {Object.keys(byAppType).length === 0 ? (
+                    <p className="text-sm font-medium text-wellq-gray text-center py-8">{t('platform.noVersionData')}</p>
                   ) : (
-                    t('platform.forceUpdateSave')
+                    Object.entries(byAppType).map(([appType, appVersions]) => {
+                      const Icon = APP_ICONS[appType.toLowerCase()] ?? Smartphone;
+                      return (
+                        <div
+                          key={appType}
+                          className="flex items-center gap-4 p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5 hover:border-wellq-gray/20 transition-colors"
+                        >
+                          <div className="w-12 h-12 rounded-xl bg-wellq-cyan/10 flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-cyan/20">
+                            <Icon size={20} className="text-wellq-cyan" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-wellq-dark dark:text-white capitalize">{appType}</p>
+                            <p className="text-xs font-medium text-wellq-gray mt-0.5">
+                              {t('platform.activeVersions')}: {appVersions.join(', ')}
+                            </p>
+                          </div>
+                          <div className="flex-shrink-0">
+                            <label className="block text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-1.5">{t('platform.minVersion')}</label>
+                            <select
+                              value={minVersions[appType] || ''}
+                              onChange={(e) => setMinVersions((prev) => ({ ...prev, [appType]: e.target.value }))}
+                              className="px-3 py-2 text-sm font-semibold border border-wellq-gray/20 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-wellq-cyan bg-white dark:bg-wellq-dark dark:text-white cursor-pointer shadow-sm"
+                            >
+                              <option value="">{t('platform.noForce')}</option>
+                              {appVersions.map((v) => (
+                                <option key={v} value={v}>v{v}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+                  {error && (
+                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 p-3.5 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-100 dark:border-red-500/20">
+                      <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                      <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p>
+                    </motion.div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] flex-shrink-0">
+                  <button
+                    onClick={onClose}
+                    className="px-5 py-2.5 rounded-xl text-sm font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/10 dark:hover:bg-white/5 transition-colors"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 transition-all disabled:opacity-50 active:scale-[0.98] shadow-sm shadow-wellq-cyan/20"
+                  >
+                    {saving ? (
+                      <><div className="w-4 h-4 border-2 border-wellq-black/30 border-t-wellq-black rounded-full animate-spin" /> {t('common.loading')}</>
+                    ) : (
+                      t('platform.forceUpdateSave')
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -319,6 +326,7 @@ const AppVersionDistribution = () => {
         )}
       </div>
 
+      {/* Modal fuera del flujo normal (portal) */}
       <AnimatePresence>
         {forceUpdateOpen && (
           <ForceUpdateModal
