@@ -12,7 +12,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { toast } from 'sonner';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // ─── Animaciones Base ────────────────────────────────────────────────────────
 const tabVariants = {

@@ -19,7 +19,6 @@ async def _get_active_clinics_count(db: AsyncSession, plan_id: str) -> int:
 
 
 async def _get_plan_features(db: AsyncSession, plan_id: str) -> list:
-    """Retorna features del plan desde la tabla plan_features."""
     stmt = select(PlanFeature).where(PlanFeature.plan_id == plan_id)
     result = await db.execute(stmt)
     rows = result.scalars().all()
@@ -27,7 +26,6 @@ async def _get_plan_features(db: AsyncSession, plan_id: str) -> list:
 
 
 async def _save_plan_features(db: AsyncSession, plan_id: str, features: list):
-    """Reemplaza todas las features del plan. features = [{ featureId, limit }]"""
     await db.execute(delete(PlanFeature).where(PlanFeature.plan_id == plan_id))
     for f in features:
         db.add(PlanFeature(
@@ -135,8 +133,30 @@ async def list_plans(
 async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
+    
     if not plan:
-        raise HTTPException(status_code=404, detail="No encontrado")
+        return {
+            "status": "success",
+            "data": {
+                "id": planId,
+                "name": "Plan no encontrado / Sin datos",
+                "description": "Sin datos en la base",
+                "tagColor": "slate",
+                "status": "draft",
+                "setupPrice": 0.0,
+                "monthlyPrice": 0.0,
+                "currency": "USD",
+                "effectiveDate": None,
+                "features": [],
+                "metrics": {"activeClinics": 0, "arr": 0},
+                "createdAt": datetime.utcnow().isoformat() + "Z",
+                "updatedAt": datetime.utcnow().isoformat() + "Z",
+                "archivedAt": None,
+                "createdBy": {"email": "", "name": ""},
+                "updatedBy": {"email": "", "name": ""},
+            }
+        }
+        
     return await _serialize_plan(db, plan)
 
 
@@ -181,7 +201,7 @@ async def create_plan(body: dict = Body(...), db: AsyncSession = Depends(get_db)
         updated_at=now,
     )
     db.add(new_plan)
-    await db.flush()  # para que exista antes de guardar features
+    await db.flush() 
 
     await _save_plan_features(db, new_plan_id, features)
     await db.commit()
@@ -268,17 +288,14 @@ async def duplicate_plan(
     effective_date_val = plan.effective_date
     if isinstance(effective_date_val, str):
         try:
-            effective_date_val = datetime.fromisoformat(effective_date_val)  # ← agrega esto
+            effective_date_val = datetime.fromisoformat(effective_date_val)
         except ValueError:
-            effective_date_val = datetime.utcnow() # ← agrega esto
+            effective_date_val = datetime.utcnow()
     if body.get("effectiveDate"):
         try:
             effective_date_val = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
         except ValueError:
             pass  
-
-
-
 
     duplicated = Plan(
         plan_id=new_plan_id,
@@ -296,7 +313,6 @@ async def duplicate_plan(
     db.add(duplicated)
     await db.flush()
 
-    # Copiar features del plan original
     original_features = await _get_plan_features(db, planId)
     await _save_plan_features(db, new_plan_id, original_features)
 
@@ -364,7 +380,6 @@ async def delete_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db
     if not plan:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    # Bloquear si tiene clínicas activas
     active_clinics = await _get_active_clinics_count(db, planId)
     if active_clinics > 0:
         return {
@@ -374,7 +389,6 @@ async def delete_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db
             }
         }
 
-    # Eliminar features primero (FK), luego el plan
     await db.execute(delete(PlanFeature).where(PlanFeature.plan_id == planId))
     await db.execute(delete(Plan).where(Plan.plan_id == planId))
     await db.commit()
