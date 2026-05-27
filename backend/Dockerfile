@@ -33,8 +33,8 @@ COPY --chown=wellq:wellq . .
 # Cambiar al usuario no-root
 USER wellq
 
-# Puerto en el que escucha Uvicorn
-EXPOSE 8000
+# Puerto en el que escucha Uvicorn (Ajustado para Google Cloud Run)
+EXPOSE 8080
 
 # Variable de entorno para evitar buffering de stdout (ver logs en tiempo real)
 ENV PYTHONUNBUFFERED=1
@@ -42,5 +42,6 @@ ENV PYTHONUNBUFFERED=1
 # Comando de inicio:
 # - workers=4: 4 procesos para aprovechar múltiples CPUs
 # - host 0.0.0.0: escuchar en todas las interfaces (necesario en Docker)
+# - port 8080: el puerto que Cloud Run exige por defecto
 # - log-level info: logs informativos en producción
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--log-level", "info"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4", "--log-level", "info"]

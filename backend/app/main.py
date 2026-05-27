@@ -85,9 +85,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuración de CORS actualizada para Producción (Vercel) y Local
+# ─────────────────────────────────────────────────────────────────────────────
+origins = [
+    "http://localhost:5173",          # Entorno de desarrollo local de Vite
+    "https://wellq-admin.vercel.app"  # Placeholder: Reemplázalo con tu URL real de Vercel
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
