@@ -23,7 +23,7 @@ from app.models_db import (
 )
 from app.db.neon import get_db
 
-router = APIRouter(prefix="/api/kpis", tags=["Dashboard KPIs"])
+router = APIRouter(prefix="/api/dashboard", tags=["Dashboard KPIs"])
 
 
 def parse_date(date_str: str | None, end_of_day: bool = False) -> datetime | None:

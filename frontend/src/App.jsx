@@ -124,7 +124,8 @@ const NotificationPanel = ({ onClose }) => {
     const fetchNotifs = async () => {
       try {
         setLoading(true);
-        const res  = await fetch('/api/notifications?limit=30');
+        // ✨ AQUÍ AGREGAMOS ${API_BASE} ✨
+        const res  = await fetch(`${API_BASE}/api/notifications?limit=30`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         setNotifications(json.data ?? []);
@@ -150,7 +151,8 @@ const NotificationPanel = ({ onClose }) => {
   const handleDelete = async (id) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE' });
+      // ✨ AQUÍ TAMBIÉN AGREGAMOS ${API_BASE} ✨
+      const res = await fetch(`${API_BASE}/api/notifications/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {

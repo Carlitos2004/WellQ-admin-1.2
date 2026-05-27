@@ -1,4 +1,4 @@
-export const API_BASE = 'http://localhost:8000';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const apiFetch = async (path, options = {}) => {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -13,6 +13,7 @@ export const apiFetch = async (path, options = {}) => {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 };
+
 export const fetchSupportTickets = (params = {}) => {
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
