@@ -889,10 +889,10 @@ export default function App() {
     const safe = (p) => p.catch(() => null);
 
     const results = await Promise.allSettled([
-      safe(apiFetch(withDates('/api/kpis/arr'))),
-      safe(apiFetch(withDates('/api/kpis/clinics/active'))),
-      safe(apiFetch(withDates('/api/kpis/patients/total'))),
-      safe(apiFetch(withDates('/api/kpis/nrr'))),
+      safe(apiFetch(withDates('/api/dashboard/arr'))),
+      safe(apiFetch(withDates('/api/dashboard/clinics/active'))),
+      safe(apiFetch(withDates('/api/dashboard/patients/total'))),
+      safe(apiFetch(withDates('/api/dashboard/nrr'))),
       safe(apiFetch(withDates('/api/financials/mrr/breakdown'))),
       safe(apiFetch(withDates('/api/financials/churn-risk/by-region'))),
       safe(apiFetch('/api/alerts')),
@@ -913,10 +913,10 @@ export default function App() {
       safe(apiFetch('/api/settings/azure')),
       safe(apiFetch('/api/settings/database')),
       safe(apiFetch('/api/users')),
-      safe(apiFetch(withDates('/api/kpis/system-health'))),
-      safe(apiFetch(withDates('/api/kpis/users/active-now'))),
-      safe(apiFetch(withDates('/api/kpis/downloads/total'))),
-      safe(apiFetch(withDates('/api/kpis/users/dormant'))),
+      safe(apiFetch(withDates('/api/dashboard/system-health'))),
+      safe(apiFetch(withDates('/api/dashboard/users/active-now'))),
+      safe(apiFetch(withDates('/api/dashboard/downloads/total'))),
+      safe(apiFetch(withDates('/api/dashboard/users/dormant'))),
     ]);
 
     const v = (i) => results[i].value;

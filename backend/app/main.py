@@ -86,16 +86,18 @@ app = FastAPI(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Configuración de CORS actualizada para Producción (Vercel) y Local
+# Configuración de CORS blindada para Producción (Vercel) y Local
 # ─────────────────────────────────────────────────────────────────────────────
 origins = [
-    "http://localhost:5173",          # Entorno de desarrollo local de Vite
-    "https://wellq-admin.vercel.app"  # Placeholder: Reemplázalo con tu URL real de Vercel
+    "http://localhost:5173",
+    "https://well-q-admin-1-2.vercel.app",
+    "https://well-q-admin-1-2-2g0tyvkyl-carlitos2004s-projects.vercel.app"  # Tu enlace exacto de Vercel
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # El comodín mágico que deja pasar subdominios
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -110,7 +112,6 @@ app.include_router(platform.router)
 app.include_router(notifications.router)
 app.include_router(jobs.router)
 app.include_router(financials.router)
-# kpis.router eliminado — no agregar de nuevo
 app.include_router(alerts.router)
 app.include_router(search.router)
 app.include_router(infrastructure.router)
@@ -127,7 +128,6 @@ app.include_router(clinic_plans.router)
 # FastAPI permite múltiples routers con el mismo prefix — se fusionan sin
 # conflicto. El nuevo endpoint queda en:
 #   GET /api/clinics/{clinic_id}/patient-health
-# que no choca con ningún endpoint existente en clinics.py.
 # ─────────────────────────────────────────────────────────────────────────────
 app.include_router(support.router)
 app.include_router(clinic_health.router)
