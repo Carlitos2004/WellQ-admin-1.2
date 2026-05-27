@@ -21,11 +21,28 @@ async def get_mrr_breakdown(
     end_date: str = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
-    # Obtener el snapshot más reciente (podría filtrarse por fecha si tuvieras recorded_at)
+    # Obtener el snapshot más reciente
     stmt = select(MrrSnapshot).order_by(MrrSnapshot.period_year.desc(), MrrSnapshot.id.desc())
     snapshot = (await db.execute(stmt)).scalars().first()
+    
+    # ✨ FIX: Fallback seguro con ceros en lugar de Error 404 ✨
     if not snapshot:
-        raise HTTPException(status_code=404, detail="No encontrado")
+        return {
+            "status": "success",
+            "data": {
+                "total_mrr": 0,
+                "currency": "USD",
+                "breakdown": {
+                    "new_business": 0,
+                    "expansion": 0,
+                    "contraction": 0,
+                    "churn": 0,
+                    "retained": 0
+                },
+                "monthly_growth_percentage": 0
+            }
+        }
+        
     return {
         "status": "success",
         "data": {

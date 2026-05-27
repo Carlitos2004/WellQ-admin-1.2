@@ -15,8 +15,16 @@ async def get_ai_costs(db: AsyncSession = Depends(get_db)):
     )
     snapshot = result.scalars().first()
 
+    # ✨ FIX: Fallback seguro con ceros en lugar de Error 404 ✨
     if not snapshot:
-        raise HTTPException(status_code=404, detail="No encontrado")
+        return {
+            "status": "success",
+            "period": "current_month",
+            "currency": "USD",
+            "totalCost": 0,
+            "breakdown": [],
+            "projectedEndOfMonthCost": 0
+        }
 
     breakdown_data = []
     if snapshot.breakdown:
@@ -63,8 +71,15 @@ async def get_pose_analysis_success_rate(db: AsyncSession = Depends(get_db)):
     )
     snapshot = result.scalars().first()
 
+    # ✨ FIX: Fallback seguro con ceros en lugar de Error 404 ✨
     if not snapshot:
-        raise HTTPException(status_code=404, detail="No encontrado")
+        return {
+            "status": "success",
+            "period": "current_month",
+            "totalSessionsAnalyzed": 0,
+            "overallSuccessRatePercentage": 0,
+            "failureReasons": []
+        }
 
     failure_reasons = []
     if snapshot.failure_reasons:
