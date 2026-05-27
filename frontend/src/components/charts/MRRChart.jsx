@@ -25,7 +25,7 @@ export const MRRChart = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const res  = await fetch('/api/financials/mrr/snapshots');
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/financials/mrr/snapshots`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         const data = json.data ?? [];

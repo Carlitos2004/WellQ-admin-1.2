@@ -78,7 +78,7 @@ const ForceUpdateModal = ({ versions, onClose }) => {
     try {
       await Promise.all(
         Object.entries(minVersions).map(([appType, version]) =>
-          fetch('/api/analytics/versions/force-update', {
+          fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/analytics/versions/force-update`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ appType, minVersion: version }),
@@ -241,7 +241,8 @@ const AppVersionDistribution = () => {
     const fetchVersions = async () => {
       try {
         setLoading(true);
-        const res = await fetch('/api/analytics/versions');
+        // ✨ AQUÍ ESTÁ LA MAGIA FINAL ✨
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/analytics/versions`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         setVersions(json.data ?? []);
