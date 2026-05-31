@@ -5,7 +5,7 @@ import { StatusBadge, UtilizationBar, HealthBadge } from '../ui';
 
 export const ClinicRow = ({
   clinic, onSelect, selected, onImpersonate,
-  onSettings, onInvoices, onDelete, checked, onCheck,
+  onSettings, onInvoices, onDelete
 }) => (
   <motion.tr
     initial={{ opacity: 0, y: 10 }}
@@ -21,16 +21,7 @@ export const ClinicRow = ({
     `}
     onClick={() => onSelect(clinic)}
   >
-    {/* Checkbox */}
-    <td className="py-4 px-4">
-      <input
-        type="checkbox"
-        checked={!!checked}
-        onChange={(e) => { e.stopPropagation(); onCheck && onCheck(clinic, e.target.checked); }}
-        className="w-4 h-4 rounded border-wellq-gray/30 dark:border-wellq-gray/40 text-wellq-cyan focus:ring-wellq-cyan focus:ring-offset-0 bg-transparent cursor-pointer transition-colors"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </td>
+    {/* ELIMINADO: La columna del Checkbox ha sido borrada para alinear perfectamente con el Header de ClinicsView */}
 
     {/* Clinic Name & Avatar */}
     <td className="py-4 px-4">
@@ -90,9 +81,9 @@ export const ClinicRow = ({
       {clinic.lastLogin ?? '-'}
     </td>
 
-    {/* Actions (Ocultas hasta hacer hover para limpiar la UI) */}
+    {/* Actions (Ahora siempre visibles y limpias) */}
     <td className="py-4 px-4">
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div className="flex items-center gap-1 transition-opacity duration-200">
         <ActionBtn
           icon={Settings}
           title="Configuración"
@@ -127,7 +118,8 @@ const ActionBtn = ({ icon: Icon, title, hoverClass, onClick }) => (
   <button
     onClick={onClick}
     title={title}
-    className={`p-2 rounded-xl transition-all duration-200 text-wellq-gray/70 dark:text-wellq-gray/50 ${hoverClass} cursor-pointer hover:scale-105`}
+    // CORRECCIÓN: Color ajustado para que sea legible siempre sin tener que pasar el mouse
+    className={`p-2 rounded-xl transition-all duration-200 text-wellq-gray dark:text-wellq-gray/80 ${hoverClass} cursor-pointer hover:scale-105`}
   >
     <Icon size={16} strokeWidth={2.5} />
   </button>

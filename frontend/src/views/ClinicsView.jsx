@@ -1,19 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import ExcelJS from 'exceljs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Filter, Download, Mail, X, Send, Loader2,
   Building2, Activity, TrendingDown, Users,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Plus, Trash2
 } from 'lucide-react';
 import { Skeleton } from '../components/ui';
 import { ClinicRow } from '../components/clinics/ClinicRow';
 import { ClinicDrawer } from '../components/clinics/ClinicDrawer';
 import { API_BASE } from '../api/client';
-import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useLanguage } from '../contexts/LanguageContext';
 
-// ─── Animaciones (idénticas a AnalyticsView) ─────────────────────────────────
+// ─── Animaciones ─────────────────────────────────────────────────────────────
 const containerVariants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.05 } },
@@ -70,27 +70,26 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <motion.div
-          className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
         />
         <motion.div
-          className="relative bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-wellq-gray/15 dark:border-white/10"
+          className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-wellq-gray/15 dark:border-white/10"
           initial={{ opacity: 0, scale: 0.96, y: 10 }}
           animate={{ opacity: 1, scale: 1,    y: 0  }}
           exit={{   opacity: 0, scale: 0.96, y: 10  }}
           transition={{ duration: 0.22, ease: 'easeOut' }}
         >
-          {/* Brillo superior */}
           <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-wellq-cyan/8 to-transparent pointer-events-none" />
 
-          <div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
+          <div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center shadow-md shadow-wellq-cyan/20">
                 <Mail size={16} className="text-wellq-black" strokeWidth={2.2} />
@@ -128,7 +127,7 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
             </div>
           ) : (
             <>
-              <div className="p-6 space-y-4">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-wellq-gray/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full">
                 <div>
                   <label className="block text-xs font-semibold text-wellq-gray uppercase tracking-wider mb-1.5">{t('clinics.subject')}</label>
                   <input
@@ -151,7 +150,8 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
                 </div>
                 {error && <p className="text-xs text-red-500">{error}</p>}
               </div>
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-wellq-gray/20 dark:border-wellq-gray/30 bg-wellq-gray/5 dark:bg-wellq-dark/50">
+
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-wellq-gray/20 dark:border-wellq-gray/30 bg-wellq-gray/5 dark:bg-wellq-dark/50 shrink-0">
                 <button
                   onClick={onClose}
                   className="px-4 py-2 border border-wellq-gray/30 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 transition-colors cursor-pointer"
@@ -173,14 +173,436 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
           )}
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
+  );
+};
+
+// ─── DeleteClinicModal (NUEVO MODAL CENTRALIZADO) ─────────────────────────────
+const DeleteClinicModal = ({ clinic, onClose, onConfirm, deleting }) => {
+  if (!clinic) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+        <motion.div
+          className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={!deleting ? onClose : undefined}
+        />
+        <motion.div
+          className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md flex flex-col overflow-hidden border border-red-500/20 dark:border-red-500/20"
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-red-500/10 to-transparent pointer-events-none" />
+
+          <div className="relative p-8 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 flex items-center justify-center mx-auto mb-4 shadow-sm">
+              <Trash2 size={28} className="text-red-500" strokeWidth={2.2} />
+            </div>
+            <h2 className="font-bold text-wellq-dark dark:text-white text-xl">¿Eliminar Clínica?</h2>
+            <p className="text-sm text-wellq-gray px-2 leading-relaxed">
+              Estás a punto de eliminar <strong>{clinic.name}</strong>. Esta acción es irreversible y borrará permanentemente todos los datos, pacientes y registros asociados.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
+            <button
+              onClick={onClose}
+              disabled={deleting}
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-wellq-dark dark:text-white bg-white dark:bg-white/5 border border-wellq-gray/20 dark:border-white/10 hover:bg-wellq-gray/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={deleting}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-colors cursor-pointer disabled:opacity-50 shadow-sm shadow-red-500/20"
+            >
+              {deleting ? <><Loader2 size={16} className="animate-spin" /> Eliminando...</> : 'Sí, Eliminar'}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>,
+    document.body
+  );
+};
+
+// ─── CreateClinicModal ────────────────────────────────────────────────────────
+const CreateClinicModal = ({ onClose, onSuccess }) => {
+  const [step,     setStep]     = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [created,  setCreated]  = useState(false);
+  const [error,    setError]    = useState(null);
+
+  const [form, setForm] = useState({
+    name:           '',
+    tier:           'smb',
+    patients_limit: '500',
+    mrr:            '0',
+    location:       '',
+    contact_name:   '',
+    contact_email:  '',
+    contact_phone:  '',
+    company_name:   '',
+    tax_id:         '',
+    billing_email:  '',
+    address:        '',
+    internal_notes: '',
+  });
+
+  const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Bloqueos de teclado para que NO entren letras
+  const handleStrictNumberKeyDown = (e) => {
+    // Permite Backspace, Delete, Tabs, Flechas
+    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
+    // Si no es un número del 0 al 9, bloquea
+    if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+  };
+
+  const handleFloatKeyDown = (e) => {
+    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
+    // Permite números y un solo punto
+    if (!/^[0-9.]$/.test(e.key)) e.preventDefault();
+  };
+
+  const handleRutKeyDown = (e) => {
+    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
+    // RUT en Chile: Números, k o K, y guion
+    if (!/^[0-9kK-]$/.test(e.key)) e.preventDefault();
+  };
+
+  const handlePhoneKeyDown = (e) => {
+    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
+    // Teléfonos: Números, espacios y el signo más
+    if (!/^[0-9 +]$/.test(e.key)) e.preventDefault();
+  };
+
+  const handleCreate = async () => {
+    if (!form.name.trim()) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/clinics`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:           form.name.trim(),
+          tier:           form.tier,
+          status:         'active',
+          patients_limit: parseInt(form.patients_limit) || 500,
+          mrr:            parseFloat(form.mrr) || 0,
+          location:       form.location       || null,
+          contact_name:   form.contact_name   || null,
+          contact_email:  form.contact_email  || null,
+          contact_phone:  form.contact_phone  || null,
+          company_name:   form.company_name   || null,
+          tax_id:         form.tax_id         || null,
+          billing_email:  form.billing_email  || null,
+          address:        form.address        || null,
+          internal_notes: form.internal_notes || null,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setCreated(true);
+      onSuccess?.();
+    } catch {
+      setError('Error al crear la clínica. Verifica los datos e intenta de nuevo.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const inputCls = "w-full px-4 py-2.5 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white placeholder-wellq-gray/40 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-transparent transition-all dark:bg-wellq-dark/50";
+  const labelCls = "block text-xs font-semibold text-wellq-gray uppercase tracking-wider mb-1.5";
+
+  return createPortal(
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+        <motion.div
+          className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        />
+        <motion.div
+          className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-wellq-gray/15 dark:border-white/10"
+          initial={{ opacity: 0, scale: 0.96, y: 10 }}
+          animate={{ opacity: 1, scale: 1,    y: 0  }}
+          exit={{   opacity: 0, scale: 0.96, y: 10  }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-wellq-cyan/10 to-transparent pointer-events-none" />
+
+          <div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center shadow-md shadow-wellq-cyan/20">
+                <Plus size={16} className="text-wellq-black" strokeWidth={2.5} />
+              </div>
+              <div>
+                <h2 className="font-bold text-wellq-dark dark:text-white text-sm leading-tight">Nueva Clínica</h2>
+                <p className="text-xs font-medium text-wellq-gray mt-0.5">Registra una nueva clínica en WellQ</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-wellq-gray/8 dark:hover:bg-white/8 rounded-xl transition-colors cursor-pointer">
+              <X size={17} className="text-wellq-gray" strokeWidth={2.5} />
+            </button>
+          </div>
+
+          {created ? (
+            <div className="flex flex-col items-center justify-center py-14 gap-3 flex-1 overflow-y-auto">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                className="w-16 h-16 rounded-full bg-wellq-green/10 border border-wellq-green/20 flex items-center justify-center"
+              >
+                <Building2 size={28} className="text-wellq-green" />
+              </motion.div>
+              <p className="font-bold text-wellq-dark dark:text-white">¡Clínica creada!</p>
+              <p className="text-sm text-wellq-gray text-center px-8">
+                <span className="font-semibold text-wellq-dark dark:text-white">{form.name}</span> ha sido registrada y está activa.
+              </p>
+              <button
+                onClick={onClose}
+                className="mt-2 px-5 py-2 bg-wellq-gray/10 dark:bg-wellq-dark/50 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-wellq-dark/80 transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-2 px-6 pt-5 pb-1 shrink-0">
+                {['Básico', 'Contacto', 'Billing'].map((s, i) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStep(i)}
+                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      i === step
+                        ? 'bg-wellq-cyan text-wellq-black'
+                        : 'bg-wellq-gray/8 dark:bg-white/5 text-wellq-gray hover:bg-wellq-cyan/15 hover:text-wellq-cyan'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-wellq-gray/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full">
+                {step === 0 && (
+                  <div className="p-6 space-y-4">
+                    <div>
+                      <label className={labelCls}>
+                        Nombre de la Clínica <span className="text-red-400 normal-case">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={form.name}
+                        onChange={(e) => update('name', e.target.value)}
+                        placeholder="Ej: Clínica San Rafael"
+                        className={inputCls}
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Plan</label>
+                      <select
+                        value={form.tier}
+                        onChange={(e) => update('tier', e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="trial">Trial</option>
+                        <option value="smb">SMB</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelCls}>Límite Pacientes</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={form.patients_limit}
+                          onKeyDown={handleStrictNumberKeyDown}
+                          onChange={(e) => update('patients_limit', e.target.value.replace(/^0+(?=\d)/, ''))}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>MRR (USD)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.mrr}
+                          onKeyDown={handleFloatKeyDown}
+                          onChange={(e) => update('mrr', e.target.value.replace(/^0+(?=\d)/, ''))}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Ubicación</label>
+                      <input
+                        type="text"
+                        value={form.location}
+                        onChange={(e) => update('location', e.target.value)}
+                        placeholder="Ej: Santiago, Chile"
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {step === 1 && (
+                  <div className="p-6 space-y-4">
+                    <div>
+                      <label className={labelCls}>Nombre de Contacto</label>
+                      <input
+                        type="text"
+                        value={form.contact_name}
+                        onChange={(e) => update('contact_name', e.target.value)}
+                        placeholder="Ej: Ana Martínez"
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Email de Contacto</label>
+                      <input
+                        type="email"
+                        value={form.contact_email}
+                        onChange={(e) => update('contact_email', e.target.value)}
+                        placeholder="admin@clinica.com"
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Teléfono</label>
+                      <input
+                        type="tel"
+                        value={form.contact_phone}
+                        onKeyDown={handlePhoneKeyDown}
+                        onChange={(e) => update('contact_phone', e.target.value)}
+                        placeholder="+56 9 XXXX XXXX"
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {step === 2 && (
+                  <div className="p-6 space-y-4">
+                    <div>
+                      <label className={labelCls}>Razón Social</label>
+                      <input
+                        type="text"
+                        value={form.company_name}
+                        onChange={(e) => update('company_name', e.target.value)}
+                        placeholder="Ej: Clínica San Rafael SpA"
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelCls}>RUT / Tax ID</label>
+                        <input
+                          type="text"
+                          value={form.tax_id}
+                          onKeyDown={handleRutKeyDown}
+                          onChange={(e) => update('tax_id', e.target.value)}
+                          placeholder="76.XXX.XXX-K"
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Email Facturación</label>
+                        <input
+                          type="email"
+                          value={form.billing_email}
+                          onChange={(e) => update('billing_email', e.target.value)}
+                          placeholder="facturas@clinica.com"
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Dirección</label>
+                      <input
+                        type="text"
+                        value={form.address}
+                        onChange={(e) => update('address', e.target.value)}
+                        placeholder="Av. Principal 123, Ciudad"
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Notas Internas</label>
+                      <textarea
+                        value={form.internal_notes}
+                        onChange={(e) => update('internal_notes', e.target.value)}
+                        placeholder="Notas privadas del equipo WellQ..."
+                        rows={3}
+                        className={`${inputCls} resize-none`}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {error && (
+                  <p className="text-xs text-red-500 px-6 pb-4">{error}</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0">
+                <button
+                  onClick={step > 0 ? () => setStep((s) => s - 1) : onClose}
+                  className="px-4 py-2 border border-wellq-gray/30 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 transition-colors cursor-pointer"
+                >
+                  {step > 0 ? '← Anterior' : 'Cancelar'}
+                </button>
+
+                {step < 2 ? (
+                  <button
+                    onClick={() => setStep((s) => s + 1)}
+                    disabled={step === 0 && !form.name.trim()}
+                    className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20"
+                  >
+                    Siguiente →
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleCreate}
+                    disabled={creating || !form.name.trim()}
+                    className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20"
+                  >
+                    {creating
+                      ? <><Loader2 size={15} className="animate-spin" /> Creando...</>
+                      : <><Building2 size={15} /> Crear Clínica</>
+                    }
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </motion.div>
+      </div>
+    </AnimatePresence>,
+    document.body
   );
 };
 
 // ─── KPI Summary Cards ────────────────────────────────────────────────────────
 const KpiCard = ({ icon: Icon, label, value, colorClass, bgClass, borderClass, ringClass, barGradient, glowClass, pct }) => (
   <div className={`relative rounded-2xl border ${borderClass} bg-white dark:bg-wellq-dark p-5 overflow-hidden group transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5`}>
-    {/* Top glow */}
     <div className={`absolute top-0 left-0 right-0 h-20 bg-gradient-to-b ${glowClass ?? 'from-transparent'} to-transparent opacity-60 pointer-events-none`} />
     <div className="relative flex items-start justify-between mb-4">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${bgClass} ring-1 ${ringClass} shadow-sm transition-transform duration-200 group-hover:scale-105`}>
@@ -222,11 +644,13 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
   const [selected,       setSelected]       = useState(null);
   const [settingsClinic, setSettingsClinic] = useState(null);
   const [invoiceClinic,  setInvoiceClinic]  = useState(null);
+  
   const [bulkOpen,       setBulkOpen]       = useState(false);
+  const [createOpen,     setCreateOpen]     = useState(false);
+  
   const [deleteTarget,   setDeleteTarget]   = useState(null);
-  const [exportState, setExportState] = useState('idle'); // 'idle' | 'loading' | 'error'
-  const [deleting,     setDeleting]     = useState(false);
-  const [checkedIds,     setCheckedIds]     = useState(new Set());
+  const [exportState,    setExportState]    = useState('idle'); 
+  const [deleting,       setDeleting]       = useState(false);
 
   const clinics  = apiClinics.length > 0 ? apiClinics : HARDCODED_CLINICS;
   const filtered = clinics.filter((c) => {
@@ -240,23 +664,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
 
   const closeAll     = () => { setSelected(null); setSettingsClinic(null); setInvoiceClinic(null); };
   const activeDrawer = selected ?? settingsClinic ?? invoiceClinic;
-
-  const allChecked  = filtered.length > 0 && filtered.every((c) => checkedIds.has(c.clinic_id ?? c.id));
-  const someChecked = !allChecked && filtered.some((c) => checkedIds.has(c.clinic_id ?? c.id));
-
-  const handleSelectAll = (e) => {
-    if (e.target.checked) setCheckedIds(new Set(filtered.map((c) => c.clinic_id ?? c.id)));
-    else                  setCheckedIds(new Set());
-  };
-
-  const handleCheck = (clinic, checked) => {
-    const id = clinic.clinic_id ?? clinic.id;
-    setCheckedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id); else next.delete(id);
-      return next;
-    });
-  };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -274,13 +681,11 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
     }
   };
 
-  // KPIs derivados de la lista real
   const totalClinics  = clinics.length;
   const activeClinics = clinics.filter((c) => c.status === 'Active' || c.status === 'active').length;
   const atRiskClinics = clinics.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0).length;
   const totalPatients = clinics.reduce((acc, c) => acc + (c.patientsUsed ?? c.patient_count ?? 0), 0);
 
-  // ── Exportar clínicas como Excel con colores ──────────────────────────────
   const handleExportExcel = async () => {
     if (!filtered.length) return;
     setExportState('loading');
@@ -288,28 +693,14 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
     try {
       const date = new Date().toISOString().split('T')[0];
 
-      // ── Paleta WellQ ──────────────────────────────────────────────────────
       const C = {
-        darkBg:   '0B1017',
-        darkMid:  '1A2535',
-        cyan:     '16F8F9',
-        white:    'FFFFFF',
-        green:    '10B981',
-        greenBg:  'ECFDF5',
-        amber:    'F59E0B',
-        amberBg:  'FFFBEB',
-        red:      'EF4444',
-        redBg:    'FEF2F2',
-        blue:     '3B82F6',
-        blueBg:   'EFF6FF',
-        rowAlt:   'F8FAFC',
-        rowWhite: 'FFFFFF',
-        textDark: '0F172A',
-        textGray: '64748B',
+        darkBg:   '0B1017', darkMid:  '1A2535', cyan:     '16F8F9', white:    'FFFFFF',
+        green:    '10B981', greenBg:  'ECFDF5', amber:    'F59E0B', amberBg:  'FFFBEB',
+        red:      'EF4444', redBg:    'FEF2F2', blue:     '3B82F6', blueBg:   'EFF6FF',
+        rowAlt:   'F8FAFC', rowWhite: 'FFFFFF', textDark: '0F172A', textGray: '64748B',
         border:   'E2E8F0',
       };
 
-      // ── Estilos reutilizables ─────────────────────────────────────────────
       const colHeaderStyle = {
         font:      { bold: true, color: { argb: `FF${C.white}` }, size: 10 },
         fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkBg}` } },
@@ -431,7 +822,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         },
       });
 
-      // ── Columnas de tabla ─────────────────────────────────────────────────
       const COLS = [
         { header: 'ID',               key: 'id',        width: 20 },
         { header: 'Nombre Clínica',   key: 'name',      width: 32 },
@@ -443,27 +833,21 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         { header: 'Último Login',     key: 'lastLogin', width: 24 },
       ];
 
-      // ── Función genérica: construye una hoja de clínicas ──────────────────
       const buildClinicSheet = (wb, sheetName, list, accentColor = C.cyan) => {
-        const ws = wb.addWorksheet(sheetName, {
-          views: [{ state: 'frozen', ySplit: 3 }],
-        });
+        const ws = wb.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 3 }] });
         ws.columns = COLS;
 
-        // Fila 1: título fusionado
         ws.mergeCells(1, 1, 1, COLS.length);
         const titleCell = ws.getCell(1, 1);
         titleCell.value = `WellQ · Clínicas — ${sheetName.toUpperCase()}  |  Exportado ${date}`;
         Object.assign(titleCell, sheetTitleStyle(accentColor));
         ws.getRow(1).height = 28;
 
-        // Fila 2: separador visual
         ws.getRow(2).height = 5;
         for (let c = 1; c <= COLS.length; c++) {
           ws.getCell(2, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } };
         }
 
-        // Fila 3: cabeceras
         const headerRow = ws.getRow(3);
         COLS.forEach((col, idx) => {
           const cell = headerRow.getCell(idx + 1);
@@ -472,7 +856,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         });
         headerRow.height = 22;
 
-        // Filas de datos
         if (!list.length) {
           const emptyRow = ws.addRow(['Sin registros para esta categoría']);
           ws.mergeCells(emptyRow.number, 1, emptyRow.number, COLS.length);
@@ -516,24 +899,16 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             });
           });
         }
-
         ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: COLS.length } };
       };
 
-      // ── Crear workbook ────────────────────────────────────────────────────
       const wb = new ExcelJS.Workbook();
       wb.creator  = 'WellQ Admin';
       wb.created  = new Date();
       wb.modified = new Date();
 
-      // ── HOJA 0: General (Resumen KPI) ─────────────────────────────────────
-      const wsSummary = wb.addWorksheet('General', {
-        views: [{ state: 'frozen', ySplit: 2 }],
-      });
-      wsSummary.columns = [
-        { key: 'metrica', width: 36 },
-        { key: 'valor',   width: 36 },
-      ];
+      const wsSummary = wb.addWorksheet('General', { views: [{ state: 'frozen', ySplit: 2 }] });
+      wsSummary.columns = [{ key: 'metrica', width: 36 }, { key: 'valor',   width: 36 }];
 
       wsSummary.mergeCells('A1:B1');
       const genTitle = wsSummary.getCell('A1');
@@ -600,13 +975,11 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         Object.assign(r.getCell(2), summaryValStyle(isAlt, accentColor));
       });
 
-      // ── Hojas por categoría ───────────────────────────────────────────────
       buildClinicSheet(wb, 'Todas',     filtered, C.cyan);
       buildClinicSheet(wb, 'Activas',   filtered.filter((c) => (c.status ?? '').toLowerCase() === 'active'),  C.green);
       buildClinicSheet(wb, 'En Riesgo', filtered.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0), C.amber);
       buildClinicSheet(wb, 'Churned',   filtered.filter((c) => (c.status ?? '').toLowerCase() === 'churned'), C.red);
 
-      // ── Descarga ──────────────────────────────────────────────────────────
       const buffer = await wb.xlsx.writeBuffer();
       const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url    = URL.createObjectURL(blob);
@@ -630,7 +1003,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
       initial="hidden"
       animate="show"
     >
-      {/* ── KPI Cards ── */}
       <motion.div variants={itemVariants} className="grid grid-cols-2 xl:grid-cols-4 gap-5">
         <KpiCard
           icon={Building2}
@@ -682,11 +1054,8 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         />
       </motion.div>
 
-      {/* ── Tabla principal ── */}
       <motion.div variants={itemVariants}>
-        {/* Toolbar */}
         <div className="flex items-center justify-between mb-5">
-          {/* Tabs de filtro */}
           <div className="flex items-center gap-1 p-1 bg-wellq-gray/10 dark:bg-white/5 rounded-xl">
             {[
               { key: 'all',     label: t('clinics.all') },
@@ -708,9 +1077,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             ))}
           </div>
 
-          {/* Acciones rápidas + Filtro avanzado */}
           <div className="flex items-center gap-2">
-            {/* Export */}
             <button
               onClick={handleExportExcel}
               disabled={exportState === 'loading'}
@@ -728,81 +1095,79 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               }
             </button>
 
-            {/* Filtro avanzado */}
             <div className="relative" ref={filterRef}>
-            <button
-              onClick={() => setFilterOpen((v) => !v)}
-              className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                filterTier || filterStatus
-                  ? 'border-wellq-cyan text-wellq-cyan bg-wellq-cyan/5'
-                  : 'border-wellq-gray/30 dark:border-wellq-gray/20 text-wellq-dark dark:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5'
-              }`}
-            >
-              <Filter size={15} strokeWidth={2.2} />
-              {t('clinics.filters')}
-              {(filterTier || filterStatus) && (
-                <span className="ml-1 w-4 h-4 rounded-full bg-wellq-cyan text-wellq-black text-[10px] font-bold flex items-center justify-center">
-                  {[filterTier, filterStatus].filter(Boolean).length}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => setFilterOpen((v) => !v)}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                  filterTier || filterStatus
+                    ? 'border-wellq-cyan text-wellq-cyan bg-wellq-cyan/5'
+                    : 'border-wellq-gray/30 dark:border-wellq-gray/20 text-wellq-dark dark:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5'
+                }`}
+              >
+                <Filter size={15} strokeWidth={2.2} />
+                {t('clinics.filters')}
+                {(filterTier || filterStatus) && (
+                  <span className="ml-1 w-4 h-4 rounded-full bg-wellq-cyan text-wellq-black text-[10px] font-bold flex items-center justify-center">
+                    {[filterTier, filterStatus].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
 
-            <AnimatePresence>
-              {filterOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0,  scale: 1    }}
-                  exit={{   opacity: 0, y: -6, scale: 0.97 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-2 z-50 w-64 bg-white dark:bg-wellq-dark rounded-2xl shadow-2xl border border-wellq-gray/15 dark:border-wellq-gray/20 p-4 space-y-4"
-                >
-                  <div>
-                    <label className="block text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1.5">Tier</label>
-                    <select
-                      value={filterTier}
-                      onChange={(e) => setFilterTier(e.target.value)}
-                      className="w-full px-3 py-2 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white dark:bg-wellq-dark/80 focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
-                    >
-                      <option value="">Todos</option>
-                      <option value="trial">Trial</option>
-                      <option value="smb">SMB</option>
-                      <option value="enterprise">Enterprise</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1.5">Estado</label>
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value)}
-                      className="w-full px-3 py-2 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white dark:bg-wellq-dark/80 focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
-                    >
-                      <option value="">Todos</option>
-                      <option value="active">Active</option>
-                      <option value="warning">Warning</option>
-                      <option value="critical">Critical</option>
-                      <option value="churned">Churned</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between pt-1">
-                    <button
-                      onClick={() => { setFilterTier(''); setFilterStatus(''); }}
-                      className="text-xs text-wellq-gray hover:text-wellq-dark dark:hover:text-white transition-colors cursor-pointer font-medium"
-                    >
-                      Limpiar filtros
-                    </button>
-                    <button
-                      onClick={() => setFilterOpen(false)}
-                      className="px-3 py-1.5 bg-wellq-cyan text-wellq-black rounded-lg text-xs font-bold cursor-pointer"
-                    >
-                      Aplicar
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+              <AnimatePresence>
+                {filterOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0,  scale: 1    }}
+                    exit={{   opacity: 0, y: -6, scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-full mt-2 z-50 w-64 bg-white dark:bg-wellq-dark rounded-2xl shadow-2xl border border-wellq-gray/15 dark:border-wellq-gray/20 p-4 space-y-4"
+                  >
+                    <div>
+                      <label className="block text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1.5">Tier</label>
+                      <select
+                        value={filterTier}
+                        onChange={(e) => setFilterTier(e.target.value)}
+                        className="w-full px-3 py-2 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white dark:bg-wellq-dark/80 focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
+                      >
+                        <option value="">Todos</option>
+                        <option value="trial">Trial</option>
+                        <option value="smb">SMB</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1.5">Estado</label>
+                      <select
+                        value={filterStatus}
+                        onChange={(e) => setFilterStatus(e.target.value)}
+                        className="w-full px-3 py-2 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white dark:bg-wellq-dark/80 focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
+                      >
+                        <option value="">Todos</option>
+                        <option value="active">Active</option>
+                        <option value="warning">Warning</option>
+                        <option value="critical">Critical</option>
+                        <option value="churned">Churned</option>
+                      </select>
+                    </div>
+                    <div className="flex justify-between pt-1">
+                      <button
+                        onClick={() => { setFilterTier(''); setFilterStatus(''); }}
+                        className="text-xs text-wellq-gray hover:text-wellq-dark dark:hover:text-white transition-colors cursor-pointer font-medium"
+                      >
+                        Limpiar filtros
+                      </button>
+                      <button
+                        onClick={() => setFilterOpen(false)}
+                        className="px-3 py-1.5 bg-wellq-cyan text-wellq-black rounded-lg text-xs font-bold cursor-pointer"
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
-            {/* Bulk Email */}
             <button
               onClick={() => setBulkOpen(true)}
               className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
@@ -810,23 +1175,21 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               <Mail size={14} strokeWidth={2.2} /> {t('clinics.bulkEmail')}
             </button>
 
+            {/* BOTÓN CREAR CLÍNICA: Iguala el estilo de Bulk Email */}
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
+            >
+              <Plus size={14} strokeWidth={2.5} /> Crear Clínica
+            </button>
           </div>
         </div>
 
-        {/* Tabla */}
         <div className="bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/15 dark:border-wellq-gray/20 overflow-hidden">
           <table className="w-full">
             <thead className="bg-wellq-gray/4 dark:bg-white/[0.02] border-b border-wellq-gray/15 dark:border-wellq-gray/20 sticky top-0">
               <tr>
-                <th className="py-4 px-4 text-left w-12">
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    ref={(el) => { if (el) el.indeterminate = someChecked; }}
-                    onChange={handleSelectAll}
-                    className="rounded border-wellq-gray/30 dark:border-wellq-gray/40 text-wellq-cyan cursor-pointer"
-                  />
-                </th>
+                {/* Cabeceras de tabla sin Checkbox */}
                 {[
                   t('clinics.columns.clinic'),
                   t('clinics.columns.plan'),
@@ -846,7 +1209,8 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               {clinicsLoading
                 ? [...Array(4)].map((_, i) => (
                     <tr key={i} className="border-b border-wellq-gray/10 dark:border-wellq-gray/30">
-                      <td colSpan={8} className="py-3 px-4">
+                      {/* Ahora son 7 columnas porque quitamos el checkbox */}
+                      <td colSpan={7} className="py-3 px-4">
                         <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
@@ -857,8 +1221,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03, duration: 0.25 }}
-                      // ClinicRow renderiza su propio <tr>, así que envolvemos en fragment
-                      // y pasamos el componente directamente:
                       style={{ display: 'contents' }}
                     >
                       <ClinicRow
@@ -868,8 +1230,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                           selected?.clinic_id === clinic.clinic_id ||
                           selected?.id === clinic.id
                         }
-                        checked={checkedIds.has(clinic.clinic_id ?? clinic.id)}
-                        onCheck={handleCheck}
                         onImpersonate={setSelected}
                         onSettings={(c) => { closeAll(); setSettingsClinic(c); }}
                         onInvoices={(c) => { closeAll(); setInvoiceClinic(c); }}
@@ -880,13 +1240,10 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             </tbody>
           </table>
 
-          {/* Footer paginación */}
+          {/* Footer de la tabla limpio (Sin Checkboxes) */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
             <span className="text-xs font-semibold text-wellq-gray">
-              {checkedIds.size > 0
-                ? <><span className="font-black text-wellq-cyan">{checkedIds.size}</span> {t('clinics.selected')}{checkedIds.size !== 1 ? 's' : ''} {t('clinics.of')} {filtered.length}</>
-                : <>{t('clinics.showing')} <span className="font-bold text-wellq-dark dark:text-white">{filtered.length > 0 ? '1' : '0'}–{filtered.length}</span> {t('clinics.of')} {filtered.length} {t('clinics.clinics')}</>
-              }
+              Mostrando <span className="font-bold text-wellq-dark dark:text-white">{filtered.length > 0 ? '1' : '0'}–{filtered.length}</span> de {filtered.length} clínicas
             </span>
             <div className="flex items-center gap-1.5">
               <button className="p-1.5 border border-wellq-gray/20 dark:border-wellq-gray/20 rounded-lg text-sm font-medium text-wellq-gray hover:bg-white dark:hover:bg-white/5 transition-colors disabled:opacity-40 cursor-not-allowed" disabled>
@@ -901,7 +1258,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         </div>
       </motion.div>
 
-      {/* ── Drawer ── */}
+      {/* ── Drawers (Menú lateral de facturas y settings) ── */}
       <AnimatePresence>
         {activeDrawer && (
           <>
@@ -921,6 +1278,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         )}
       </AnimatePresence>
 
+      {/* ── Modal Bulk Email ── */}
       {bulkOpen && (
         <BulkEmailModal
           onClose={() => setBulkOpen(false)}
@@ -928,12 +1286,20 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         />
       )}
 
-      <ConfirmDialog
-        open={!!deleteTarget}
-        title={t('clinics.deleteTitle')}
-        message={`${t('clinics.deleteMessage')} "${deleteTarget?.name}"? ${t('clinics.deleteWarning')}`}
+      {/* ── Modal Crear Clínica ── */}
+      {createOpen && (
+        <CreateClinicModal
+          onClose={() => setCreateOpen(false)}
+          onSuccess={() => { onRefreshClinics && onRefreshClinics(); }}
+        />
+      )}
+
+      {/* ── Modal Eliminar (RE-DISEÑADO) ── */}
+      <DeleteClinicModal 
+        clinic={deleteTarget}
+        deleting={deleting}
+        onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteTarget(null)}
       />
     </motion.div>
   );

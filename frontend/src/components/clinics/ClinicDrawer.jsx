@@ -226,7 +226,7 @@ const FALLBACK_INVOICES = [
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
-  const [activeTab,    setActiveTab]    = useState(mode);
+  const [activeTab,     setActiveTab]    = useState(mode);
   const [subscription, setSubscription] = useState(null);
   const [license,      setLicense]      = useState(null);
   const [usage,        setUsage]        = useState(null);
@@ -243,7 +243,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
   const [contactModalOpen, setContactModalOpen] = useState(false);
 
   // ── Estado para invoices ──────────────────────────────────────────────────
-  const [invoices,        setInvoices]        = useState(FALLBACK_INVOICES);
+  const [invoices,         setInvoices]         = useState(FALLBACK_INVOICES);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [downloadingId,   setDownloadingId]   = useState(null);
   const [downloadError,   setDownloadError]   = useState(null);
@@ -274,6 +274,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       .then((d) => {
         // Solo reemplaza si la API devuelve datos reales; si no, mantiene FALLBACK_INVOICES
         if (d?.invoices?.length > 0) setInvoices(d.invoices);
+        else if (d?.invoices?.length === 0) setInvoices([]); // Si devuelve arreglo vacío, limpia las facturas
       })
       .catch(() => {}) // Mantiene FALLBACK_INVOICES en caso de error
       .finally(() => setInvoicesLoading(false));
@@ -771,13 +772,13 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       { type: 'data',    metrica: 'ID de Sistema',                  valor: clinicId                   },
       { type: 'data',    metrica: 'Plan Contratado',                valor: clinic.tier?.toUpperCase() ?? '—' },
       { type: 'data',    metrica: 'Fecha de Exportación',           valor: new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' }) },
-      { type: 'spacer'                                                                                  },
+      { type: 'spacer'                                                                                                                                },
       { type: 'header',  metrica: '◆  ESTADÍSTICAS DE FACTURAS',   valor: '',         accent: C.cyan  },
       { type: 'data',    metrica: 'Total Facturas Registradas',     valor: invoices.length             },
       { type: 'dataGreen', metrica: 'Cantidad Pagadas',             valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'paid').length    },
       { type: 'dataAmber', metrica: 'Cantidad Pendientes',          valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'pending').length },
       { type: 'dataRed',   metrica: 'Cantidad Vencidas',            valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'overdue').length },
-      { type: 'spacer'                                                                                  },
+      { type: 'spacer'                                                                                                                                },
       { type: 'header',  metrica: '◆  RESUMEN FINANCIERO',         valor: '',         accent: C.cyan  },
       { type: 'dataGreen', metrica: 'Total Recaudado (Pagado)',     valor: fmt$(total((i) => (i.status ?? '').toLowerCase() === 'paid'))    },
       { type: 'dataAmber', metrica: 'Total por Cobrar (Pendiente)', valor: fmt$(total((i) => (i.status ?? '').toLowerCase() === 'pending')) },
@@ -915,7 +916,8 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
         </div>
 
         {/* ── Body Content ─────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-[#0b1017] p-6">
+        {/* AQUÍ SE AÑADEN LAS CLASES DE SCROLLBAR OSCURO */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-[#0b1017] p-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-wellq-gray/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full">
           <AnimatePresence mode="wait">
 
             {/* OVERVIEW TAB */}
@@ -1118,7 +1120,6 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                         <Receipt size={16} className="text-wellq-gray dark:text-white group-hover:text-wellq-cyan transition-colors" />
                       </div>
                       <div>
-                        {/* AQUÍ ESTÁ EL FIX: Muestra fallbacks robustos para ID y Fecha */}
                         <p className="text-sm font-black text-wellq-dark dark:text-white tracking-tight">
                           {typeof inv.amount === 'number' ? `$${inv.amount.toLocaleString('es-CL')} USD` : inv.amount ?? '—'}
                         </p>
@@ -1138,7 +1139,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                       }`}>
                         {inv.status}
                       </span>
-                      {/* Botón descarga — siempre visible, con estados de loading/error */}
+                      {/* Botón descarga */}
                       <button
                         className={`p-2 rounded-xl transition-all ${
                           downloadError === inv.id

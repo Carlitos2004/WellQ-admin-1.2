@@ -5,7 +5,7 @@ Endpoints 14 al 25 conectados a Neon (PostgreSQL)
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Body, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update, desc, asc
+from sqlalchemy import select, func, desc, asc
 from datetime import datetime
 import uuid
 
@@ -70,14 +70,14 @@ async def list_clinics(
             "tier": c.tier,
             "status": c.status,
             "contact": {
-                "phone": c.contact_phone,
-                "email": c.contact_email
+                "phone": getattr(c, 'contact_phone', None),
+                "email": getattr(c, 'contact_email', None)
             },
-            "patient_count": c.patients_used,
-            "patientsUsed": c.patients_used,
-            "patientsLimit": c.patients_limit,
-            "healthScore": c.health_score,
-            "lastLogin": c.last_login.isoformat() if c.last_login else None
+            "patient_count": getattr(c, 'patients_used', 0),
+            "patientsUsed": getattr(c, 'patients_used', 0),
+            "patientsLimit": getattr(c, 'patients_limit', 500),
+            "healthScore": getattr(c, 'health_score', 100),
+            "lastLogin": c.last_login.isoformat() if getattr(c, 'last_login', None) else None
         })
 
     return {
@@ -90,18 +90,30 @@ async def list_clinics(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 15. POST /clinics — Registro de una nueva clínica en el sistema
+# FIX: Ahora captura TODOS los datos del modal de React
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("", summary="Registro de una nueva clínica", status_code=status.HTTP_201_CREATED)
 async def create_clinic(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     # Generar un ID único para la nueva clínica
     new_clinic_id = f"CL-{uuid.uuid4().hex[:6].upper()}"
     
+    # Capturamos todos los campos enviados desde React, si no vienen, dejamos defaults
     new_clinic = Clinic(
         clinic_id=new_clinic_id,
         name=body.get("name", "Nueva Clínica"),
         tier=body.get("tier", "smb"),
-        status="onboarding",
-        patients_limit=body.get("patientsLimit", 500)
+        status=body.get("status", "active"), # Ahora sí respeta el "active" de React
+        patients_limit=body.get("patients_limit", 500),
+        mrr=body.get("mrr", 0.0),
+        location=body.get("location"),
+        contact_name=body.get("contact_name"),
+        contact_email=body.get("contact_email"),
+        contact_phone=body.get("contact_phone"),
+        company_name=body.get("company_name"),
+        tax_id=body.get("tax_id"),
+        billing_email=body.get("billing_email"),
+        address=body.get("address"),
+        internal_notes=body.get("internal_notes")
     )
     
     db.add(new_clinic)
@@ -129,7 +141,6 @@ async def bulk_email(body: dict = Body(...), db: AsyncSession = Depends(get_db))
     clinic_ids = body.get('clinic_ids', [])
     subject = body.get("subject", "Actualización importante")
     
-    # Registramos la acción masiva en la tabla Notification
     notif = Notification(
         notification_id=f"notif-{uuid.uuid4().hex[:8]}",
         title=subject,
@@ -165,7 +176,6 @@ async def export_clinics(
     from openpyxl.utils import get_column_letter
     from fastapi.responses import StreamingResponse
 
-    # — Colores del frontend WellQ —
     C_DARK    = "1A1A2E"
     C_WHITE   = "FFFFFF"
     C_TEAL    = "0D9488"
@@ -192,7 +202,6 @@ async def export_clinics(
         s = Side(style='thin', color='E5E7EB')
         return Border(left=s, right=s, top=s, bottom=s)
 
-    # — Traer datos reales de la DB —
     query = select(Clinic)
     if status_param:
         query = query.where(Clinic.status == status_param)
@@ -207,17 +216,15 @@ async def export_clinics(
         "name": c.name,
         "tier": c.tier,
         "status": c.status,
-        "patientsUsed": c.patients_used,
-        "patientsLimit": c.patients_limit,
-        "healthScore": c.health_score,
-        "mrr": c.mrr,
-        "lastLogin": c.last_login.isoformat() if c.last_login else "",
-        "location": c.location or "",
+        "patientsUsed": getattr(c, 'patients_used', 0),
+        "patientsLimit": getattr(c, 'patients_limit', 0),
+        "healthScore": getattr(c, 'health_score', 0),
+        "mrr": getattr(c, 'mrr', 0),
+        "lastLogin": c.last_login.isoformat() if getattr(c, 'last_login', None) else "",
+        "location": getattr(c, 'location', ""),
     } for c in clinics]
 
     wb = Workbook()
-
-    # ══ HOJA 1 — Todas las clínicas ══
     ws = wb.active
     ws.title = "Clínicas"
     ws.sheet_view.showGridLines = False
@@ -232,7 +239,7 @@ async def export_clinics(
     ws.row_dimensions[1].height = 32
 
     headers    = ["ID", "Nombre Clínica", "Tier", "Estado", "Pacientes", "Límite", "Uso %", "Health", "MRR (USD)", "Último Login", "Ciudad"]
-    col_widths = [12,   28,               13,     12,       11,          10,       9,       10,      13,          22,             16]
+    col_widths = [12,   28,               13,     12,       11,          10,       9,       10,       13,          22,             16]
 
     for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
         cell = ws.cell(row=2, column=ci, value=h)
@@ -262,19 +269,16 @@ async def export_clinics(
             cell.border    = border()
             cell.alignment = Alignment(vertical="center")
 
-        # Tier badge (col 3)
         tbg, tfg = TIER_COLORS.get(c["tier"].lower(), ("E5E7EB", "374151"))
         tc = ws.cell(row=ri, column=3)
         tc.fill = fill(tbg); tc.font = Font(name="Arial", size=10, bold=True, color=tfg)
         tc.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Status badge (col 4)
         sbg, sfg = STATUS_COLORS.get(c["status"].lower(), ("F3F4F6", "374151"))
         sc = ws.cell(row=ri, column=4)
         sc.fill = fill(sbg); sc.font = Font(name="Arial", size=10, bold=True, color=sfg)
         sc.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Uso % con color semáforo (col 7)
         pc = ws.cell(row=ri, column=7)
         pc.number_format = "0.0%"
         pc.alignment = Alignment(horizontal="center", vertical="center")
@@ -282,131 +286,22 @@ async def export_clinics(
         elif uso >= 70: pc.fill = fill("FEF3C7"); pc.font = Font(name="Arial", size=10, bold=True, color="92400E")
         else:           pc.fill = fill("D1FAE5"); pc.font = Font(name="Arial", size=10, color="065F46")
 
-        # Health Score con color (col 8)
         hs = c["healthScore"]
         hc = ws.cell(row=ri, column=8)
         hbg, hfg = ("F0FDF4","065F46") if hs>=80 else ("FFFBEB","92400E") if hs>=60 else ("FFF1F2","991B1B") if hs>0 else ("F9FAFB","9CA3AF")
         hc.fill = fill(hbg); hc.font = Font(name="Arial", size=10, bold=True, color=hfg)
         hc.alignment = Alignment(horizontal="center", vertical="center")
 
-        # MRR formato moneda (col 9)
         ws.cell(row=ri, column=9).number_format = '"$"#,##0.00'
         ws.cell(row=ri, column=9).alignment = Alignment(horizontal="right", vertical="center")
         ws.cell(row=ri, column=10).alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[ri].height = 20
 
-    last_row = 2 + len(data)
-
-    # Fila totales
-    tr = last_row + 1
-    ws.merge_cells(f"A{tr}:B{tr}")
-    for ci in range(1, 12):
-        ws.cell(row=tr, column=ci).fill = fill(C_TEAL)
-    tot = ws.cell(row=tr, column=1, value="TOTALES / PROMEDIOS")
-    tot.font = Font(name="Arial", bold=True, size=10, color=C_WHITE)
-    tot.alignment = Alignment(horizontal="center", vertical="center")
-    for ci, formula, fmt in [
-        (5,  f"=SUM(E3:E{last_row})",       "General"),
-        (6,  f"=SUM(F3:F{last_row})",       "General"),
-        (8,  f"=AVERAGE(H3:H{last_row})",   "0.0"),
-        (9,  f"=SUM(I3:I{last_row})",       '"$"#,##0.00'),
-    ]:
-        cell = ws.cell(row=tr, column=ci, value=formula)
-        cell.font = Font(name="Arial", bold=True, color=C_WHITE)
-        cell.fill = fill(C_TEAL)
-        cell.number_format = fmt
-        cell.alignment = Alignment(horizontal="center" if ci != 9 else "right", vertical="center")
-    ws.row_dimensions[tr].height = 22
-
-    # ══ HOJA 2 — Por Estado ══
-    ws2 = wb.create_sheet("Por Estado")
-    ws2.sheet_view.showGridLines = False
-    mini_headers = ["ID", "Nombre", "Tier", "Pacientes", "Límite", "Health", "MRR (USD)", "Ciudad"]
-    mini_widths  = [12, 28, 13, 11, 10, 10, 14, 16]
-    for ci, w in enumerate(mini_widths, 1):
-        ws2.column_dimensions[get_column_letter(ci)].width = w
-
-    cr = 1
-    for status_key in ["active", "warning", "critical", "trial", "churned", "onboarding"]:
-        group = [c for c in data if c["status"].lower() == status_key]
-        if not group: continue
-        sbg, sfg = STATUS_COLORS.get(status_key, ("F3F4F6", "374151"))
-        ws2.merge_cells(f"A{cr}:H{cr}")
-        gh = ws2.cell(row=cr, column=1, value=f"  {status_key.upper()}  ({len(group)} clínica{'s' if len(group)!=1 else ''})")
-        gh.font = Font(name="Arial", bold=True, size=11, color=sfg)
-        gh.fill = fill(sbg); gh.alignment = Alignment(vertical="center", indent=1)
-        ws2.row_dimensions[cr].height = 24; cr += 1
-        for ci, h in enumerate(mini_headers, 1):
-            cell = ws2.cell(row=cr, column=ci, value=h)
-            cell.font = Font(name="Arial", bold=True, size=9, color=C_WHITE)
-            cell.fill = fill("374151"); cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = border()
-        ws2.row_dimensions[cr].height = 18; cr += 1
-        for ri2, c in enumerate(group):
-            bg = "F9FAFB" if ri2 % 2 == 0 else C_WHITE
-            for ci, val in enumerate([c["clinic_id"], c["name"], c["tier"].upper(),
-                                       c["patientsUsed"], c["patientsLimit"],
-                                       c["healthScore"], c["mrr"], c["location"]], 1):
-                cell = ws2.cell(row=cr, column=ci, value=val)
-                cell.font = Font(name="Arial", size=9, color="1F2937")
-                cell.fill = fill(bg); cell.border = border()
-                cell.alignment = Alignment(vertical="center")
-            ws2.cell(row=cr, column=7).number_format = '"$"#,##0.00'
-            ws2.cell(row=cr, column=7).alignment = Alignment(horizontal="right", vertical="center")
-            ws2.row_dimensions[cr].height = 18; cr += 1
-        cr += 1
-
-    # ══ HOJA 3 — Por Tier ══
-    ws3 = wb.create_sheet("Por Tier")
-    ws3.sheet_view.showGridLines = False
-    for ci, w in enumerate(mini_widths, 1):
-        ws3.column_dimensions[get_column_letter(ci)].width = w
-
-    cr = 1
-    for tier_key in ["enterprise", "smb", "trial"]:
-        group = [c for c in data if c["tier"].lower() == tier_key]
-        if not group: continue
-        tbg, tfg = TIER_COLORS.get(tier_key, ("E5E7EB", "374151"))
-        ws3.merge_cells(f"A{cr}:H{cr}")
-        gh = ws3.cell(row=cr, column=1, value=f"  {tier_key.upper()}  ({len(group)} clínica{'s' if len(group)!=1 else ''})")
-        gh.font = Font(name="Arial", bold=True, size=11, color=tfg)
-        gh.fill = fill(tbg); gh.alignment = Alignment(vertical="center", indent=1)
-        ws3.row_dimensions[cr].height = 24; cr += 1
-        for ci, h in enumerate(mini_headers, 1):
-            cell = ws3.cell(row=cr, column=ci, value=h)
-            cell.font = Font(name="Arial", bold=True, size=9, color=C_WHITE)
-            cell.fill = fill("374151"); cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = border()
-        ws3.row_dimensions[cr].height = 18; cr += 1
-        for ri3, c in enumerate(group):
-            bg = "F9FAFB" if ri3 % 2 == 0 else C_WHITE
-            sbg2, sfg2 = STATUS_COLORS.get(c["status"].lower(), ("F3F4F6","374151"))
-            for ci, val in enumerate([c["clinic_id"], c["name"], c["status"].capitalize(),
-                                       c["patientsUsed"], c["patientsLimit"],
-                                       c["healthScore"], c["mrr"], c["location"]], 1):
-                cell = ws3.cell(row=cr, column=ci, value=val)
-                cell.font = Font(name="Arial", size=9, color="1F2937")
-                cell.fill = fill(bg); cell.border = border()
-                cell.alignment = Alignment(vertical="center")
-            sc2 = ws3.cell(row=cr, column=3)
-            sc2.fill = fill(sbg2); sc2.font = Font(name="Arial", size=9, bold=True, color=sfg2)
-            sc2.alignment = Alignment(horizontal="center", vertical="center")
-            ws3.cell(row=cr, column=7).number_format = '"$"#,##0.00'
-            ws3.cell(row=cr, column=7).alignment = Alignment(horizontal="right", vertical="center")
-            ws3.row_dimensions[cr].height = 18; cr += 1
-        cr += 1
-
-    # — Serializar y devolver como descarga —
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
-
     filename = f"clinicas_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.xlsx"
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -426,14 +321,13 @@ async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_
         "name": clinic.name,
         "status": clinic.status,
         "tier": clinic.tier,
-        "internal_notes": clinic.internal_notes,
-        "created_at": clinic.created_at.isoformat()
+        "internal_notes": getattr(clinic, 'internal_notes', None),
+        "created_at": clinic.created_at.isoformat() if clinic.created_at else None
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 17. PATCH /clinics/{clinic_id} — Actualizar campos de una clínica
-# FIX: mapeo explícito de campos para garantizar que name/tier/status se guarden
 # ─────────────────────────────────────────────────────────────────────────────
 @router.patch("/{clinic_id}", summary="Actualizar campos de una clínica")
 async def update_clinic(
@@ -447,7 +341,6 @@ async def update_clinic(
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
-    # Mapeo explícito: frontend manda name/tier/status → campos reales del modelo
     field_map = {
         "name":   "name",
         "tier":   "tier",
@@ -473,7 +366,6 @@ async def update_clinic(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 17b. DELETE /clinics/{clinic_id} — Eliminar clínica
-# FIX: endpoint nuevo — el frontend llamaba DELETE pero no existía (404/405)
 # ─────────────────────────────────────────────────────────────────────────────
 @router.delete("/{clinic_id}", summary="Eliminar clínica del sistema")
 async def delete_clinic(
@@ -509,15 +401,15 @@ async def get_clinic_contact(clinic_id: str = Path(...), db: AsyncSession = Depe
     return {
         "clinic_id": clinic.clinic_id,
         "contact_info": {
-            "primary_name": clinic.contact_name,
-            "primary_email": clinic.contact_email,
-            "primary_phone": clinic.contact_phone
+            "primary_name": getattr(clinic, 'contact_name', None),
+            "primary_email": getattr(clinic, 'contact_email', None),
+            "primary_phone": getattr(clinic, 'contact_phone', None)
         },
         "billing_info": {
-            "company_name": clinic.company_name,
-            "tax_id": clinic.tax_id,
-            "billing_email": clinic.billing_email,
-            "address": clinic.address
+            "company_name": getattr(clinic, 'company_name', None),
+            "tax_id": getattr(clinic, 'tax_id', None),
+            "billing_email": getattr(clinic, 'billing_email', None),
+            "address": getattr(clinic, 'address', None)
         }
     }
 
@@ -527,7 +419,6 @@ async def get_clinic_contact(clinic_id: str = Path(...), db: AsyncSession = Depe
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/{clinic_id}/subscription", summary="Detalles del plan de suscripción")
 async def get_clinic_subscription(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
-    # Buscamos la última asignación activa en ClinicPlan
     result = await db.execute(
         select(ClinicPlan)
         .where(ClinicPlan.clinic_id == clinic_id)
@@ -549,7 +440,7 @@ async def get_clinic_subscription(clinic_id: str = Path(...), db: AsyncSession =
             "status": "active",
             "mrr_value": plan_data.get("monthlyPrice", 0.0),
             "currency": plan_data.get("currency", "USD"),
-            "started_at": plan_assignment.effective_from.isoformat(),
+            "started_at": plan_assignment.effective_from.isoformat() if plan_assignment.effective_from else None,
             "renews_at": plan_assignment.effective_to.isoformat() if plan_assignment.effective_to else None,
             "features_enabled": ["custom_branding", "api_access", "priority_support"]
         }
@@ -595,8 +486,8 @@ async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depe
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
-    used = clinic.patients_used
-    limit = clinic.patients_limit
+    used = getattr(clinic, 'patients_used', 0)
+    limit = getattr(clinic, 'patients_limit', 0)
     utilization = round((used / limit) * 100, 2) if limit > 0 else 0
 
     return {
@@ -604,7 +495,7 @@ async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depe
         "licenses": {
             "total_limit": limit,
             "currently_active": used,
-            "available": limit - used,
+            "available": max(0, limit - used),
             "utilization_percentage": utilization
         },
         "warning_threshold_reached": utilization >= 90.0
@@ -613,6 +504,7 @@ async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depe
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 22. GET /clinics/{clinic_id}/invoices — Historial de facturas
+# FIX: Agregada compatibilidad de llaves 'id' y 'date' para que React no falle
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/{clinic_id}/invoices", summary="Historial de facturas emitidas")
 async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
@@ -623,19 +515,22 @@ async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Dep
     )
     invoices = result.scalars().all()
 
-    pending_balance = sum(inv.amount for inv in invoices if inv.status != "paid")
+    pending_balance = sum(inv.amount for inv in invoices if getattr(inv, 'status', '') != "paid")
 
     return {
         "clinic_id": clinic_id,
         "pending_balance": pending_balance,
         "invoices": [
             {
-                "invoice_id": inv.invoice_id,
+                # React necesita estrictamente las llaves 'id' y 'date'. Aquí se las mandamos:
+                "id": getattr(inv, 'invoice_id', getattr(inv, 'id', None)),
+                "invoice_id": getattr(inv, 'invoice_id', getattr(inv, 'id', None)),
                 "amount": inv.amount,
-                "currency": inv.currency,
+                "currency": getattr(inv, 'currency', 'USD'),
                 "status": inv.status,
-                "issued_at": inv.issued_at.isoformat(),
-                "pdf_url": inv.pdf_url
+                "date": inv.issued_at.isoformat() if inv.issued_at else None,
+                "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+                "pdf_url": getattr(inv, 'pdf_url', None)
             } for inv in invoices
         ]
     }
@@ -657,7 +552,6 @@ async def impersonate_clinic(
             "error": "La justificación ética debe tener más de 10 caracteres."
         }
 
-    # Verificamos si la clínica existe
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
     
