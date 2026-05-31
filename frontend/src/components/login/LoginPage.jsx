@@ -336,8 +336,8 @@ export default function LoginPage({ onLoginSuccess }) {
       <div className="relative isolate w-full max-w-[800px] overflow-hidden rounded-[14px] border border-cyan-300/30 bg-[#07101d]/95 shadow-[0_0_38px_rgba(34,211,238,.22),0_24px_80px_rgba(0,0,0,.62)] backdrop-blur-2xl md:h-[490px]">
         <div className="hidden h-full grid-cols-2 md:grid">
           
-          {/* Redujimos el padding vertical (py-8 a py-6) para que entre perfecto */}
-          <section className="flex h-full items-center justify-center px-8 py-6 min-h-0">
+          {/* Se agregó key={mode} a la sección para evitar NotFoundError al destruir componentes */}
+          <section key={`desktop-left-${mode}`} className="flex h-full items-center justify-center px-8 py-6 min-h-0">
             {isLogin && (
               <LoginForm
                 email={email}
@@ -402,7 +402,8 @@ export default function LoginPage({ onLoginSuccess }) {
             )}
           </section>
 
-          <section className="flex h-full items-center justify-center px-8 py-6 min-h-0">
+          {/* Se agregó key={mode} a la sección */}
+          <section key={`desktop-right-${mode}`} className="flex h-full items-center justify-center px-8 py-6 min-h-0">
             {isRegister && (
               <RegisterForm
                 regFullName={regFullName}
@@ -441,7 +442,8 @@ export default function LoginPage({ onLoginSuccess }) {
         <div className="md:hidden">
           <MobilePanel mode={mode} loading={loading} switchMode={switchMode} />
 
-          <section className="flex h-[calc(100vh-250px)] items-center justify-center px-6 py-5 min-h-0">
+          {/* Se agregó key={mode} a la sección móvil */}
+          <section key={`mobile-section-${mode}`} className="flex h-[calc(100vh-250px)] items-center justify-center px-6 py-5 min-h-0">
             {isLogin && (
               <LoginForm
                 email={email}
@@ -581,7 +583,8 @@ function MovingPanel({ mode, loading, switchMode }) {
             )}
           </div>
 
-          <h1 className="max-w-[250px] text-[38px] font-black leading-[1.06] tracking-tight text-white">
+          {/* Se agregó key={`title-${mode}`} */}
+          <h1 key={`title-${mode}`} className="max-w-[250px] text-[38px] font-black leading-[1.06] tracking-tight text-white">
             {isRecovery ? (
               <>
                 Recover <br />
@@ -597,7 +600,8 @@ function MovingPanel({ mode, loading, switchMode }) {
             )}
           </h1>
 
-          <p className="mt-5 max-w-[260px] text-sm font-medium leading-6 text-cyan-50/90">
+          {/* Se agregó key={`desc-${mode}`} */}
+          <p key={`desc-${mode}`} className="mt-5 max-w-[260px] text-sm font-medium leading-6 text-cyan-50/90">
             {isRecovery
               ? "Solicita un código seguro y define una nueva contraseña para tu cuenta."
               : mode === "login"
@@ -606,7 +610,9 @@ function MovingPanel({ mode, loading, switchMode }) {
           </p>
         </div>
 
+        {/* Se agregó key={`btn-${mode}`} */}
         <button
+          key={`btn-${mode}`}
           type="button"
           disabled={loading}
           onClick={() => switchMode(mode === "register" ? "login" : "register")}
@@ -627,11 +633,14 @@ function MobilePanel({ mode, loading, switchMode }) {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(224,255,255,.2),transparent_30%)]" />
 
       <div className="relative z-10">
-        <h1 className="text-3xl font-black leading-tight text-white">
+        {/* Se agregó key={`title-mobile-${mode}`} */}
+        <h1 key={`title-mobile-${mode}`} className="text-3xl font-black leading-tight text-white">
           {isRecovery ? "Recover Access" : mode === "login" ? "Welcome Back" : "Welcome"}
         </h1>
 
+        {/* Se agregó key={`btn-mobile-${mode}`} */}
         <button
+          key={`btn-mobile-${mode}`}
           type="button"
           disabled={loading}
           onClick={() => switchMode(mode === "register" ? "login" : "register")}
