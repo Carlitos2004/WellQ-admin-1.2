@@ -140,8 +140,8 @@ async def get_servers(db: AsyncSession = Depends(get_db)):
                 "region": s.region,
                 "status": s.status,
                 "uptime": s.uptime,
-                "cpuUsage": s.cpu_usage,
-                "ramUsage": s.ram_usage
+                "cpu_usage": s.cpu_usage,  # <-- CORREGIDO a snake_case
+                "ram_usage": s.ram_usage   # <-- CORREGIDO a snake_case
             }
             for s in servers
         ]
@@ -160,8 +160,8 @@ async def get_background_processes(db: AsyncSession = Depends(get_db)):
                 "processId": p.process_id,
                 "name": p.name,
                 "status": p.status,
-                "queuedItems": p.queued_items,
-                "memoryConsumption": p.memory_consumption,
+                "queued_items": p.queued_items,            # <-- CORREGIDO a snake_case
+                "memory_consumption": p.memory_consumption, # <-- CORREGIDO a snake_case
                 "description": p.description,
                 "startedAt": p.started_at.isoformat() + "Z" if p.started_at else None
             }

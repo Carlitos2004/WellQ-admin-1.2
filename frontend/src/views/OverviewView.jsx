@@ -681,8 +681,8 @@ const OperationalStatusTab = ({
     name:   s.name,
     status: s.status === 'healthy' ? 'operational' : s.status,
     uptime: s.uptime,
-    cpu:    typeof s.cpu === 'string' ? parseInt(s.cpu) : (s.cpu ?? (s.cpu_usage ? parseInt(s.cpu_usage) : 0)),
-    memory: typeof s.memory === 'number' ? s.memory : (s.ram_usage ? parseInt(s.ram_usage) : 0),
+    cpu:    parseInt(s.cpu || s.cpu_usage || s.cpuUsage || "0", 10),
+    memory: parseInt(s.memory || s.ram_usage || s.ramUsage || "0", 10),
     region: s.region,
     server_id:  s.server_id,
     type:       s.type,
@@ -856,7 +856,7 @@ const OperationalStatusTab = ({
                   {tVal(proc.status)}
                 </span>
                 <div className="text-right text-xs font-black text-wellq-dark dark:text-white w-24 tabular-nums bg-white dark:bg-wellq-dark/50 py-1 px-2 rounded-lg border border-wellq-gray/10 dark:border-white/5">
-                  {(proc.queued_items ?? 0).toLocaleString()} <span className="text-[10px] font-semibold text-wellq-gray">jobs</span>
+                  {(proc.queued_items ?? proc.queuedItems ?? 0).toLocaleString()} <span className="text-[10px] font-semibold text-wellq-gray">jobs</span>
                 </div>
               </div>
             ))}
