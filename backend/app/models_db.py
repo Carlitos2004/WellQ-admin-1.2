@@ -646,8 +646,25 @@ class SupportTicket(SQLModel, table=True):
     solution: Optional[str]            = Field(default=None, sa_column=Column(Text))
     reporter_name: Optional[str]       = Field(default=None)             # aplanado de reporter.name
     reporter_email: Optional[str]      = Field(default=None, index=True) # aplanado de reporter.email (útil para inferir clinic_id)
+    responder_id: Optional[str]        = Field(default=None, index=True) # ID del agente/equipo asignado
     responder_name: Optional[str]      = Field(default=None)             # resuelto desde responder_id → responder.name
     recorded_at: datetime              = Field(default_factory=datetime.utcnow)  # timestamp de sync
+
+
+# ── 36. RESPONDERS ─────────────────────────────────────────────────────────────
+class Responder(SQLModel, table=True):
+    """
+    Agentes de soporte para asignar tickets.
+    Sincronizado desde la colección `responder` de MongoDB.
+    """
+    __tablename__ = "responders"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    responder_id: str = Field(unique=True, index=True)  # Mapea el _id (ObjectId) de Mongo
+    name: str = Field()
+    group: str = Field(index=True)                      # Ej: "Financiero", "Técnico"
+    user: str = Field(unique=True)
+    password: str = Field()                             # Hashed password
 
 
 # ── FORCE UPDATE CONFIG ────────────────────────────────────────────────────────

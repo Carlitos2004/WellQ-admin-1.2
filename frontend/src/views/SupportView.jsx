@@ -1,50 +1,51 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LifeBuoy, RefreshCw, AlertTriangle, CheckCircle2, Send, Zap } from 'lucide-react';
+import { LifeBuoy, RefreshCw, AlertTriangle, CheckCircle2, Send, Zap, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchSupportTickets } from '../api/client';
+import { fetchSupportTickets, createSupportTicket } from '../api/client';
 import { SupportTicketTable } from '../components/support/SupportTicketTable';
 import { SupportTicketDrawer } from '../components/support/SupportTicketDrawer';
+import { CreateTicketModal } from '../components/support/CreateTicketModal';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Skeleton } from '../components/ui'; // Añadido para unificar el loading state
+import { Skeleton } from '../components/ui';
 
-// ─── Design tokens (Homologados a la paleta WellQ y Analytics METRIC_META) ───
+// ─── Design tokens ────────────────────────────────────────────────────────────
 export const STATUS_META = {
   Open: {
-    label: 'Open',
-    icon: AlertTriangle,
-    ring: 'ring-amber-500/20 dark:ring-amber-500/10',
+    label:  'Open',
+    icon:   AlertTriangle,
+    ring:   'ring-amber-500/20 dark:ring-amber-500/10',
     border: 'border-amber-500/20 dark:border-amber-500/30',
-    bg: 'bg-amber-500/5 dark:bg-amber-500/10',
-    badge: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/40',
-    dot: 'bg-amber-500',
-    bar: 'from-amber-400 to-orange-500',
-    text: 'text-amber-500 dark:text-amber-400',
-    pulse: true,
+    bg:     'bg-amber-500/5 dark:bg-amber-500/10',
+    badge:  'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/40',
+    dot:    'bg-amber-500',
+    bar:    'from-amber-400 to-orange-500',
+    text:   'text-amber-500 dark:text-amber-400',
+    pulse:  true,
   },
   Closed: {
-    label: 'Closed',
-    icon: CheckCircle2,
-    ring: 'ring-wellq-green/20 dark:ring-wellq-green/10',
+    label:  'Closed',
+    icon:   CheckCircle2,
+    ring:   'ring-wellq-green/20 dark:ring-wellq-green/10',
     border: 'border-wellq-green/20 dark:border-wellq-green/30',
-    bg: 'bg-wellq-green/5 dark:bg-wellq-green/10',
-    badge: 'bg-wellq-green/10 text-wellq-green border-wellq-green/20 dark:bg-wellq-green/10 dark:text-wellq-green dark:border-wellq-green/20',
-    dot: 'bg-wellq-green',
-    bar: 'from-wellq-green to-teal-400',
-    text: 'text-wellq-green',
-    pulse: false,
+    bg:     'bg-wellq-green/5 dark:bg-wellq-green/10',
+    badge:  'bg-wellq-green/10 text-wellq-green border-wellq-green/20 dark:bg-wellq-green/10 dark:text-wellq-green dark:border-wellq-green/20',
+    dot:    'bg-wellq-green',
+    bar:    'from-wellq-green to-teal-400',
+    text:   'text-wellq-green',
+    pulse:  false,
   },
   Sent: {
-    label: 'Sent',
-    icon: Send,
-    ring: 'ring-wellq-blue/20 dark:ring-wellq-blue/10',
+    label:  'Sent',
+    icon:   Send,
+    ring:   'ring-wellq-blue/20 dark:ring-wellq-blue/10',
     border: 'border-wellq-blue/20 dark:border-wellq-blue/30',
-    bg: 'bg-wellq-blue/5 dark:bg-wellq-blue/10',
-    badge: 'bg-wellq-blue/10 text-wellq-blue border-wellq-blue/20 dark:bg-wellq-blue/10 dark:text-wellq-blue dark:border-wellq-blue/20',
-    dot: 'bg-wellq-blue',
-    bar: 'from-wellq-blue to-indigo-400',
-    text: 'text-wellq-blue',
-    pulse: false,
+    bg:     'bg-wellq-blue/5 dark:bg-wellq-blue/10',
+    badge:  'bg-wellq-blue/10 text-wellq-blue border-wellq-blue/20 dark:bg-wellq-blue/10 dark:text-wellq-blue dark:border-wellq-blue/20',
+    dot:    'bg-wellq-blue',
+    bar:    'from-wellq-blue to-indigo-400',
+    text:   'text-wellq-blue',
+    pulse:  false,
   },
 };
 
@@ -58,19 +59,28 @@ export const CATEGORY_META = {
 // ─── Main view ────────────────────────────────────────────────────────────────
 export const SupportView = ({ apiClinics = [] }) => {
   const { t } = useLanguage();
-  const [tickets,   setTickets]   = useState([]);
-  const [total,     setTotal]     = useState(0);
-  const [loading,   setLoading]   = useState(true);
-  const [filters,   setFilters]   = useState({ page: 1, page_size: 20 });
-  const [selected,  setSelected]  = useState(null);
+
+  const [tickets,    setTickets]    = useState([]);
+  const [total,      setTotal]      = useState(0);
+  const [counts,     setCounts]     = useState({ open: 0, closed: 0, sent: 0 }); // ← agregados del backend
+  const [loading,    setLoading]    = useState(true);
+  const [filters,    setFilters]    = useState({ page: 1, page_size: 20 });
+  const [selected,   setSelected]   = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showCreate, setShowCreate] = useState(false); // ← modal de nuevo ticket
 
   const load = useCallback(async (f = filters) => {
     setLoading(true);
     try {
       const res = await fetchSupportTickets(f);
-      setTickets(res?.data  ?? []);
-      setTotal(res?.total   ?? 0);
+      setTickets(res?.data ?? []);
+      setTotal(res?.total ?? 0);
+      // Conteos globales que vienen del backend (no del array paginado)
+      setCounts({
+        open:   res?.open_count   ?? 0,
+        closed: res?.closed_count ?? 0,
+        sent:   res?.sent_count   ?? 0,
+      });
     } catch (err) {
       toast.error(err.message ?? t('support.errorLoading'));
     } finally {
@@ -90,17 +100,20 @@ export const SupportView = ({ apiClinics = [] }) => {
   const handleFilterChange = (newFilters) => setFilters((prev) => ({ ...prev, ...newFilters }));
   const handlePageChange   = (newPage)    => setFilters((prev) => ({ ...prev, page: newPage }));
 
-  const openCount   = tickets.filter((tk) => tk.status === 'Open').length;
-  const closedCount = tickets.filter((tk) => tk.status === 'Closed').length;
-  const sentCount   = tickets.filter((tk) => tk.status === 'Sent').length;
-  const resolveRate = total > 0 ? Math.round((closedCount / total) * 100) : 0;
-
-  // Sincronizado con la coreografía de AnalyticsView
-  const containerVariants = {
-    hidden: {},
-    show: { transition: { staggerChildren: 0.05 } },
+  // Cuando se cierra el drawer, refrescamos la lista para mostrar el estado actualizado
+  const handleDrawerClose = (didUpdate = false) => {
+    setSelected(null);
+    if (didUpdate) load(filters);
   };
 
+  // Tasa de resolución usando conteos globales del backend
+  const totalGlobal  = counts.open + counts.closed + counts.sent;
+  const resolveRate  = totalGlobal > 0 ? Math.round((counts.closed / totalGlobal) * 100) : 0;
+
+  const containerVariants = {
+    hidden: {},
+    show:   { transition: { staggerChildren: 0.05 } },
+  };
   const itemVariants = {
     hidden: { opacity: 0, y: 15 },
     show:   { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
@@ -108,7 +121,7 @@ export const SupportView = ({ apiClinics = [] }) => {
 
   return (
     <motion.div
-      className="space-y-7 font-sans" // Usa Poppins según la nueva config de Tailwind
+      className="space-y-7 font-sans"
       variants={containerVariants}
       initial="hidden"
       animate="show"
@@ -121,7 +134,7 @@ export const SupportView = ({ apiClinics = [] }) => {
               <LifeBuoy size={20} className="text-wellq-black" strokeWidth={2} />
             </div>
             <AnimatePresence>
-              {openCount > 0 && (
+              {counts.open > 0 && (
                 <motion.span
                   key="badge"
                   initial={{ scale: 0 }}
@@ -129,7 +142,7 @@ export const SupportView = ({ apiClinics = [] }) => {
                   exit={{ scale: 0 }}
                   className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white dark:ring-wellq-dark tabular-nums"
                 >
-                  {openCount > 99 ? '99+' : openCount}
+                  {counts.open > 99 ? '99+' : counts.open}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -151,43 +164,58 @@ export const SupportView = ({ apiClinics = [] }) => {
           </div>
         </div>
 
-        {/* Refresh button */}
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-[#1e293b] text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all disabled:opacity-40 shadow-sm"
-        >
-          <RefreshCw
-            size={13}
-            strokeWidth={2.5}
-            className={`transition-transform ${refreshing ? 'animate-spin' : 'group-hover:rotate-180 duration-500'}`}
-          />
-          {t('topbar.refresh')}
-        </motion.button>
+        {/* Botones de acción */}
+        <div className="flex items-center gap-2">
+          {/* Nuevo ticket */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-wellq-blue to-wellq-cyan text-wellq-dark text-[13px] font-bold shadow-sm shadow-wellq-cyan/20 ring-1 ring-white/10 transition-all hover:shadow-md hover:shadow-wellq-cyan/30"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            {t('support.newTicket', 'Nuevo ticket')}
+          </motion.button>
+
+          {/* Refresh */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-[#1e293b] text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all disabled:opacity-40 shadow-sm"
+          >
+            <RefreshCw
+              size={13}
+              strokeWidth={2.5}
+              className={`transition-transform ${refreshing ? 'animate-spin' : 'group-hover:rotate-180 duration-500'}`}
+            />
+            {t('topbar.refresh')}
+          </motion.button>
+        </div>
       </motion.div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* Usando counts.open/closed/sent en lugar del array paginado */}
         <MetricCard
           label={t('support.statusOpen')}
-          count={openCount}
-          total={total}
+          count={counts.open}
+          total={totalGlobal}
           meta={STATUS_META.Open}
           loading={loading}
         />
         <MetricCard
           label={t('support.statusClosed')}
-          count={closedCount}
-          total={total}
+          count={counts.closed}
+          total={totalGlobal}
           meta={STATUS_META.Closed}
           loading={loading}
         />
         <MetricCard
           label={t('support.statusSent')}
-          count={sentCount}
-          total={total}
+          count={counts.sent}
+          total={totalGlobal}
           meta={STATUS_META.Sent}
           loading={loading}
         />
@@ -195,7 +223,10 @@ export const SupportView = ({ apiClinics = [] }) => {
       </motion.div>
 
       {/* ── Table ──────────────────────────────────────────────────────────── */}
-      <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/20 dark:border-[#1e293b] overflow-hidden">
+      <motion.div
+        variants={itemVariants}
+        className="bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/20 dark:border-[#1e293b] overflow-hidden"
+      >
         <SupportTicketTable
           tickets={tickets}
           total={total}
@@ -216,7 +247,22 @@ export const SupportView = ({ apiClinics = [] }) => {
           <SupportTicketDrawer
             key={selected}
             ticketId={selected}
-            onClose={() => setSelected(null)}
+            onClose={handleDrawerClose}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal: Nuevo ticket ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showCreate && (
+          <CreateTicketModal
+            clinics={apiClinics}
+            onClose={() => setShowCreate(false)}
+            onCreated={() => {
+              setShowCreate(false);
+              load(filters);
+              toast.success(t('support.ticketCreated', 'Ticket creado correctamente'));
+            }}
           />
         )}
       </AnimatePresence>
@@ -224,7 +270,7 @@ export const SupportView = ({ apiClinics = [] }) => {
   );
 };
 
-// ─── Metric Card (Estilo homogado a AnalyticsMetricCard) ──────────────────────
+// ─── Metric Card ──────────────────────────────────────────────────────────────
 const MetricCard = ({ label, count, total, meta, loading }) => {
   const Icon = meta.icon;
   const pct  = total > 0 ? Math.round((count / total) * 100) : 0;
@@ -252,7 +298,6 @@ const MetricCard = ({ label, count, total, meta, loading }) => {
         {label}
       </p>
 
-      {/* Barra de progreso micro-animada inferior */}
       <div className="mt-4 h-1.5 bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
         <motion.div
           className={`h-full bg-gradient-to-r ${meta.bar} rounded-full`}
@@ -265,10 +310,9 @@ const MetricCard = ({ label, count, total, meta, loading }) => {
   );
 };
 
-// ─── Resolution Rate Card (Estilo homogado a SOAP Quality) ─────────────────────
+// ─── Resolution Rate Card ─────────────────────────────────────────────────────
 const ResolutionCard = ({ rate, loading }) => (
   <div className="relative bg-gradient-to-br from-white to-wellq-gray/5 dark:from-wellq-dark dark:to-white/[0.01] rounded-2xl p-5 shadow-sm border border-wellq-gray/20 dark:border-[#1e293b] overflow-hidden group hover:shadow-md transition-all duration-300">
-    {/* Brillo ambiental superior similar a Analytics */}
     <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-wellq-cyan/10 to-transparent opacity-60 pointer-events-none" />
 
     <div className="relative flex items-start justify-between mb-4">
