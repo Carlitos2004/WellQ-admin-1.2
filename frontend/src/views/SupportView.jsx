@@ -248,6 +248,7 @@ export const SupportView = ({ apiClinics = [] }) => {
             key={selected}
             ticketId={selected}
             onClose={handleDrawerClose}
+            onUpdated={() => load(filters)}
           />
         )}
       </AnimatePresence>

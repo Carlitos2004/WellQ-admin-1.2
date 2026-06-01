@@ -32,7 +32,7 @@ from app.models_db import (
     ImpersonateAuditLog, NeedsAttentionItem,
     InfrastructureCostSnapshot, InfraNode,
     # ── NUEVOS MODELOS ────────────────────────────────────────────────────────
-    ClinicianSummary, PatientHealthSummary, SupportTicket,
+    ClinicianSummary, PatientHealthSummary, SupportTicket, Responder,
 )
 
 DATABASE_URL = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
@@ -871,6 +871,16 @@ PATIENT_HEALTH_DATA = [
 # de SupportView tengan datos variados.
 # clinic_id se incluye directamente en el seed (en producción se infiere
 # desde reporter.email → users → clinicians o lo provee la empresa en el sync).
+RESPONDERS_DATA = [
+    {
+        "responder_id": "RESP-001",
+        "name": "WellQ Admin",
+        "team": "General",
+        "username": "admin@wellq.co",
+        "password": "seed-password-hash-placeholder",
+    },
+]
+
 SUPPORT_TICKETS_DATA = [
     {
         "ticket_id": "TK-001",
@@ -881,6 +891,7 @@ SUPPORT_TICKETS_DATA = [
         "category": "Bug",
         "reporter_name": "Juan Pérez",
         "reporter_email": "admin@clinicasanjose.com",
+        "responder_id": "RESP-001",
         "responder_name": "WellQ Admin",
         "reported_at": datetime(2026, 5, 10, 9, 30, 0),
         "closed_at": None,
@@ -896,6 +907,7 @@ SUPPORT_TICKETS_DATA = [
         "category": "Billing",
         "reporter_name": "María González",
         "reporter_email": "hola@centromedico.com",
+        "responder_id": "RESP-001",
         "responder_name": "WellQ Admin",
         "reported_at": datetime(2026, 4, 20, 11, 0, 0),
         "closed_at": datetime(2026, 4, 22, 15, 0, 0),
@@ -911,6 +923,7 @@ SUPPORT_TICKETS_DATA = [
         "category": "Feature",
         "reporter_name": "Pedro Alarcón",
         "reporter_email": "pedro@kinesur.cl",
+        "responder_id": None,
         "responder_name": None,
         "reported_at": datetime(2026, 5, 8, 14, 0, 0),
         "closed_at": None,
@@ -926,6 +939,7 @@ SUPPORT_TICKETS_DATA = [
         "category": "Request",
         "reporter_name": "Juan Pérez",
         "reporter_email": "admin@clinicasanjose.com",
+        "responder_id": "RESP-001",
         "responder_name": "WellQ Admin",
         "reported_at": datetime(2026, 5, 12, 10, 0, 0),
         "closed_at": None,
@@ -941,6 +955,7 @@ SUPPORT_TICKETS_DATA = [
         "category": "Bug",
         "reporter_name": "Carolina Muñoz",
         "reporter_email": "carolina@fisioclinicanorte.cl",
+        "responder_id": "RESP-001",
         "responder_name": "WellQ Admin",
         "reported_at": datetime(2026, 5, 5, 8, 0, 0),
         "closed_at": datetime(2026, 5, 6, 12, 0, 0),
@@ -956,6 +971,7 @@ SUPPORT_TICKETS_DATA = [
         "category": "Bug",
         "reporter_name": "Ignacio Rojas",
         "reporter_email": "irojas@deporte.cl",
+        "responder_id": "RESP-001",
         "responder_name": "WellQ Admin",
         "reported_at": datetime(2026, 5, 14, 16, 30, 0),
         "closed_at": None,
@@ -1003,6 +1019,43 @@ async def create_tables():
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS active_clinics integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS clinics_delta integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS in_treatment integer DEFAULT 0"))
+        # ── support_tickets / responders (campos usados por soporte) ──────────
+        await conn.execute(text("ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS responder_id varchar DEFAULT NULL"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_tickets_responder_id ON support_tickets (responder_id)"))
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'group'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'team'
+                ) THEN
+                    ALTER TABLE responders RENAME COLUMN "group" TO team;
+                END IF;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'user'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'username'
+                ) THEN
+                    ALTER TABLE responders RENAME COLUMN "user" TO username;
+                END IF;
+            END $$;
+        """))
     print("✅ Tablas creadas/verificadas en Neon")
 
 async def seed_clinics(session):
@@ -1153,6 +1206,11 @@ async def seed_patient_health_summaries(session):
         session.add(PatientHealthSummary(**data))
     print(f"  → {len(PATIENT_HEALTH_DATA)} patient_health_summaries")
 
+async def seed_responders(session):
+    for data in RESPONDERS_DATA:
+        session.add(Responder(**data))
+    print(f"  → {len(RESPONDERS_DATA)} responders")
+
 async def seed_support_tickets(session):
     for data in SUPPORT_TICKETS_DATA:
         session.add(SupportTicket(**data))
@@ -1176,7 +1234,7 @@ async def run_seed():
             "ai_latency_metrics, pose_analysis_snapshots, app_versions, platform_settings, "
             "impersonate_audit_log, needs_attention_items, infrastructure_cost_snapshots, infra_nodes, "
             # ── NUEVAS TABLAS ────────────────────────────────────────────────
-            "clinician_summaries, patient_health_summaries, support_tickets, "
+            "clinician_summaries, patient_health_summaries, responders, support_tickets, "
             "force_update_config "
             "RESTART IDENTITY CASCADE"
         ))
@@ -1221,6 +1279,7 @@ async def run_seed():
         # ── NUEVOS (tablas sincronizadas desde MongoDB) ───────────────────────
         await seed_clinician_summaries(session)
         await seed_patient_health_summaries(session)
+        await seed_responders(session)
         await seed_support_tickets(session)
 
         await session.commit()

@@ -12,7 +12,7 @@ CHANGELOG:
   - POST /api/support-tickets        → crear ticket desde el backoffice
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +29,9 @@ VALID_TRANSITIONS = {
     "Open":   ["Closed"],
     "Closed": [],          # terminal — no se puede reabrir
 }
+
+VALID_STATUSES = {"Sent", "Open", "Closed"}
+VALID_CATEGORIES = {"Bug", "Billing", "Feature", "Request"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -130,7 +133,7 @@ async def list_ticket_categories(db: AsyncSession = Depends(get_db)):
 @router.get("/responders", summary="Responders disponibles agrupados por equipo")
 async def list_responders(db: AsyncSession = Depends(get_db)):
     """
-    Retorna los responders agrupados por su campo 'group'.
+    Retorna los responders agrupados por equipo.
     El frontend filtra la lista según la categoría del ticket.
     """
     rows = (await db.execute(select(Responder))).scalars().all()
@@ -140,17 +143,17 @@ async def list_responders(db: AsyncSession = Depends(get_db)):
     flat_responders = []
 
     for r in rows:
-        group_name = r.group or "General"
+        team_name = r.team or "General"
         
         # Mapeo manual seguro para EVITAR el Error 500 del __dict__
         resp_data = {
             "id": r.responder_id,  # Usa el responder_id del modelo
             "name": r.name,
-            "user": getattr(r, "user", None),
-            "group": r.group,
+            "user": getattr(r, "username", None),
+            "group": r.team,
         }
         
-        groups.setdefault(group_name, []).append(resp_data)
+        groups.setdefault(team_name, []).append(resp_data)
         flat_responders.append(resp_data)
 
     return {
@@ -223,8 +226,18 @@ async def update_support_ticket(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
 
+    responder = None
+    if body.responder_id:
+        responder = (await db.execute(
+            select(Responder).where(Responder.responder_id == body.responder_id)
+        )).scalar_one_or_none()
+        if not responder:
+            raise HTTPException(status_code=422, detail="Responder no encontrado")
+
     # ── Validación de transición de estado ────────────────────────────────────
     if body.status and body.status != ticket.status:
+        if body.status not in VALID_STATUSES:
+            raise HTTPException(status_code=422, detail="Estado de ticket inválido")
         allowed = VALID_TRANSITIONS.get(ticket.status, [])
         if body.status not in allowed:
             raise HTTPException(
@@ -240,13 +253,14 @@ async def update_support_ticket(
             )
         ticket.status = body.status
         if body.status == "Closed":
-            ticket.closed_at = datetime.now(timezone.utc)
+            ticket.closed_at = datetime.utcnow()
 
     # ── Actualizar responder ───────────────────────────────────────────────────
-    if body.responder_name is not None:
-        ticket.responder_name = body.responder_name
-    if body.responder_id is not None and hasattr(ticket, "responder_id"):
+    if body.responder_id is not None:
         ticket.responder_id = body.responder_id
+        ticket.responder_name = responder.name if responder else body.responder_name
+    elif body.responder_name is not None:
+        ticket.responder_name = body.responder_name
 
     # ── Actualizar solución ───────────────────────────────────────────────────
     if body.solution is not None:
@@ -283,17 +297,38 @@ async def create_support_ticket(
     db: AsyncSession = Depends(get_db),
 ):
     import uuid
+    title = body.title.strip()
+    description = body.description.strip()
+    reporter_name = body.reporter_name.strip() if body.reporter_name else None
+    reporter_email = body.reporter_email.strip() if body.reporter_email else None
+
+    if not title:
+        raise HTTPException(status_code=422, detail="El título es obligatorio")
+    if not description:
+        raise HTTPException(status_code=422, detail="La descripción es obligatoria")
+    if body.category not in VALID_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoría de ticket inválida")
+    if not body.clinic_id:
+        raise HTTPException(status_code=422, detail="Selecciona una clínica para crear el ticket")
+
+    clinic = (await db.execute(
+        select(Clinic).where(Clinic.clinic_id == body.clinic_id)
+    )).scalar_one_or_none()
+    if not clinic:
+        raise HTTPException(status_code=422, detail="Clínica no encontrada")
+
+    now = datetime.utcnow()
     new_ticket = SupportTicket(
-        ticket_id     = str(uuid.uuid4()),
-        title         = body.title,
-        description   = body.description,
+        ticket_id     = f"TK-{uuid.uuid4().hex[:8].upper()}",
+        title         = title,
+        description   = description,
         category      = body.category,
         clinic_id     = body.clinic_id,
-        reporter_name = body.reporter_name,
-        reporter_email= body.reporter_email,
+        reporter_name = reporter_name,
+        reporter_email= reporter_email,
         status        = "Sent",                        # siempre empieza en Sent
-        reported_at   = datetime.now(timezone.utc),
-        recorded_at   = datetime.now(timezone.utc),
+        reported_at   = now,
+        recorded_at   = now,
     )
     db.add(new_ticket)
     await db.commit()

@@ -30,6 +30,7 @@ export const CreateTicketModal = ({ clinics = [], onClose, onCreated }) => {
     if (!form.title.trim())    return setError('El título es obligatorio.');
     if (!form.description.trim()) return setError('La descripción es obligatoria.');
     if (!form.category)        return setError('Selecciona una categoría.');
+    if (!form.clinic_id)       return setError('Selecciona una clínica.');
 
     setSaving(true);
     setError(null);
@@ -142,7 +143,7 @@ export const CreateTicketModal = ({ clinics = [], onClose, onCreated }) => {
               </Field>
 
               {clinics.length > 0 && (
-                <Field label="Clínica">
+                <Field label="Clínica *">
                   <div className="relative">
                     <select
                       value={form.clinic_id}
@@ -150,7 +151,7 @@ export const CreateTicketModal = ({ clinics = [], onClose, onCreated }) => {
                       disabled={saving}
                       className={`${inputCls} appearance-none pr-8`}
                     >
-                      <option value="">— Todas —</option>
+                      <option value="">— Seleccionar —</option>
                       {clinics.map((c) => (
                         <option key={c.clinic_id} value={c.clinic_id}>{c.name}</option>
                       ))}

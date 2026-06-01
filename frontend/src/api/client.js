@@ -1,16 +1,28 @@
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const apiFetch = async (path, options = {}) => {
+  const headers = {
+    ...(options.body != null ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.headers ?? {}),
+  };
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
+  const text = await res.text();
   if (!res.ok) {
-    const err = new Error(`HTTP ${res.status} — ${path}`);
+    let detail = '';
+    try {
+      const payload = text ? JSON.parse(text) : null;
+      detail = typeof payload?.detail === 'string' ? payload.detail : '';
+    } catch {
+      detail = text;
+    }
+    const err = new Error(detail || `HTTP ${res.status} — ${path}`);
     if (import.meta.env.DEV) console.warn('[apiFetch]', err.message);
     throw err;
   }
-  const text = await res.text();
   return text ? JSON.parse(text) : null;
 };
 

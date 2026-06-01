@@ -5,12 +5,12 @@ import { StatusBadge, UtilizationBar, HealthBadge } from '../ui';
 
 export const ClinicRow = ({
   clinic, onSelect, selected, onImpersonate,
-  onSettings, onInvoices, onDelete
+  onSettings, onInvoices, onDelete, animationDelay = 0
 }) => (
   <motion.tr
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3, ease: 'easeOut' }}
+    transition={{ delay: animationDelay, duration: 0.3, ease: 'easeOut' }}
     className={`
       font-sans border-b border-wellq-gray/10 dark:border-white/5
       transition-all duration-200 cursor-pointer group

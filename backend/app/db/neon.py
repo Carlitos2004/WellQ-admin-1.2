@@ -2,6 +2,7 @@
 db/neon.py — Conexión asíncrona a Neon (PostgreSQL) con SQLModel
 """
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlmodel import SQLModel
 import structlog
@@ -54,13 +55,49 @@ async def close_neon() -> None:
 
 
 async def create_db_tables() -> None:
-    """Crea todas las tablas registradas en SQLModel.metadata si no existen."""
+    """Crea tablas nuevas y verifica columnas agregadas a tablas existentes."""
     global _engine
     if _engine is None:
         raise RuntimeError("Neon no inicializado. Llama a init_neon() primero.")
 
     async with _engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.execute(text("ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS responder_id varchar DEFAULT NULL"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_tickets_responder_id ON support_tickets (responder_id)"))
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'group'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'team'
+                ) THEN
+                    ALTER TABLE responders RENAME COLUMN "group" TO team;
+                END IF;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'user'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'responders'
+                      AND column_name = 'username'
+                ) THEN
+                    ALTER TABLE responders RENAME COLUMN "user" TO username;
+                END IF;
+            END $$;
+        """))
         logger.info("Tablas de Neon verificadas/creadas correctamente.")
 
 

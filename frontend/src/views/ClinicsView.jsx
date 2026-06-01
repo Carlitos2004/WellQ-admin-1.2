@@ -1216,26 +1216,20 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                     </tr>
                   ))
                 : filtered.map((clinic, i) => (
-                    <motion.tr
+                    <ClinicRow
                       key={clinic.clinic_id ?? clinic.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.03, duration: 0.25 }}
-                      style={{ display: 'contents' }}
-                    >
-                      <ClinicRow
-                        clinic={clinic}
-                        onSelect={setSelected}
-                        selected={
-                          selected?.clinic_id === clinic.clinic_id ||
-                          selected?.id === clinic.id
-                        }
-                        onImpersonate={setSelected}
-                        onSettings={(c) => { closeAll(); setSettingsClinic(c); }}
-                        onInvoices={(c) => { closeAll(); setInvoiceClinic(c); }}
-                        onDelete={setDeleteTarget}
-                      />
-                    </motion.tr>
+                      clinic={clinic}
+                      onSelect={setSelected}
+                      selected={
+                        selected?.clinic_id === clinic.clinic_id ||
+                        selected?.id === clinic.id
+                      }
+                      onImpersonate={setSelected}
+                      onSettings={(c) => { closeAll(); setSettingsClinic(c); }}
+                      onInvoices={(c) => { closeAll(); setInvoiceClinic(c); }}
+                      onDelete={setDeleteTarget}
+                      animationDelay={i * 0.03}
+                    />
                   ))}
             </tbody>
           </table>

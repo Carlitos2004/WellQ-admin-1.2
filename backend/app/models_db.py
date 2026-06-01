@@ -662,8 +662,8 @@ class Responder(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     responder_id: str = Field(unique=True, index=True)  # Mapea el _id (ObjectId) de Mongo
     name: str = Field()
-    group: str = Field(index=True)                      # Ej: "Financiero", "Técnico"
-    user: str = Field(unique=True)
+    team: str = Field(index=True)                       # Ej: "Financiero", "Técnico"
+    username: str = Field(unique=True)
     password: str = Field()                             # Hashed password
 
 
