@@ -50,6 +50,15 @@ export const patchSupportTicket = (ticketId, body) =>
   });
 
 /**
+ * Elimina un ticket permanentemente.
+ * @param {string} ticketId
+ */
+export const deleteSupportTicket = (ticketId) =>
+  apiFetch(`/api/support-tickets/${ticketId}`, {
+    method: 'DELETE',
+  });
+
+/**
  * Crea un ticket nuevo desde el backoffice.
  * @param {{ title: string, description: string, category: string, clinic_id?: string, reporter_name?: string, reporter_email?: string }} body
  */
@@ -59,19 +68,58 @@ export const createSupportTicket = (body) =>
     body: JSON.stringify(body),
   });
 
+// ─── Support Config: Categorías ───────────────────────────────────────────────
+
 /**
  * Retorna las categorías disponibles (dinámicas desde la BD).
- * Úsalo para poblar los chips de filtro y el formulario de creación.
  */
 export const fetchTicketCategories = () =>
   apiFetch('/api/support-tickets/categories');
 
+export const createTicketCategory = (body) =>
+  apiFetch('/api/support-tickets/categories', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updateTicketCategory = (categoryId, body) =>
+  apiFetch(`/api/support-tickets/categories/${categoryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deleteTicketCategory = (categoryId) =>
+  apiFetch(`/api/support-tickets/categories/${categoryId}`, {
+    method: 'DELETE',
+  });
+
+// ─── Support Config: Resolutores ──────────────────────────────────────────────
+
 /**
  * Retorna los responders disponibles, planos y agrupados por equipo.
- * El drawer los usa para el selector de reasignación.
  */
-export const fetchResponders = () =>
+export const fetchSupportResponders = () =>
   apiFetch('/api/support-tickets/responders');
+
+// Alias por si algún componente antiguo sigue usando fetchResponders en vez de fetchSupportResponders
+export const fetchResponders = fetchSupportResponders;
+
+export const createResponder = (body) =>
+  apiFetch('/api/support-tickets/responders', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updateResponder = (responderId, body) =>
+  apiFetch(`/api/support-tickets/responders/${responderId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deleteResponder = (responderId) =>
+  apiFetch(`/api/support-tickets/responders/${responderId}`, {
+    method: 'DELETE',
+  });
 
 // ─── Otros endpoints existentes ───────────────────────────────────────────────
 

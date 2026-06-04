@@ -33,8 +33,10 @@ pip install bcrypt
 
 # 6. Cargamos los datos iniciales a la base de datos
 python seed.py
+# 7. eliminar duplicados 
+python cleanup_duplicates.py
 
-# 7. Encendemos el motor
+# 8. Encendemos el motor
 uvicorn app.main:app --reload --port 8000
 ```
 

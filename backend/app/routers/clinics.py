@@ -1,8 +1,15 @@
 """
 routers/clinics.py — MÓDULO: GESTIÓN DE CLÍNICAS
 Endpoints 14 al 25 conectados a Neon (PostgreSQL)
+
+CORRECCIONES APLICADAS:
+- Soft Delete: Al eliminar se pasa a estado "churned" en lugar de borrar el registro.
+- Filtro Listado: Oculta clínicas eliminadas (is_deleted=True) a menos que se filtre por "churned".
+- Validación Email: Se protege el endpoint POST y PATCH con regex para correos.
+- Hard Delete: Si se elimina una clínica que ya está en "churned", se borra permanentemente.
 """
 
+import re
 from fastapi import APIRouter, Depends, HTTPException, Path, Body, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, asc
@@ -16,6 +23,18 @@ from app.models_db import (
 from app.db.neon import get_db
 
 router = APIRouter(prefix="/api/clinics", tags=["Gestión de Clínicas"])
+
+
+# ─── Helper de Validación de Correos ─────────────────────────────────────────
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+def _validate_email_format(email: str | None, field_label: str = "email") -> None:
+    """Lanza HTTPException 422 si el email tiene formato inválido."""
+    if email and not _EMAIL_RE.match(email):
+        raise HTTPException(
+            status_code=422,
+            detail=f"El {field_label} no tiene formato válido (falta @ o dominio)."
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -35,13 +54,21 @@ async def list_clinics(
     # Construir query base
     query = select(Clinic)
     
-    # Filtros
+    # ── LÓGICA DE CHURN Y SOFT DELETE ──
+    if status_param == "churned":
+        # Si piden ver "churned", mostramos solo las eliminadas/churn
+        query = query.where(Clinic.status == "churned")
+    else:
+        # Por defecto, ocultamos las eliminadas
+        query = query.where(Clinic.is_deleted == False)
+        if status_param:
+            query = query.where(Clinic.status == status_param)
+
+    # Filtros restantes
     if search:
         query = query.where(Clinic.name.ilike(f"%{search}%"))
     if tier:
         query = query.where(Clinic.tier == tier)
-    if status_param:
-        query = query.where(Clinic.status == status_param)
 
     # Calcular el total para la paginación
     count_query = select(func.count()).select_from(query.subquery())
@@ -90,10 +117,13 @@ async def list_clinics(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 15. POST /clinics — Registro de una nueva clínica en el sistema
-# FIX: Ahora captura TODOS los datos del modal de React
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("", summary="Registro de una nueva clínica", status_code=status.HTTP_201_CREATED)
 async def create_clinic(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    # ── VALIDACIÓN DE CORREOS ──
+    _validate_email_format(body.get("contact_email"), "correo de contacto")
+    _validate_email_format(body.get("billing_email"), "correo de facturación")
+
     # Generar un ID único para la nueva clínica
     new_clinic_id = f"CL-{uuid.uuid4().hex[:6].upper()}"
     
@@ -102,7 +132,7 @@ async def create_clinic(body: dict = Body(...), db: AsyncSession = Depends(get_d
         clinic_id=new_clinic_id,
         name=body.get("name", "Nueva Clínica"),
         tier=body.get("tier", "smb"),
-        status=body.get("status", "active"), # Ahora sí respeta el "active" de React
+        status=body.get("status", "active"),
         patients_limit=body.get("patients_limit", 500),
         mrr=body.get("mrr", 0.0),
         location=body.get("location"),
@@ -203,10 +233,18 @@ async def export_clinics(
         return Border(left=s, right=s, top=s, bottom=s)
 
     query = select(Clinic)
-    if status_param:
-        query = query.where(Clinic.status == status_param)
+    
+    # ── LÓGICA DE CHURN IGUAL QUE EN EL LISTADO ──
+    if status_param == "churned":
+        query = query.where(Clinic.status == "churned")
+    else:
+        query = query.where(Clinic.is_deleted == False)
+        if status_param:
+            query = query.where(Clinic.status == status_param)
+
     if tier:
         query = query.where(Clinic.tier == tier)
+        
     query = query.order_by(asc(Clinic.name))
     result = await db.execute(query)
     clinics = result.scalars().all()
@@ -335,6 +373,12 @@ async def update_clinic(
     updates: dict = Body(...),
     db: AsyncSession = Depends(get_db)
 ):
+    # ── VALIDACIÓN DE CORREOS ──
+    if "contact_email" in updates:
+        _validate_email_format(updates.get("contact_email"), "correo de contacto")
+    if "billing_email" in updates:
+        _validate_email_format(updates.get("billing_email"), "correo de facturación")
+
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
 
@@ -345,6 +389,8 @@ async def update_clinic(
         "name":   "name",
         "tier":   "tier",
         "status": "status",
+        "contact_email": "contact_email",
+        "billing_email": "billing_email"
     }
 
     updated = []
@@ -365,9 +411,9 @@ async def update_clinic(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 17b. DELETE /clinics/{clinic_id} — Eliminar clínica
+# 17b. DELETE /clinics/{clinic_id} — Eliminar clínica (Soft Delete o Hard Delete)
 # ─────────────────────────────────────────────────────────────────────────────
-@router.delete("/{clinic_id}", summary="Eliminar clínica del sistema")
+@router.delete("/{clinic_id}", summary="Eliminar clínica del sistema (Soft/Hard Delete)")
 async def delete_clinic(
     clinic_id: str = Path(...),
     db: AsyncSession = Depends(get_db)
@@ -378,12 +424,23 @@ async def delete_clinic(
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
-    await db.delete(clinic)
+    # ── LÓGICA DE SOFT DELETE Y HARD DELETE ──
+    if getattr(clinic, 'is_deleted', False) or clinic.status == "churned":
+        # Si ya estaba en la papelera (Churned), la borramos para siempre (Hard Delete)
+        await db.delete(clinic)
+        msg = f"Clínica {clinic_id} eliminada permanentemente de la base de datos."
+    else:
+        # Si estaba activa, la mandamos a la papelera (Soft Delete)
+        clinic.is_deleted = True
+        clinic.deleted_at = datetime.utcnow()
+        clinic.status = "churned"
+        msg = f"Clínica {clinic_id} eliminada y movida a churn correctamente."
+
     await db.commit()
 
     return {
         "status": "success",
-        "message": f"Clínica {clinic_id} eliminada correctamente"
+        "message": msg
     }
 
 
@@ -504,7 +561,6 @@ async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depe
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 22. GET /clinics/{clinic_id}/invoices — Historial de facturas
-# FIX: Agregada compatibilidad de llaves 'id' y 'date' para que React no falle
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/{clinic_id}/invoices", summary="Historial de facturas emitidas")
 async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
@@ -522,7 +578,6 @@ async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Dep
         "pending_balance": pending_balance,
         "invoices": [
             {
-                # React necesita estrictamente las llaves 'id' y 'date'. Aquí se las mandamos:
                 "id": getattr(inv, 'invoice_id', getattr(inv, 'id', None)),
                 "invoice_id": getattr(inv, 'invoice_id', getattr(inv, 'id', None)),
                 "amount": inv.amount,

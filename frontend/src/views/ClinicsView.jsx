@@ -178,9 +178,12 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
   );
 };
 
-// ─── DeleteClinicModal (NUEVO MODAL CENTRALIZADO) ─────────────────────────────
+// ─── DeleteClinicModal (NUEVO MODAL INTELIGENTE) ─────────────────────────────
 const DeleteClinicModal = ({ clinic, onClose, onConfirm, deleting }) => {
   if (!clinic) return null;
+
+  // Verificamos si la clínica ya estaba en la papelera
+  const isChurned = (clinic.status || '').toLowerCase() === 'churned';
 
   return createPortal(
     <AnimatePresence>
@@ -193,21 +196,27 @@ const DeleteClinicModal = ({ clinic, onClose, onConfirm, deleting }) => {
           onClick={!deleting ? onClose : undefined}
         />
         <motion.div
-          className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md flex flex-col overflow-hidden border border-red-500/20 dark:border-red-500/20"
+          className={`relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md flex flex-col overflow-hidden border ${isChurned ? 'border-red-500/40 dark:border-red-500/40' : 'border-red-500/20 dark:border-red-500/20'}`}
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ duration: 0.22, ease: 'easeOut' }}
         >
-          <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-red-500/10 to-transparent pointer-events-none" />
+          <div className={`absolute top-0 left-0 right-0 h-24 pointer-events-none bg-gradient-to-b ${isChurned ? 'from-red-500/20' : 'from-amber-500/10 dark:from-red-500/10'} to-transparent`} />
 
           <div className="relative p-8 text-center space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 flex items-center justify-center mx-auto mb-4 shadow-sm">
-              <Trash2 size={28} className="text-red-500" strokeWidth={2.2} />
+            <div className={`w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto mb-4 shadow-sm ${isChurned ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30' : 'bg-amber-50 dark:bg-red-500/10 border-amber-200 dark:border-red-500/20'}`}>
+              <Trash2 size={28} className={isChurned ? "text-red-500" : "text-amber-500 dark:text-red-500"} strokeWidth={2.2} />
             </div>
-            <h2 className="font-bold text-wellq-dark dark:text-white text-xl">¿Eliminar Clínica?</h2>
+            <h2 className="font-bold text-wellq-dark dark:text-white text-xl">
+              {isChurned ? '¿Eliminar Permanentemente?' : '¿Dar de baja Clínica?'}
+            </h2>
             <p className="text-sm text-wellq-gray px-2 leading-relaxed">
-              Estás a punto de eliminar <strong>{clinic.name}</strong>. Esta acción es irreversible y borrará permanentemente todos los datos, pacientes y registros asociados.
+              {isChurned ? (
+                <>Estás a punto de borrar <strong>{clinic.name}</strong> de forma permanente. Esta acción purgará la base de datos y es absolutamente irreversible.</>
+              ) : (
+                <>Estás a punto de dar de baja a <strong>{clinic.name}</strong>. Sus accesos serán suspendidos y pasará a la pestaña de "Churned".</>
+              )}
             </p>
           </div>
 
@@ -222,9 +231,9 @@ const DeleteClinicModal = ({ clinic, onClose, onConfirm, deleting }) => {
             <button
               onClick={onConfirm}
               disabled={deleting}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-colors cursor-pointer disabled:opacity-50 shadow-sm shadow-red-500/20"
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-50 shadow-sm ${isChurned ? 'bg-red-600 hover:bg-red-700 shadow-red-500/30' : 'bg-red-500 hover:bg-red-600 shadow-red-500/20'}`}
             >
-              {deleting ? <><Loader2 size={16} className="animate-spin" /> Eliminando...</> : 'Sí, Eliminar'}
+              {deleting ? <><Loader2 size={16} className="animate-spin" /> Procesando...</> : (isChurned ? 'Purgar Datos' : 'Mover a Churned')}
             </button>
           </div>
         </motion.div>
@@ -673,7 +682,8 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
       const res = await fetch(`${API_BASE}/api/clinics/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDeleteTarget(null);
-      onRefreshClinics && onRefreshClinics();
+      // 🔥 AQUI ESTÁ EL CAMBIO: Recarga según la pestaña actual
+      onRefreshClinics && onRefreshClinics(filter === 'churned' ? { status: 'churned' } : {});
     } catch (err) {
       console.error('Delete error:', err);
     } finally {
@@ -1065,7 +1075,13 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             ].map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setFilter(key)}
+                // 🔥 AQUI ESTÁ EL CAMBIO: Al cambiar la pestaña notifica al padre
+                onClick={() => {
+                  setFilter(key);
+                  if (onRefreshClinics) {
+                    onRefreshClinics(key === 'churned' ? { status: 'churned' } : {});
+                  }
+                }}
                 className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                   filter === key
                     ? 'bg-white dark:bg-wellq-dark shadow-sm text-wellq-dark dark:text-white'
@@ -1284,7 +1300,8 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
       {createOpen && (
         <CreateClinicModal
           onClose={() => setCreateOpen(false)}
-          onSuccess={() => { onRefreshClinics && onRefreshClinics(); }}
+          // 🔥 AQUI ESTÁ EL CAMBIO: Mantiene el filtro de la pestaña actual después de crear
+          onSuccess={() => { onRefreshClinics && onRefreshClinics(filter === 'churned' ? { status: 'churned' } : {}); }}
         />
       )}
 

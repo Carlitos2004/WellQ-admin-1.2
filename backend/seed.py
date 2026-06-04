@@ -1,12 +1,22 @@
 """
 seed.py — Migra los datos JSON hardcodeados a PostgreSQL (Neon)
 ===============================================================
-Ejecutar UNA SOLA VEZ desde la carpeta backend/:
+SEED NO DESTRUCTIVO:
+Puedes ejecutar este script múltiples veces (`python seed.py`).
+Creará tablas faltantes, agregará columnas nuevas e insertará la data base.
+Si un registro ya existe, lo omitirá para no borrar ni alterar los datos
+que hayas creado manualmente.
 
-    python seed.py
+CLÍNICAS CHURNED:
+Las clínicas con status="churned" se marcan automáticamente con
+is_deleted=TRUE. Cuando elimines una clínica desde el frontend,
+cambia su status a "churned" — el seed preserva ese estado.
 
-Esto crea todas las tablas (si no existen) y las llena con los datos
-que actualmente están en duro en los routers.
+CORRECCIONES v2:
+- 14 funciones de seed corregidas: insert_ignore_duplicates → insert_if_not_exists
+  para tablas con ID auto-generado (evita duplicados en cada run).
+- CL-007 añadida como ejemplo de clínica churned (soft-deleted).
+- text() movido a imports globales.
 """
 
 import asyncio
@@ -16,6 +26,8 @@ from datetime import datetime, timezone
 from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select, text
 
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
@@ -31,8 +43,8 @@ from app.models_db import (
     AiLatencyMetric, PoseAnalysisSnapshot, AppVersion, PlatformSetting,
     ImpersonateAuditLog, NeedsAttentionItem,
     InfrastructureCostSnapshot, InfraNode,
-    # ── NUEVOS MODELOS ────────────────────────────────────────────────────────
     ClinicianSummary, PatientHealthSummary, SupportTicket, Responder,
+    TicketCategory,
 )
 
 DATABASE_URL = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
@@ -42,14 +54,9 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DATOS ORIGINALES (NO SE BORRÓ NADA)
+# DATA DEFINITIONS
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── CLINICS_DATA: se agrega mongo_clinic_id a cada clínica ───────────────────
-# mongo_clinic_id = _id de la clínica en MongoDB Atlas.
-# Permite al job de sync hacer el lookup directo sin ambigüedad.
-# Los IDs placeholder "mongo_id_CLxxx" deben reemplazarse por los ObjectId
-# reales una vez que la empresa los entregue.
 CLINICS_DATA = [
     {
         "clinic_id": "CL-001", "name": "Clínica San José",
@@ -57,7 +64,7 @@ CLINICS_DATA = [
         "patients_used": 1500, "patients_limit": 5000,
         "health_score": 87,
         "last_login": datetime(2026, 4, 25, 14, 30, 0),
-        "created_at": datetime(2026, 1, 15),                     # ← YTD
+        "created_at": datetime(2026, 1, 15),
         "mrr": 1999.0,
         "contact_name": "Juan Pérez", "contact_email": "admin@clinicasanjose.com",
         "contact_phone": "+56911111111",
@@ -65,15 +72,14 @@ CLINICS_DATA = [
         "billing_email": "facturacion@clinicasanjose.com",
         "address": "Av. Providencia 1234, Santiago",
         "internal_notes": "Cliente clave, renovó por 2 años.",
-        "mongo_clinic_id": "mongo_id_CL001",                     # ← NUEVO
     },
     {
         "clinic_id": "CL-002", "name": "Centro Médico Integral",
         "tier": "smb", "status": "active",
         "patients_used": 340, "patients_limit": 500,
         "health_score": 62,
-        "last_login": datetime(2026, 3, 20, 9, 15, 0),           # ← dormido (>30d)
-        "created_at": datetime(2026, 3, 20),                     # ← YTD / QTD-Q1 (antes de 30D)
+        "last_login": datetime(2026, 3, 20, 9, 15, 0),
+        "created_at": datetime(2026, 3, 20),
         "mrr": 299.0,
         "contact_name": "María González", "contact_email": "hola@centromedico.com",
         "contact_phone": "+56922222222",
@@ -81,16 +87,14 @@ CLINICS_DATA = [
         "billing_email": "hola@centromedico.com",
         "address": "Av. Las Condes 456, Santiago",
         "internal_notes": None,
-        "mongo_clinic_id": "mongo_id_CL002",                     # ← NUEVO
     },
-    # ── NUEVAS CLÍNICAS ──────────────────────────────────────────────────────
     {
         "clinic_id": "CL-003", "name": "Centro Kinésico del Sur",
         "tier": "smb", "status": "active",
         "patients_used": 412, "patients_limit": 500,
         "health_score": 54,
         "last_login": datetime(2026, 5, 22, 8, 45, 0),
-        "created_at": datetime(2026, 5, 22, 14, 0, 0),           # ← 24H (ayer)
+        "created_at": datetime(2026, 5, 22, 14, 0, 0),
         "mrr": 299.0,
         "contact_name": "Pedro Alarcón", "contact_email": "pedro@kinesur.cl",
         "contact_phone": "+56933333333",
@@ -98,7 +102,6 @@ CLINICS_DATA = [
         "billing_email": "facturas@kinesur.cl",
         "address": "Av. Matta 2001, Santiago",
         "internal_notes": "Posible upgrade a plan superior en 3 meses.",
-        "mongo_clinic_id": "mongo_id_CL003",                     # ← NUEVO
     },
     {
         "clinic_id": "CL-004", "name": "Fisioclínica Norte",
@@ -106,7 +109,7 @@ CLINICS_DATA = [
         "patients_used": 3800, "patients_limit": 5000,
         "health_score": 91,
         "last_login": datetime(2026, 5, 22, 10, 20, 0),
-        "created_at": datetime(2026, 5, 19, 12, 0, 0),           # ← 7D
+        "created_at": datetime(2026, 5, 19, 12, 0, 0),
         "mrr": 1999.0,
         "contact_name": "Carolina Muñoz", "contact_email": "carolina@fisioclinicanorte.cl",
         "contact_phone": "+56944444444",
@@ -114,7 +117,6 @@ CLINICS_DATA = [
         "billing_email": "carolina@fisioclinicanorte.cl",
         "address": "Av. Independencia 3456, Santiago",
         "internal_notes": None,
-        "mongo_clinic_id": "mongo_id_CL004",                     # ← NUEVO
     },
     {
         "clinic_id": "CL-005", "name": "Rehab Centro",
@@ -122,7 +124,7 @@ CLINICS_DATA = [
         "patients_used": 30, "patients_limit": 50,
         "health_score": 88,
         "last_login": datetime(2026, 5, 3, 16, 0, 0),
-        "created_at": datetime(2026, 4, 10, 8, 0, 0),            # ← QTD (fuera de 30D)
+        "created_at": datetime(2026, 4, 10, 8, 0, 0),
         "mrr": 0.0,
         "contact_name": "Andrés Soto", "contact_email": "info@rehabcentro.cl",
         "contact_phone": "+56955555555",
@@ -130,15 +132,14 @@ CLINICS_DATA = [
         "billing_email": None,
         "address": "Calle Ejército 123, Santiago",
         "internal_notes": "Cliente en período de prueba, muy activo.",
-        "mongo_clinic_id": "mongo_id_CL005",                     # ← NUEVO
     },
     {
         "clinic_id": "CL-006", "name": "Clínica del Deporte SpA",
         "tier": "smb", "status": "warning",
         "patients_used": 490, "patients_limit": 500,
         "health_score": 41,
-        "last_login": datetime(2026, 2, 10, 12, 30, 0),          # ← dormido (>90d)
-        "created_at": datetime(2026, 3, 1),                      # ← antigua (>30d)
+        "last_login": datetime(2026, 2, 10, 12, 30, 0),
+        "created_at": datetime(2026, 3, 1),
         "mrr": 299.0,
         "contact_name": "Ignacio Rojas", "contact_email": "irojas@deporte.cl",
         "contact_phone": "+56966666666",
@@ -146,25 +147,39 @@ CLINICS_DATA = [
         "billing_email": "irojas@deporte.cl",
         "address": "Av. Bilbao 987, Santiago",
         "internal_notes": "Salud financiera baja, riesgo de churn moderado.",
-        "mongo_clinic_id": "mongo_id_CL006",                     # ← NUEVO
+    },
+    # ── Clínica churned: ejemplo de soft-delete desde el frontend ──────────
+    {
+        "clinic_id": "CL-007", "name": "Clínica del Bienestar",
+        "tier": "smb", "status": "churned",
+        "patients_used": 0, "patients_limit": 500,
+        "health_score": 18,
+        "last_login": datetime(2026, 4, 5, 10, 0, 0),
+        "created_at": datetime(2026, 2, 1),
+        "mrr": 0.0,
+        "contact_name": "Roberto Fernández", "contact_email": "rfernandez@bienestar.cl",
+        "contact_phone": "+56977777777",
+        "company_name": "Clínica del Bienestar Ltda.", "tax_id": "82.999.000-1",
+        "billing_email": "rfernandez@bienestar.cl",
+        "address": "Av. Vicuña Mackenna 500, Santiago",
+        "internal_notes": "Cliente churneado en Abril 2026 por motivos de precio. No renovó plan SMB.",
     },
 ]
 
 FEATURES_DATA = [
     {"feature_id": "feat-patients",   "name": "Active Patients",      "category": "Patients & Licenses",    "unit": "patients",    "unit_type": "number", "default_limit": "500",  "description": "Maximum number of concurrent active patients",         "icon": "users"},
     {"feature_id": "feat-clinicians", "name": "Clinician Seats",      "category": "Patients & Licenses",    "unit": "seats",       "unit_type": "number", "default_limit": "5",    "description": "Number of clinician licenses included",                "icon": "users"},
-    {"feature_id": "feat-tablets",    "name": "Tablet Devices",       "category": "Patients & Licenses",    "unit": "devices",     "unit_type": "number", "default_limit": "3",    "description": "Connected clinician tablet devices",                   "icon": "smartphone"},
+    {"feature_id": "feat-tablets",    "name": "Tablet Devices",       "category": "Patients & Licenses",    "unit": "devices",     "unit_type": "number", "default_limit": "3",    "description": "Connected clinician tablet devices",                    "icon": "smartphone"},
     {"feature_id": "feat-locations",  "name": "Clinic Locations",     "category": "Patients & Licenses",    "unit": "locations",   "unit_type": "number", "default_limit": "1",    "description": "Number of physical locations under one account",       "icon": "building2"},
     {"feature_id": "feat-pose",       "name": "Pose Analysis",        "category": "AI Capabilities",        "unit": "sessions/mo", "unit_type": "number", "default_limit": "1000", "description": "AI-powered movement & pose analysis sessions",         "icon": "activity"},
-    {"feature_id": "feat-soap",       "name": "SOAP Note Generation", "category": "AI Capabilities",        "unit": "notes/mo",    "unit_type": "number", "default_limit": "500",  "description": "Auto-generated clinical SOAP notes",                   "icon": "fileText"},
+    {"feature_id": "feat-soap",       "name": "SOAP Note Generation", "category": "AI Capabilities",        "unit": "notes/mo",    "unit_type": "number", "default_limit": "500",  "description": "Auto-generated clinical SOAP notes",                    "icon": "fileText"},
     {"feature_id": "feat-churn",      "name": "Churn Prediction",     "category": "AI Capabilities",        "unit": "enabled",     "unit_type": "toggle", "default_limit": "1",    "description": "AI-driven patient/clinic churn risk insights",         "icon": "trendingUp"},
     {"feature_id": "feat-video",      "name": "Video Processing",     "category": "AI Capabilities",        "unit": "minutes/mo",  "unit_type": "number", "default_limit": "600",  "description": "Cloud video session processing minutes",               "icon": "zap"},
     {"feature_id": "feat-storage",    "name": "Cloud Storage",        "category": "Storage & Data",         "unit": "GB",          "unit_type": "number", "default_limit": "100",  "description": "Patient records and media storage",                    "icon": "hardDrive"},
     {"feature_id": "feat-retention",  "name": "Data Retention",       "category": "Storage & Data",         "unit": "months",      "unit_type": "number", "default_limit": "24",   "description": "How long historical records are kept",                 "icon": "calendar"},
     {"feature_id": "feat-exports",    "name": "Data Exports",         "category": "Storage & Data",         "unit": "exports/mo",  "unit_type": "number", "default_limit": "10",   "description": "Bulk data export operations per month",                "icon": "download"},
     {"feature_id": "feat-backup",     "name": "Daily Backups",        "category": "Storage & Data",         "unit": "enabled",     "unit_type": "toggle", "default_limit": "1",    "description": "Automated encrypted daily backups",                    "icon": "database"},
-    {"feature_id": "feat-support",    "name": "Support Tier",         "category": "Support & Integrations", "unit": "level",       "unit_type": "select", "default_limit": "Email","description": "Customer support response level",                      "icon": "headphones",
-     "options": json.dumps(["Email", "Business Hours", "24/7 Priority"])},
+    {"feature_id": "feat-support",    "name": "Support Tier",         "category": "Support & Integrations", "unit": "level",       "unit_type": "select", "default_limit": "Email","description": "Customer support response level",                      "icon": "headphones", "options": json.dumps(["Email", "Business Hours", "24/7 Priority"])},
     {"feature_id": "feat-ehr",        "name": "EHR Integration",      "category": "Support & Integrations", "unit": "integrations","unit_type": "number", "default_limit": "1",    "description": "Connections to external EHR systems",                  "icon": "globe"},
     {"feature_id": "feat-api",        "name": "API Rate Limit",       "category": "Support & Integrations", "unit": "req/min",     "unit_type": "number", "default_limit": "60",   "description": "Public API requests per minute",                       "icon": "zap"},
     {"feature_id": "feat-webhooks",   "name": "Webhooks",             "category": "Support & Integrations", "unit": "enabled",     "unit_type": "toggle", "default_limit": "0",    "description": "Real-time event webhooks",                             "icon": "globe"},
@@ -230,7 +245,6 @@ CLINIC_PLANS_DATA = [
         "effective_from": datetime(2026, 2, 1), "effective_to": None,
         "reason": "Onboarding",
     },
-    # ── NUEVAS ASIGNACIONES ──────────────────────────────────────────────────
     {
         "assignment_id": "asgn-003", "clinic_id": "CL-003", "plan_id": "plan-smb",
         "plan_snapshot": json.dumps({"id": "plan-smb", "name": "SMB", "monthlyPrice": 299.0, "currency": "USD"}),
@@ -255,6 +269,13 @@ CLINIC_PLANS_DATA = [
         "effective_from": datetime(2026, 3, 1), "effective_to": None,
         "reason": "Onboarding",
     },
+    # ── CL-007: plan histórico antes de churn ─────────────────────────────
+    {
+        "assignment_id": "asgn-007", "clinic_id": "CL-007", "plan_id": "plan-smb",
+        "plan_snapshot": json.dumps({"id": "plan-smb", "name": "SMB", "monthlyPrice": 299.0, "currency": "USD"}),
+        "effective_from": datetime(2026, 2, 1), "effective_to": datetime(2026, 4, 15, 23, 59, 59),
+        "reason": "Plan cancelado — cliente churneado por precio",
+    },
 ]
 
 SCHEDULED_CHANGES_DATA = [
@@ -263,7 +284,6 @@ SCHEDULED_CHANGES_DATA = [
         "effective_from": datetime(2026, 7, 1),
         "status": "scheduled", "notify_clinic": True,
     },
-    # ── NUEVOS CAMBIOS PROGRAMADOS ──────────────────────────────────────────
     {
         "schedule_id": "sched-002", "clinic_id": "CL-003", "plan_id": "plan-enterprise",
         "effective_from": datetime(2026, 8, 1),
@@ -292,7 +312,6 @@ ALERTS_DATA = [
         "severity": "medium", "related_type": "clinic", "related_id": "CL-002",
         "created_at": datetime(2026, 4, 24, 15, 30, 0),
     },
-    # ── NUEVAS ALERTAS ──────────────────────────────────────────────────────
     {
         "alert_id": "ALT-003", "type": "health_declining",
         "title": "Salud de cliente cayendo",
@@ -313,6 +332,16 @@ ALERTS_DATA = [
         "severity": "medium", "related_type": "clinic", "related_id": "CL-005",
         "created_at": datetime(2026, 5, 6, 11, 0, 0),
     },
+    {
+        "alert_id": "ALT-005", "type": "clinic_churned",
+        "title": "Clínica churneada",
+        "message": "Clínica del Bienestar canceló su suscripción y fue marcada como churned.",
+        "title_key": "alerts.clinic_churned.title",
+        "message_key": "alerts.clinic_churned.message",
+        "message_params": json.dumps({"clinic": "Clínica del Bienestar", "date": "2026-04-15"}),
+        "severity": "high", "related_type": "clinic", "related_id": "CL-007",
+        "created_at": datetime(2026, 4, 15, 16, 0, 0),
+    },
 ]
 
 NOTIFICATIONS_DATA = [
@@ -329,7 +358,6 @@ NOTIFICATIONS_DATA = [
         "channel": "in_app", "status": "pending", "recipient_clinic_id": "all",
         "sent_by": "system-ops", "sender_name": "System Ops",
     },
-    # ── NUEVAS NOTIFICACIONES ──────────────────────────────────────────────
     {
         "notification_id": "notif-003", "title": "Recordatorio de pago",
         "message": "Su factura de abril está disponible. Pague antes del 5 de mayo.",
@@ -354,7 +382,6 @@ JOBS_DATA = [
         "started_at": datetime(2026, 4, 25, 19, 0, 5),
         "completed_at": datetime(2026, 4, 25, 19, 1, 10),
     },
-    # ── NUEVOS JOBS ─────────────────────────────────────────────────────────
     {
         "job_id": "job-b2a5-4c9e-8d1f", "job_type": "generate_monthly_invoices",
         "status": "running", "progress": 45, "created_by": "system-scheduler",
@@ -373,9 +400,6 @@ JOBS_DATA = [
     },
 ]
 
-# ── Un único usuario administrador WellQ ──────────────────────────────────────
-# Contraseña: WellQ2026!
-# Formato bcrypt $2b$12$ — compatible con passlib CryptContext(schemes=["bcrypt"])
 ADMIN_USERS_DATA = [
     {
         "user_id": "USR-WELLQ-001", "full_name": "WellQ Admin",
@@ -393,11 +417,10 @@ KPI_SNAPSHOTS_DATA = [
     {"month": "Mar", "year": 2026, "arr": 555600,  "mrr": 46300, "nrr_percentage": 104.0, "expansion_mrr": 14000, "churn_mrr": 1650, "nrr_status": "healthy"},
     {"month": "Abr", "year": 2026, "arr": 542400,  "mrr": 45200, "nrr_percentage": 104.5, "expansion_mrr": 15000, "churn_mrr": 1600, "nrr_status": "healthy"},
     {"month": "May", "year": 2026, "arr": 556800,  "mrr": 46400, "nrr_percentage": 104.8, "expansion_mrr": 15500, "churn_mrr": 1580, "nrr_status": "healthy"},
-
 ]
 
 APP_METRICS_DATA = [
-    {"metric_key": "active_now_total",            "metric_value": 42},
+    {"metric_key": "active_now_total",             "metric_value": 42},
     {"metric_key": "active_now_web_admin",         "metric_value": 5},
     {"metric_key": "active_now_mobile_clinician",  "metric_value": 12},
     {"metric_key": "active_now_mobile_patient",    "metric_value": 25},
@@ -407,97 +430,83 @@ APP_METRICS_DATA = [
     {"metric_key": "downloads_last_24h",           "metric_value": 56},
 ]
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# DATOS NUEVOS (YA EXISTENTES + NUEVOS)
-# ══════════════════════════════════════════════════════════════════════════════
-
 INVOICES_DATA = [
-    # ── CL-001: Clínica San José — Enterprise $1,999/mo (desde Ene 2026) ────────
     {"invoice_id": "INV-2026-001", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 1, 1),  "pdf_url": "https://storage.wellq.co/inv/1.pdf"},
     {"invoice_id": "INV-2026-002", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 2, 1),  "pdf_url": "https://storage.wellq.co/inv/2.pdf"},
     {"invoice_id": "INV-2026-003", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 3, 1),  "pdf_url": "https://storage.wellq.co/inv/3.pdf"},
     {"invoice_id": "INV-2026-004", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 4, 1),  "pdf_url": "https://storage.wellq.co/inv/4.pdf"},
     {"invoice_id": "INV-2026-005", "clinic_id": "CL-001", "amount": 1999.0, "currency": "USD", "status": "pending", "issued_at": datetime(2026, 5, 1),  "pdf_url": "https://storage.wellq.co/inv/5.pdf"},
-
-    # ── CL-002: Centro Médico Integral — SMB $299/mo (desde Feb 2026) ───────────
     {"invoice_id": "INV-2026-006", "clinic_id": "CL-002", "amount": 299.0,  "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 2, 1),  "pdf_url": "https://storage.wellq.co/inv/6.pdf"},
     {"invoice_id": "INV-2026-007", "clinic_id": "CL-002", "amount": 299.0,  "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 3, 1),  "pdf_url": "https://storage.wellq.co/inv/7.pdf"},
     {"invoice_id": "INV-2026-008", "clinic_id": "CL-002", "amount": 299.0,  "currency": "USD", "status": "pending", "issued_at": datetime(2026, 4, 15), "pdf_url": "https://storage.wellq.co/inv/8.pdf"},
     {"invoice_id": "INV-2026-009", "clinic_id": "CL-002", "amount": 299.0,  "currency": "USD", "status": "pending", "issued_at": datetime(2026, 5, 1),  "pdf_url": "https://storage.wellq.co/inv/9.pdf"},
-
-    # ── CL-003: Centro Kinésico del Sur — SMB $299/mo (desde Mar 2026) ──────────
-    # Tiene facturas impagas desde el inicio — riesgo de churn
     {"invoice_id": "INV-2026-010", "clinic_id": "CL-003", "amount": 299.0,  "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 3, 15), "pdf_url": "https://storage.wellq.co/inv/10.pdf"},
     {"invoice_id": "INV-2026-011", "clinic_id": "CL-003", "amount": 299.0,  "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 4, 15), "pdf_url": "https://storage.wellq.co/inv/11.pdf"},
     {"invoice_id": "INV-2026-012", "clinic_id": "CL-003", "amount": 299.0,  "currency": "USD", "status": "pending", "issued_at": datetime(2026, 5, 15), "pdf_url": "https://storage.wellq.co/inv/12.pdf"},
-
-    # ── CL-004: Fisioclínica Norte — Enterprise $1,999/mo (desde Ene 2026) ──────
     {"invoice_id": "INV-2026-013", "clinic_id": "CL-004", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 1, 20), "pdf_url": "https://storage.wellq.co/inv/13.pdf"},
     {"invoice_id": "INV-2026-014", "clinic_id": "CL-004", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 2, 20), "pdf_url": "https://storage.wellq.co/inv/14.pdf"},
     {"invoice_id": "INV-2026-015", "clinic_id": "CL-004", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 3, 20), "pdf_url": "https://storage.wellq.co/inv/15.pdf"},
     {"invoice_id": "INV-2026-016", "clinic_id": "CL-004", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 4, 20), "pdf_url": "https://storage.wellq.co/inv/16.pdf"},
     {"invoice_id": "INV-2026-017", "clinic_id": "CL-004", "amount": 1999.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 5, 1),  "pdf_url": "https://storage.wellq.co/inv/17.pdf"},
-
-    # ── CL-005: Rehab Centro — Trial $0/mo (sin facturas, es período de prueba) ─
-    # Sin registros intencionalmente — trial no genera cargos.
-
-    # ── CL-006: Clínica del Deporte SpA — SMB $299/mo (desde Mar 2026) ──────────
-    # Todas vencidas/atrasadas — health score bajo, riesgo real de churn
     {"invoice_id": "INV-2026-018", "clinic_id": "CL-006", "amount": 299.0,  "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 2, 1),  "pdf_url": "https://storage.wellq.co/inv/18.pdf"},
     {"invoice_id": "INV-2026-019", "clinic_id": "CL-006", "amount": 299.0,  "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 3, 1),  "pdf_url": "https://storage.wellq.co/inv/19.pdf"},
     {"invoice_id": "INV-2026-020", "clinic_id": "CL-006", "amount": 299.0,  "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 4, 1),  "pdf_url": "https://storage.wellq.co/inv/20.pdf"},
     {"invoice_id": "INV-2026-021", "clinic_id": "CL-006", "amount": 299.0,  "currency": "USD", "status": "pending", "issued_at": datetime(2026, 5, 1),  "pdf_url": "https://storage.wellq.co/inv/21.pdf"},
+    # ── CL-007: historial de facturas antes de churn ──────────────────────
+    {"invoice_id": "INV-2026-022", "clinic_id": "CL-007", "amount": 299.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 2, 1), "pdf_url": "https://storage.wellq.co/inv/22.pdf"},
+    {"invoice_id": "INV-2026-023", "clinic_id": "CL-007", "amount": 299.0, "currency": "USD", "status": "paid",    "issued_at": datetime(2026, 3, 1), "pdf_url": "https://storage.wellq.co/inv/23.pdf"},
+    {"invoice_id": "INV-2026-024", "clinic_id": "CL-007", "amount": 299.0, "currency": "USD", "status": "overdue", "issued_at": datetime(2026, 4, 1), "pdf_url": "https://storage.wellq.co/inv/24.pdf"},
 ]
 
-# ── CLINIC_USAGE_METRICS_DATA: se agregan 3 campos nuevos por clínica ─────────
-# appointments_this_month → COUNT appointments WHERE clinic_id=X AND start_time >= inicio mes
-# notes_generated         → COUNT clinical_notes (join provider_id → clinicians.clinic_ids[])
-# exercises_assigned      → COUNT patient_programs WHERE active_until = null (activos)
 CLINIC_USAGE_METRICS_DATA = [
     {
         "clinic_id": "CL-001", "period": "last_30_days",
         "active_clinicians": 45, "patient_sessions_completed": 3500,
         "ai_processing_minutes": 8400, "api_calls": 125000,
-        "appointments_this_month": 320, "notes_generated": 280, "exercises_assigned": 95,   # ← NUEVOS
+        "appointments_this_month": 320, "notes_generated": 280, "exercises_assigned": 95,
     },
     {
         "clinic_id": "CL-002", "period": "last_30_days",
         "active_clinicians": 5, "patient_sessions_completed": 450,
         "ai_processing_minutes": 950, "api_calls": 12000,
-        "appointments_this_month": 87,  "notes_generated": 64,  "exercises_assigned": 22,   # ← NUEVOS
+        "appointments_this_month": 87, "notes_generated": 64, "exercises_assigned": 22,
     },
-    # ── NUEVAS MÉTRICAS DE USO ──────────────────────────────────────────────
     {
         "clinic_id": "CL-003", "period": "last_30_days",
         "active_clinicians": 4, "patient_sessions_completed": 380,
         "ai_processing_minutes": 720, "api_calls": 9400,
-        "appointments_this_month": 145, "notes_generated": 110, "exercises_assigned": 41,   # ← NUEVOS
+        "appointments_this_month": 145, "notes_generated": 110, "exercises_assigned": 41,
     },
     {
         "clinic_id": "CL-004", "period": "last_30_days",
         "active_clinicians": 42, "patient_sessions_completed": 3200,
         "ai_processing_minutes": 7600, "api_calls": 98500,
-        "appointments_this_month": 210, "notes_generated": 185, "exercises_assigned": 67,   # ← NUEVOS
+        "appointments_this_month": 210, "notes_generated": 185, "exercises_assigned": 67,
     },
     {
         "clinic_id": "CL-005", "period": "last_30_days",
         "active_clinicians": 1, "patient_sessions_completed": 80,
         "ai_processing_minutes": 110, "api_calls": 1350,
-        "appointments_this_month": 53,  "notes_generated": 38,  "exercises_assigned": 14,   # ← NUEVOS
+        "appointments_this_month": 53, "notes_generated": 38, "exercises_assigned": 14,
     },
     {
         "clinic_id": "CL-006", "period": "last_30_days",
         "active_clinicians": 3, "patient_sessions_completed": 320,
         "ai_processing_minutes": 510, "api_calls": 8700,
-        "appointments_this_month": 60,  "notes_generated": 42,  "exercises_assigned": 18,   # ← NUEVOS
+        "appointments_this_month": 60, "notes_generated": 42, "exercises_assigned": 18,
+    },
+    # ── CL-007: métricas históricas (último mes activo) ───────────────────
+    {
+        "clinic_id": "CL-007", "period": "last_30_days",
+        "active_clinicians": 0, "patient_sessions_completed": 0,
+        "ai_processing_minutes": 0, "api_calls": 0,
+        "appointments_this_month": 0, "notes_generated": 0, "exercises_assigned": 0,
     },
 ]
 
 SERVERS_DATA = [
     {"server_id": "SRV-AZ-001", "name": "AI Processing Node 1", "region": "us-east-1", "status": "healthy",  "uptime": "99.9%",  "cpu_usage": "45%", "ram_usage": "60%"},
     {"server_id": "SRV-AZ-002", "name": "Database Primary",     "region": "sa-east-1", "status": "healthy",  "uptime": "99.99%", "cpu_usage": "65%", "ram_usage": "80%"},
-    # ── NUEVOS SERVIDORES ───────────────────────────────────────────────────
     {"server_id": "SRV-AZ-003", "name": "Web App Server",       "region": "us-east-1", "status": "healthy",  "uptime": "99.95%", "cpu_usage": "30%", "ram_usage": "55%"},
     {"server_id": "SRV-AZ-004", "name": "Cache Redis",          "region": "sa-east-1", "status": "healthy",  "uptime": "100%",   "cpu_usage": "10%", "ram_usage": "25%"},
     {"server_id": "SRV-AZ-005", "name": "Queue Worker 1",       "region": "us-east-1", "status": "degraded", "uptime": "99.8%",  "cpu_usage": "78%", "ram_usage": "90%"},
@@ -506,13 +515,11 @@ SERVERS_DATA = [
 BACKGROUND_PROCESSES_DATA = [
     {"process_id": "PROC-001", "name": "Daily Invoice Generation",    "status": "sleeping", "queued_items": 0,   "memory_consumption": "120MB"},
     {"process_id": "PROC-002", "name": "Video Pose Estimation Queue", "status": "running",  "queued_items": 15,  "memory_consumption": "1024MB"},
-    # ── NUEVOS PROCESOS ─────────────────────────────────────────────────────
     {"process_id": "PROC-003", "name": "Email Scheduler",             "status": "running",  "queued_items": 120, "memory_consumption": "45MB"},
     {"process_id": "PROC-004", "name": "Health Score Calculator",     "status": "sleeping", "queued_items": 0,   "memory_consumption": "80MB"},
     {"process_id": "PROC-005", "name": "Churn Prediction Job",        "status": "running",  "queued_items": 3,   "memory_consumption": "512MB"},
 ]
 
-# ── MRR: 12 meses completos (Jun 2025 → May 2026) ─────────────────────────────
 MRR_SNAPSHOTS_DATA = [
     {"period_month": "Jun", "period_year": 2025, "total_mrr": 36500.0, "new_business": 900.0,  "expansion": 5500.0,  "contraction": 400.0, "churn": 2100.0, "retained": 34400.0, "monthly_growth_percentage": 1.2},
     {"period_month": "Jul", "period_year": 2025, "total_mrr": 37800.0, "new_business": 1000.0, "expansion": 6200.0,  "contraction": 350.0, "churn": 2000.0, "retained": 35800.0, "monthly_growth_percentage": 3.6},
@@ -526,10 +533,8 @@ MRR_SNAPSHOTS_DATA = [
     {"period_month": "Mar", "period_year": 2026, "total_mrr": 46300.0, "new_business": 1200.0, "expansion": 14000.0, "contraction": 500.0, "churn": 1650.0, "retained": 44650.0, "monthly_growth_percentage": 3.4},
     {"period_month": "Abr", "period_year": 2026, "total_mrr": 45200.0, "new_business": 1500.0, "expansion": 15000.0, "contraction": 800.0, "churn": 1600.0, "retained": 43600.0, "monthly_growth_percentage": 2.1},
     {"period_month": "May", "period_year": 2026, "total_mrr": 46400.0, "new_business": 1800.0, "expansion": 15500.0, "contraction": 600.0, "churn": 1580.0, "retained": 44820.0, "monthly_growth_percentage": 2.7},
-
 ]
 
-# ── Churn risk con risk_level siempre definido ─────────────────────────────────
 CHURN_RISK_REGIONS_DATA = [
     {"region": "North America", "clinics_at_risk": 2, "potential_mrr_loss": 598.0,  "risk_level": "Low"},
     {"region": "LATAM",         "clinics_at_risk": 5, "potential_mrr_loss": 1495.0, "risk_level": "Medium"},
@@ -540,45 +545,24 @@ CHURN_RISK_REGIONS_DATA = [
 APP_USAGE_STATS_DATA = [
     {
         "app_type": "patients", "period": "current_month",
-        "monthly_active_users": 15200,
-        "average_session_length_minutes": 8.5,
-        "crash_free_sessions_percentage": 99.8,
-        "top_screens": json.dumps(["Home", "Exercises", "Progress"]),
-        "total_downloads": 892000,
-        "active_today": 45200,
-        "active_30d": 579000,
-        "inactive_users": 314000,
-        "ios_downloads": 456000,
-        "android_downloads": 436000,
-        "registered_users": 0,
+        "monthly_active_users": 15200, "average_session_length_minutes": 8.5,
+        "crash_free_sessions_percentage": 99.8, "top_screens": json.dumps(["Home", "Exercises", "Progress"]),
+        "total_downloads": 892000, "active_today": 45200, "active_30d": 579000, "inactive_users": 314000,
+        "ios_downloads": 456000, "android_downloads": 436000, "registered_users": 0,
     },
     {
         "app_type": "tablet", "period": "current_month",
-        "monthly_active_users": 3400,
-        "average_session_length_minutes": 45.2,
-        "crash_free_sessions_percentage": 99.9,
-        "top_screens": json.dumps(["Dashboard", "Patient Details", "Notes"]),
-        "total_downloads": 4850,
-        "active_today": 2340,
-        "active_30d": 4210,
-        "inactive_users": 640,
-        "ios_downloads": 2900,
-        "android_downloads": 1950,
-        "registered_users": 0,
+        "monthly_active_users": 3400, "average_session_length_minutes": 45.2,
+        "crash_free_sessions_percentage": 99.9, "top_screens": json.dumps(["Dashboard", "Patient Details", "Notes"]),
+        "total_downloads": 4850, "active_today": 2340, "active_30d": 4210, "inactive_users": 640,
+        "ios_downloads": 2900, "android_downloads": 1950, "registered_users": 0,
     },
     {
         "app_type": "web", "period": "current_month",
-        "monthly_active_users": 7890,
-        "average_session_length_minutes": 22.0,
-        "crash_free_sessions_percentage": 99.7,
-        "top_screens": json.dumps(["Dashboard", "Clinics", "Reports"]),
-        "total_downloads": 0,
-        "active_today": 1245,
-        "active_30d": 7890,
-        "inactive_users": 1030,
-        "ios_downloads": 0,
-        "android_downloads": 0,
-        "registered_users": 8920,
+        "monthly_active_users": 7890, "average_session_length_minutes": 22.0,
+        "crash_free_sessions_percentage": 99.7, "top_screens": json.dumps(["Dashboard", "Clinics", "Reports"]),
+        "total_downloads": 0, "active_today": 1245, "active_30d": 7890, "inactive_users": 1030,
+        "ios_downloads": 0, "android_downloads": 0, "registered_users": 8920,
     },
 ]
 
@@ -604,44 +588,23 @@ COHORT_RETENTION_DATA = [
 SOAP_QUALITY_METRICS_DATA = [
     {
         "period": "current_month",
-        "total_notes_generated": 45000,
-        "acceptance_rate_percentage": 92.5,
-        "edits_required_percentage": 7.5,
-        "average_time_saved_minutes_per_note": 6.2,
-        "common_corrections": json.dumps(["Patient tone adjustment", "Adding specific ROM degrees"]),
+        "total_notes_generated": 45000, "acceptance_rate_percentage": 92.5, "edits_required_percentage": 7.5,
+        "average_time_saved_minutes_per_note": 6.2, "common_corrections": json.dumps(["Patient tone adjustment", "Adding specific ROM degrees"]),
     },
 ]
 
 AI_COST_SNAPSHOTS_DATA = [
-    {
-        "period": "last_month", "currency": "USD", "total_cost": 3200.0,
-        "breakdown": json.dumps({"OpenAI (SOAP)": 1100, "GCP Vertex (Pose)": 2100}),
-        "projected_eom_cost": 3800.0,
-    },
-    {
-        "period": "current_month", "currency": "USD", "total_cost": 3450.0,
-        "breakdown": json.dumps({"OpenAI (SOAP)": 1200, "GCP Vertex (Pose)": 2250}),
-        "projected_eom_cost": 4200.0,
-    },
+    {"period": "last_month",     "currency": "USD", "total_cost": 3200.0, "breakdown": json.dumps({"OpenAI (SOAP)": 1100, "GCP Vertex (Pose)": 2100}), "projected_eom_cost": 3800.0},
+    {"period": "current_month",  "currency": "USD", "total_cost": 3450.0, "breakdown": json.dumps({"OpenAI (SOAP)": 1200, "GCP Vertex (Pose)": 2250}), "projected_eom_cost": 4200.0},
 ]
 
 POSE_ANALYSIS_SNAPSHOTS_DATA = [
-    {
-        "period": "last_month",
-        "total_sessions_analyzed": 7800,
-        "overall_success_rate_percentage": 97.5,
-        "failure_reasons": json.dumps({"Poor Lighting": 50, "Subject out of frame": 45, "Unknown Error": 20}),
-    },
-    {
-        "period": "last_7_days",
-        "total_sessions_analyzed": 8500,
-        "overall_success_rate_percentage": 98.2,
-        "failure_reasons": json.dumps({"Poor Lighting": 45, "Subject out of frame": 40, "Unknown Error": 15}),
-    },
+    {"period": "last_month",  "total_sessions_analyzed": 7800, "overall_success_rate_percentage": 97.5, "failure_reasons": json.dumps({"Poor Lighting": 50, "Subject out of frame": 45, "Unknown Error": 20})},
+    {"period": "last_7_days", "total_sessions_analyzed": 8500, "overall_success_rate_percentage": 98.2, "failure_reasons": json.dumps({"Poor Lighting": 45, "Subject out of frame": 40, "Unknown Error": 15})},
 ]
 
 AI_LATENCY_METRICS_DATA = [
-    {"service": "soap_generation",         "period": "last_24_hours", "average_latency_ms": 1200, "p95_latency_ms": 2500, "status": "healthy"},
+    {"service": "soap_generation",          "period": "last_24_hours", "average_latency_ms": 1200, "p95_latency_ms": 2500, "status": "healthy"},
     {"service": "pose_estimation_realtime", "period": "last_24_hours", "average_latency_ms": 150,  "p95_latency_ms": 300,  "status": "healthy"},
 ]
 
@@ -658,219 +621,65 @@ PLATFORM_SETTINGS_DATA = [
     {"setting_key": "support_email",    "setting_value": "wellq.admin@gmail.com"},
 ]
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TABLAS NUEVAS – DATOS INICIALES (existentes antes de este PR)
-# ══════════════════════════════════════════════════════════════════════════════
-
 IMPERSONATE_AUDIT_LOG_DATA = [
     {
         "audit_log_id": "audit-001", "clinic_id": "CL-001", "clinic_name": "Clínica San José",
         "admin_user_id": "USR-WELLQ-001", "admin_email": "admin@wellq.com",
         "reason": "Revisar configuración de facturación por solicitud del cliente.",
         "session_token_hash": "hash123ejemplo",
-        "expires_at": datetime(2026, 5, 8, 12, 0, 0),
-        "revoked_at": None,
+        "expires_at": datetime(2026, 5, 8, 12, 0, 0), "revoked_at": None,
     },
 ]
 
 NEEDS_ATTENTION_ITEMS_DATA = [
-    {
-        "item_id": "attn-001", "clinic_id": "CL-001", "clinic_name": "Clínica San José",
-        "issue_type": "overdue_invoice", "severity": "critical",
-        "description": "Factura INV-2026-001 vencida hace más de 30 días.",
-        "action_url": "/invoices/INV-2026-001",
-    },
-    {
-        "item_id": "attn-002", "clinic_id": "CL-006", "clinic_name": "Clínica del Deporte SpA",
-        "issue_type": "low_health", "severity": "warning",
-        "description": "Health Score bajó a 41. Revisar engagement y facturación.",
-        "action_url": "/clinics/CL-006",
-    },
-    {
-        "item_id": "attn-003", "clinic_id": "CL-005", "clinic_name": "Rehab Centro",
-        "issue_type": "no_login", "severity": "info",
-        "description": "No ha iniciado sesión en 3 días. Posible inactividad en prueba.",
-        "action_url": "/clinics/CL-005",
-    },
+    {"item_id": "attn-001", "clinic_id": "CL-001", "clinic_name": "Clínica San José",       "issue_type": "overdue_invoice", "severity": "critical", "description": "Factura INV-2026-001 vencida hace más de 30 días.", "action_url": "/invoices/INV-2026-001"},
+    {"item_id": "attn-002", "clinic_id": "CL-006", "clinic_name": "Clínica del Deporte SpA","issue_type": "low_health",      "severity": "warning",  "description": "Health Score bajó a 41. Revisar engagement y facturación.", "action_url": "/clinics/CL-006"},
+    {"item_id": "attn-003", "clinic_id": "CL-005", "clinic_name": "Rehab Centro",           "issue_type": "no_login",        "severity": "info",     "description": "No ha iniciado sesión en 3 días. Posible inactividad en prueba.", "action_url": "/clinics/CL-005"},
 ]
 
 INFRASTRUCTURE_COST_SNAPSHOTS_DATA = [
     {
         "period": "Marzo 2026", "period_year": 2026, "period_month": 3,
         "total_usd": 8450.0, "budget_usd": 9000.0, "budget_used_percent": 93.9,
-        "breakdown": json.dumps([
-            {"service": "Compute Engine", "cost": 3200},
-            {"service": "Cloud SQL",      "cost": 1800},
-            {"service": "Cloud Storage",  "cost": 450},
-            {"service": "AI APIs",        "cost": 2200},
-            {"service": "Networking",     "cost": 800},
-        ]),
+        "breakdown": json.dumps([{"service": "Compute Engine", "cost": 3200}, {"service": "Cloud SQL", "cost": 1800}, {"service": "Cloud Storage", "cost": 450}, {"service": "AI APIs", "cost": 2200}, {"service": "Networking", "cost": 800}]),
     },
     {
         "period": "Abril 2026", "period_year": 2026, "period_month": 4,
         "total_usd": 9120.0, "budget_usd": 9000.0, "budget_used_percent": 101.3,
-        "breakdown": json.dumps([
-            {"service": "Compute Engine", "cost": 3500},
-            {"service": "Cloud SQL",      "cost": 1900},
-            {"service": "Cloud Storage",  "cost": 520},
-            {"service": "AI APIs",        "cost": 2400},
-            {"service": "Networking",     "cost": 800},
-        ]),
+        "breakdown": json.dumps([{"service": "Compute Engine", "cost": 3500}, {"service": "Cloud SQL", "cost": 1900}, {"service": "Cloud Storage", "cost": 520}, {"service": "AI APIs", "cost": 2400}, {"service": "Networking", "cost": 800}]),
     },
 ]
 
 INFRA_NODES_DATA = [
-    {
-        "node_id": "node-api-us-east", "name": "API Gateway US East", "type": "api",
-        "status": "healthy", "region": "us-east-1",
-        "metrics": json.dumps({"requests_per_sec": 340, "latency_p95": 120}),
-    },
-    {
-        "node_id": "node-worker-pose", "name": "Pose Worker", "type": "worker",
-        "status": "healthy", "region": "us-east-1",
-        "metrics": json.dumps({"queue_depth": 15, "processed_last_hour": 200}),
-    },
-    {
-        "node_id": "node-db-primary", "name": "Database Primary", "type": "database",
-        "status": "healthy", "region": "sa-east-1",
-        "metrics": json.dumps({"connections": 45, "slow_queries": 2}),
-    },
-    {
-        "node_id": "node-cache-01", "name": "Redis Cache", "type": "cache",
-        "status": "healthy", "region": "us-east-1",
-        "metrics": json.dumps({"hit_rate": 0.92, "memory_used_mb": 256}),
-    },
-    {
-        "node_id": "node-queue-01", "name": "Bull Queue Worker", "type": "queue",
-        "status": "degraded", "region": "us-east-1",
-        "metrics": json.dumps({"queue_depth": 340, "failures_last_hour": 5}),
-    },
+    {"node_id": "node-api-us-east", "name": "API Gateway US East", "type": "api",      "status": "healthy",  "region": "us-east-1", "metrics": json.dumps({"requests_per_sec": 340, "latency_p95": 120})},
+    {"node_id": "node-worker-pose", "name": "Pose Worker",         "type": "worker",   "status": "healthy",  "region": "us-east-1", "metrics": json.dumps({"queue_depth": 15, "processed_last_hour": 200})},
+    {"node_id": "node-db-primary",  "name": "Database Primary",    "type": "database", "status": "healthy",  "region": "sa-east-1", "metrics": json.dumps({"connections": 45, "slow_queries": 2})},
+    {"node_id": "node-cache-01",    "name": "Redis Cache",         "type": "cache",    "status": "healthy",  "region": "us-east-1", "metrics": json.dumps({"hit_rate": 0.92, "memory_used_mb": 256})},
+    {"node_id": "node-queue-01",    "name": "Bull Queue Worker",   "type": "queue",    "status": "degraded", "region": "us-east-1", "metrics": json.dumps({"queue_depth": 340, "failures_last_hour": 5})},
 ]
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TABLAS NUEVAS — SINCRONIZADAS DESDE MONGODB DE LA EMPRESA
-# ══════════════════════════════════════════════════════════════════════════════
-
-# ── CLINICIAN_SUMMARIES_DATA ───────────────────────────────────────────────────
-# Un registro por clínica. Fuente: colección `clinicians` de MongoDB.
-# active_clinicians < total_clinicians en todos los casos (algunos inactivos).
-# specialties: strings reales del contexto clínico WellQ.
-# recorded_at simula el timestamp del último sync desde MongoDB.
 CLINICIAN_SUMMARIES_DATA = [
-    {
-        "clinic_id": "CL-001",
-        "total_clinicians": 12,
-        "active_clinicians": 10,
-        "specialties": json.dumps(["Kinesiología", "Traumatología", "Rehabilitación Física"]),
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-002",
-        "total_clinicians": 5,
-        "active_clinicians": 4,
-        "specialties": json.dumps(["Kinesiología", "Neurología"]),
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-003",
-        "total_clinicians": 6,
-        "active_clinicians": 4,
-        "specialties": json.dumps(["Kinesiología", "Medicina del Deporte"]),
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-004",
-        "total_clinicians": 48,
-        "active_clinicians": 42,
-        "specialties": json.dumps(["Kinesiología", "Traumatología", "Reumatología", "Rehabilitación Física", "Neurología"]),
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-005",
-        "total_clinicians": 2,
-        "active_clinicians": 1,
-        "specialties": json.dumps(["Kinesiología"]),
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-006",
-        "total_clinicians": 4,
-        "active_clinicians": 3,
-        "specialties": json.dumps(["Kinesiología", "Medicina del Deporte"]),
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
+    {"clinic_id": "CL-001", "total_clinicians": 12, "active_clinicians": 10, "specialties": json.dumps(["Kinesiología", "Traumatología", "Rehabilitación Física"]),           "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-002", "total_clinicians": 5,  "active_clinicians": 4,  "specialties": json.dumps(["Kinesiología", "Neurología"]),                                       "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-003", "total_clinicians": 6,  "active_clinicians": 4,  "specialties": json.dumps(["Kinesiología", "Medicina del Deporte"]),                             "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-004", "total_clinicians": 48, "active_clinicians": 42, "specialties": json.dumps(["Kinesiología", "Traumatología", "Reumatología", "Rehabilitación Física", "Neurología"]), "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-005", "total_clinicians": 2,  "active_clinicians": 1,  "specialties": json.dumps(["Kinesiología"]),                                                     "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-006", "total_clinicians": 4,  "active_clinicians": 3,  "specialties": json.dumps(["Kinesiología", "Medicina del Deporte"]),                             "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    # ── CL-007: datos al momento del churn ───────────────────────────────
+    {"clinic_id": "CL-007", "total_clinicians": 3,  "active_clinicians": 0,  "specialties": json.dumps(["Kinesiología"]),                                                     "recorded_at": datetime(2026, 4, 15, 3, 0, 0)},
 ]
 
-# ── PATIENT_HEALTH_DATA ────────────────────────────────────────────────────────
-# Un registro por clínica. Fuente: colección `patients` de MongoDB, campo `status`.
-# INVARIANTE: at_risk + declining + stable + improving == total_patients
-#             total_patients debe coincidir con patients_used en CLINICS_DATA.
-# CL-001: 1500 | CL-002: 340 | CL-003: 412 | CL-004: 3800 | CL-005: 30 | CL-006: 490
 PATIENT_HEALTH_DATA = [
-    {
-        "clinic_id": "CL-001",
-        "total_patients": 1500,   # = patients_used CL-001
-        "at_risk":   120,         # 8%
-        "declining": 180,         # 12%
-        "stable":    850,         # 57%
-        "improving": 350,         # 23%  → suma: 1500 ✓
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-002",
-        "total_patients": 340,    # = patients_used CL-002
-        "at_risk":   45,          # 13%
-        "declining": 60,          # 18%
-        "stable":    180,         # 53%
-        "improving": 55,          # 16%  → suma: 340 ✓
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-003",
-        "total_patients": 412,    # = patients_used CL-003
-        "at_risk":   58,          # 14%
-        "declining": 74,          # 18%
-        "stable":    210,         # 51%
-        "improving": 70,          # 17%  → suma: 412 ✓
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-004",
-        "total_patients": 3800,   # = patients_used CL-004
-        "at_risk":   280,         # 7%
-        "declining": 420,         # 11%
-        "stable":    2200,        # 58%
-        "improving": 900,         # 24%  → suma: 3800 ✓
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-005",
-        "total_patients": 30,     # = patients_used CL-005
-        "at_risk":   2,           # 7%
-        "declining": 3,           # 10%
-        "stable":    18,          # 60%
-        "improving": 7,           # 23%  → suma: 30 ✓
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
-    {
-        "clinic_id": "CL-006",
-        "total_patients": 490,    # = patients_used CL-006
-        "at_risk":   95,          # 19% — clínica en warning, más pacientes en riesgo
-        "declining": 120,         # 24%
-        "stable":    220,         # 45%
-        "improving": 55,          # 12%  → suma: 490 ✓
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
-    },
+    {"clinic_id": "CL-001", "total_patients": 1500, "at_risk": 120, "declining": 180, "stable": 850,  "improving": 350, "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-002", "total_patients": 340,  "at_risk": 45,  "declining": 60,  "stable": 180,  "improving": 55,  "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-003", "total_patients": 412,  "at_risk": 58,  "declining": 74,  "stable": 210,  "improving": 70,  "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-004", "total_patients": 3800, "at_risk": 280, "declining": 420, "stable": 2200, "improving": 900, "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-005", "total_patients": 30,   "at_risk": 2,   "declining": 3,   "stable": 18,   "improving": 7,   "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    {"clinic_id": "CL-006", "total_patients": 490,  "at_risk": 95,  "declining": 120, "stable": 220,  "improving": 55,  "recorded_at": datetime(2026, 5, 15, 3, 0, 0)},
+    # ── CL-007: datos históricos al momento del churn ────────────────────
+    {"clinic_id": "CL-007", "total_patients": 85,   "at_risk": 85,  "declining": 0,   "stable": 0,    "improving": 0,   "recorded_at": datetime(2026, 4, 15, 3, 0, 0)},
 ]
 
-# ── SUPPORT_TICKETS_DATA ───────────────────────────────────────────────────────
-# 6 tickets distribuidos entre clínicas.
-# Los 3 estados (Open, Closed, Sent) están representados para que los filtros
-# de SupportView tengan datos variados.
-# clinic_id se incluye directamente en el seed (en producción se infiere
-# desde reporter.email → users → clinicians o lo provee la empresa en el sync).
 RESPONDERS_DATA = [
     {
         "responder_id": "RESP-001",
@@ -883,118 +692,68 @@ RESPONDERS_DATA = [
 
 SUPPORT_TICKETS_DATA = [
     {
-        "ticket_id": "TK-001",
-        "clinic_id": "CL-001",
-        "title": "Error al cargar historial de ejercicios",
+        "ticket_id": "TK-001", "clinic_id": "CL-001", "title": "Error al cargar historial de ejercicios",
         "description": "Algunos pacientes reportan que la pantalla de historial queda en blanco al cargar.",
-        "status": "Open",
-        "category": "Bug",
-        "reporter_name": "Juan Pérez",
-        "reporter_email": "admin@clinicasanjose.com",
-        "responder_id": "RESP-001",
-        "responder_name": "WellQ Admin",
-        "reported_at": datetime(2026, 5, 10, 9, 30, 0),
-        "closed_at": None,
-        "solution": None,
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
+        "status": "Open", "category": "Bug", "reporter_name": "Juan Pérez", "reporter_email": "admin@clinicasanjose.com",
+        "responder_id": "RESP-001", "responder_name": "WellQ Admin",
+        "reported_at": datetime(2026, 5, 10, 9, 30, 0), "closed_at": None, "solution": None, "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
     },
     {
-        "ticket_id": "TK-002",
-        "clinic_id": "CL-002",
-        "title": "Cobro duplicado en factura de abril",
+        "ticket_id": "TK-002", "clinic_id": "CL-002", "title": "Cobro duplicado en factura de abril",
         "description": "La factura de abril aparece cobrada dos veces en el estado de cuenta.",
-        "status": "Closed",
-        "category": "Billing",
-        "reporter_name": "María González",
-        "reporter_email": "hola@centromedico.com",
-        "responder_id": "RESP-001",
-        "responder_name": "WellQ Admin",
-        "reported_at": datetime(2026, 4, 20, 11, 0, 0),
-        "closed_at": datetime(2026, 4, 22, 15, 0, 0),
-        "solution": "Se emitió nota de crédito y se ajustó la factura. Reembolso procesado.",
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
+        "status": "Closed", "category": "Billing", "reporter_name": "María González", "reporter_email": "hola@centromedico.com",
+        "responder_id": "RESP-001", "responder_name": "WellQ Admin",
+        "reported_at": datetime(2026, 4, 20, 11, 0, 0), "closed_at": datetime(2026, 4, 22, 15, 0, 0),
+        "solution": "Se emitió nota de crédito y se ajustó la factura. Reembolso procesado.", "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
     },
     {
-        "ticket_id": "TK-003",
-        "clinic_id": "CL-003",
-        "title": "Solicitud: exportar reportes en formato Excel",
+        "ticket_id": "TK-003", "clinic_id": "CL-003", "title": "Solicitud: exportar reportes en formato Excel",
         "description": "Necesitamos poder exportar los reportes de adherencia en .xlsx además de PDF.",
-        "status": "Open",
-        "category": "Feature",
-        "reporter_name": "Pedro Alarcón",
-        "reporter_email": "pedro@kinesur.cl",
-        "responder_id": None,
-        "responder_name": None,
-        "reported_at": datetime(2026, 5, 8, 14, 0, 0),
-        "closed_at": None,
-        "solution": None,
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
+        "status": "Open", "category": "Feature", "reporter_name": "Pedro Alarcón", "reporter_email": "pedro@kinesur.cl",
+        "responder_id": None, "responder_name": None,
+        "reported_at": datetime(2026, 5, 8, 14, 0, 0), "closed_at": None, "solution": None, "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
     },
     {
-        "ticket_id": "TK-004",
-        "clinic_id": "CL-001",
-        "title": "Solicitud de aumento de límite de pacientes",
+        "ticket_id": "TK-004", "clinic_id": "CL-001", "title": "Solicitud de aumento de límite de pacientes",
         "description": "Estamos llegando al 95% del límite. Necesitamos ampliar a 6000 pacientes.",
-        "status": "Sent",
-        "category": "Request",
-        "reporter_name": "Juan Pérez",
-        "reporter_email": "admin@clinicasanjose.com",
-        "responder_id": "RESP-001",
-        "responder_name": "WellQ Admin",
-        "reported_at": datetime(2026, 5, 12, 10, 0, 0),
-        "closed_at": None,
-        "solution": None,
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
+        "status": "Sent", "category": "Request", "reporter_name": "Juan Pérez", "reporter_email": "admin@clinicasanjose.com",
+        "responder_id": "RESP-001", "responder_name": "WellQ Admin",
+        "reported_at": datetime(2026, 5, 12, 10, 0, 0), "closed_at": None, "solution": None, "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
     },
     {
-        "ticket_id": "TK-005",
-        "clinic_id": "CL-004",
-        "title": "Falla en sincronización con TM3",
+        "ticket_id": "TK-005", "clinic_id": "CL-004", "title": "Falla en sincronización con TM3",
         "description": "Las citas del día no se están sincronizando correctamente desde TM3.",
-        "status": "Closed",
-        "category": "Bug",
-        "reporter_name": "Carolina Muñoz",
-        "reporter_email": "carolina@fisioclinicanorte.cl",
-        "responder_id": "RESP-001",
-        "responder_name": "WellQ Admin",
-        "reported_at": datetime(2026, 5, 5, 8, 0, 0),
-        "closed_at": datetime(2026, 5, 6, 12, 0, 0),
-        "solution": "Se reconfiguró el webhook de TM3 y se forzó re-sync manual. Estable desde entonces.",
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
+        "status": "Closed", "category": "Bug", "reporter_name": "Carolina Muñoz", "reporter_email": "carolina@fisioclinicanorte.cl",
+        "responder_id": "RESP-001", "responder_name": "WellQ Admin",
+        "reported_at": datetime(2026, 5, 5, 8, 0, 0), "closed_at": datetime(2026, 5, 6, 12, 0, 0),
+        "solution": "Se reconfiguró el webhook de TM3 y se forzó re-sync manual. Estable desde entonces.", "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
     },
     {
-        "ticket_id": "TK-006",
-        "clinic_id": "CL-006",
-        "title": "No puedo acceder al módulo de reportes",
+        "ticket_id": "TK-006", "clinic_id": "CL-006", "title": "No puedo acceder al módulo de reportes",
         "description": "Al intentar abrir la sección de reportes aparece error 403.",
-        "status": "Open",
-        "category": "Bug",
-        "reporter_name": "Ignacio Rojas",
-        "reporter_email": "irojas@deporte.cl",
-        "responder_id": "RESP-001",
-        "responder_name": "WellQ Admin",
-        "reported_at": datetime(2026, 5, 14, 16, 30, 0),
-        "closed_at": None,
-        "solution": None,
-        "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
+        "status": "Open", "category": "Bug", "reporter_name": "Ignacio Rojas", "reporter_email": "irojas@deporte.cl",
+        "responder_id": "RESP-001", "responder_name": "WellQ Admin",
+        "reported_at": datetime(2026, 5, 14, 16, 30, 0), "closed_at": None, "solution": None, "recorded_at": datetime(2026, 5, 15, 3, 0, 0),
     },
+]
+
+TICKET_CATEGORIES_DATA = [
+    {"category_id": "cat-001", "name": "Bug",     "team": "Técnico",    "emails": '["soporte@wellq.co"]',  "is_active": True},
+    {"category_id": "cat-002", "name": "Billing", "team": "Financiero", "emails": '["pagos@wellq.co"]',    "is_active": True},
+    {"category_id": "cat-003", "name": "Feature", "team": "Técnico",    "emails": '["producto@wellq.co"]', "is_active": True},
+    {"category_id": "cat-004", "name": "Request", "team": "General",    "emails": '["contacto@wellq.co"]', "is_active": True},
 ]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FUNCIONES DE SEED
+# SETUP DE TABLAS
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        # Agrega columnas nuevas si no existen (idempotente — seguro de re-ejecutar)
-        from sqlalchemy import text
-        
-        # ── SOLUCIÓN: Agrega la columna password_hash a los usuarios administradores ──
-        await conn.execute(text("ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS password_hash varchar DEFAULT NULL"))
 
-        # ── app_usage_stats (columnas previas) ──────────────────────────────
+        await conn.execute(text("ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS password_hash varchar DEFAULT NULL"))
         await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS total_downloads integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS active_today integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS active_30d integer DEFAULT 0"))
@@ -1002,247 +761,266 @@ async def create_tables():
         await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS ios_downloads integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS android_downloads integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE app_usage_stats ADD COLUMN IF NOT EXISTS registered_users integer DEFAULT 0"))
-        # ── clinics (campo nuevo) ────────────────────────────────────────────
-        await conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS mongo_clinic_id varchar DEFAULT NULL"))
-        # ── clinic_usage_metrics (campos nuevos) ────────────────────────────
+
+        # ── Soft delete para clínicas churned ────────────────────────────
+        await conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT FALSE"))
+        await conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS deleted_at timestamp DEFAULT NULL"))
+
         await conn.execute(text("ALTER TABLE clinic_usage_metrics ADD COLUMN IF NOT EXISTS appointments_this_month integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE clinic_usage_metrics ADD COLUMN IF NOT EXISTS notes_generated integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE clinic_usage_metrics ADD COLUMN IF NOT EXISTS exercises_assigned integer DEFAULT 0"))
-        # ── alerts (campos i18n) ─────────────────────────────────────────────
         await conn.execute(text("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS title_key varchar DEFAULT NULL"))
         await conn.execute(text("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS message_key varchar DEFAULT NULL"))
         await conn.execute(text("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS message_params text DEFAULT NULL"))
-        # ── kpi_snapshots (campos de período) ────────────────────────────────
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS period varchar DEFAULT NULL"))
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS total_patients integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS patients_delta integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS active_clinics integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS clinics_delta integer DEFAULT 0"))
         await conn.execute(text("ALTER TABLE kpi_snapshots ADD COLUMN IF NOT EXISTS in_treatment integer DEFAULT 0"))
-        # ── support_tickets / responders (campos usados por soporte) ──────────
+
         await conn.execute(text("ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS responder_id varchar DEFAULT NULL"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_tickets_responder_id ON support_tickets (responder_id)"))
+        await conn.execute(text("ALTER TABLE responders ADD COLUMN IF NOT EXISTS email varchar DEFAULT NULL"))
+
         await conn.execute(text("""
             DO $$
             BEGIN
                 IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_name = 'responders'
-                      AND column_name = 'group'
-                )
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_name = 'responders'
-                      AND column_name = 'team'
+                    SELECT 1 FROM information_schema.columns WHERE table_name = 'responders' AND column_name = 'group'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns WHERE table_name = 'responders' AND column_name = 'team'
                 ) THEN
                     ALTER TABLE responders RENAME COLUMN "group" TO team;
                 END IF;
-
                 IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_name = 'responders'
-                      AND column_name = 'user'
-                )
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_name = 'responders'
-                      AND column_name = 'username'
+                    SELECT 1 FROM information_schema.columns WHERE table_name = 'responders' AND column_name = 'user'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns WHERE table_name = 'responders' AND column_name = 'username'
                 ) THEN
                     ALTER TABLE responders RENAME COLUMN "user" TO username;
                 END IF;
             END $$;
         """))
-    print("✅ Tablas creadas/verificadas en Neon")
+
+    print("✅ Tablas verificadas y actualizadas de forma segura en Neon")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HELPERS DE INSERCIÓN
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def insert_ignore_duplicates(session, model_class, data_list):
+    """Para tablas con ID explícito en el dict (PK string como clinic_id, plan_id...)."""
+    inserted = 0
+    for data in data_list:
+        session.add(model_class(**data))
+        try:
+            await session.commit()
+            inserted += 1
+        except IntegrityError:
+            await session.rollback()
+    return inserted
+
+
+async def insert_if_not_exists(session, model_class, data_list, unique_keys):
+    """Para tablas con ID auto-generado. Hace SELECT antes de insertar."""
+    inserted = 0
+    for data in data_list:
+        conditions = [getattr(model_class, key) == data[key] for key in unique_keys]
+        result = await session.execute(select(model_class).where(*conditions))
+        if result.first() is None:
+            session.add(model_class(**data))
+            try:
+                await session.commit()
+                inserted += 1
+            except IntegrityError:
+                await session.rollback()
+    return inserted
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FUNCIONES DE SEED
+# ══════════════════════════════════════════════════════════════════════════════
 
 async def seed_clinics(session):
-    for data in CLINICS_DATA: session.add(Clinic(**data))
-    print(f"  → {len(CLINICS_DATA)} clínicas")
+    count = await insert_ignore_duplicates(session, Clinic, CLINICS_DATA)
+    # Sincronizar soft-delete: clínicas churned → is_deleted=TRUE
+    await session.execute(text("""
+        UPDATE clinics
+        SET is_deleted = TRUE,
+            deleted_at = COALESCE(deleted_at, NOW())
+        WHERE status = 'churned'
+          AND (is_deleted IS DISTINCT FROM TRUE)
+    """))
+    await session.commit()
+    print(f"  → {count}/{len(CLINICS_DATA)} clínicas agregadas (incluyendo churned)")
 
 async def seed_features(session):
-    for data in FEATURES_DATA: session.add(Feature(**data))
-    print(f"  → {len(FEATURES_DATA)} features")
+    count = await insert_ignore_duplicates(session, Feature, FEATURES_DATA)
+    print(f"  → {count}/{len(FEATURES_DATA)} features agregados")
 
 async def seed_plans(session):
-    for data in PLANS_DATA: session.add(Plan(**data))
-    print(f"  → {len(PLANS_DATA)} planes")
+    count = await insert_ignore_duplicates(session, Plan, PLANS_DATA)
+    print(f"  → {count}/{len(PLANS_DATA)} planes agregados")
 
 async def seed_plan_features(session):
-    count = 0
-    for plan_id, features in PLAN_FEATURES_DATA.items():
-        for feature_id, limit in features:
-            session.add(PlanFeature(plan_id=plan_id, feature_id=feature_id, limit_value=limit))
-            count += 1
-    print(f"  → {count} plan_features (relaciones plan↔feature)")
+    flat = [
+        {"plan_id": plan_id, "feature_id": feature_id, "limit_value": limit}
+        for plan_id, features in PLAN_FEATURES_DATA.items()
+        for feature_id, limit in features
+    ]
+    count = await insert_if_not_exists(session, PlanFeature, flat, ["plan_id", "feature_id"])
+    print(f"  → {count}/{len(flat)} plan_features agregados")
 
 async def seed_clinic_plans(session):
-    for data in CLINIC_PLANS_DATA: session.add(ClinicPlan(**data))
-    print(f"  → {len(CLINIC_PLANS_DATA)} asignaciones de planes a clínicas")
+    count = await insert_ignore_duplicates(session, ClinicPlan, CLINIC_PLANS_DATA)
+    print(f"  → {count}/{len(CLINIC_PLANS_DATA)} asignaciones agregadas")
 
 async def seed_scheduled_changes(session):
-    for data in SCHEDULED_CHANGES_DATA: session.add(ScheduledChange(**data))
-    print(f"  → {len(SCHEDULED_CHANGES_DATA)} cambios programados")
+    count = await insert_ignore_duplicates(session, ScheduledChange, SCHEDULED_CHANGES_DATA)
+    print(f"  → {count}/{len(SCHEDULED_CHANGES_DATA)} cambios programados")
 
 async def seed_alerts(session):
-    for data in ALERTS_DATA: session.add(Alert(**data))
-    print(f"  → {len(ALERTS_DATA)} alertas")
+    count = await insert_ignore_duplicates(session, Alert, ALERTS_DATA)
+    print(f"  → {count}/{len(ALERTS_DATA)} alertas agregadas")
 
 async def seed_notifications(session):
-    for data in NOTIFICATIONS_DATA: session.add(Notification(**data))
-    print(f"  → {len(NOTIFICATIONS_DATA)} notificaciones")
+    count = await insert_ignore_duplicates(session, Notification, NOTIFICATIONS_DATA)
+    print(f"  → {count}/{len(NOTIFICATIONS_DATA)} notificaciones")
 
 async def seed_jobs(session):
-    for data in JOBS_DATA: session.add(Job(**data))
-    print(f"  → {len(JOBS_DATA)} jobs")
+    count = await insert_ignore_duplicates(session, Job, JOBS_DATA)
+    print(f"  → {count}/{len(JOBS_DATA)} jobs")
 
 async def seed_admin_users(session):
-    for data in ADMIN_USERS_DATA: session.add(AdminUser(**data))
-    print(f"  → {len(ADMIN_USERS_DATA)} usuarios admin")
+    count = await insert_ignore_duplicates(session, AdminUser, ADMIN_USERS_DATA)
+    print(f"  → {count}/{len(ADMIN_USERS_DATA)} usuarios admin")
 
 async def seed_kpi_snapshots(session):
-    for data in KPI_SNAPSHOTS_DATA: session.add(KpiSnapshot(**data))
-    print(f"  → {len(KPI_SNAPSHOTS_DATA)} kpi_snapshots")
+    count = await insert_if_not_exists(session, KpiSnapshot, KPI_SNAPSHOTS_DATA, ["month", "year"])
+    print(f"  → {count}/{len(KPI_SNAPSHOTS_DATA)} kpi_snapshots")
 
 async def seed_app_metrics(session):
-    for data in APP_METRICS_DATA: session.add(AppMetric(**data))
-    print(f"  → {len(APP_METRICS_DATA)} app_metrics")
+    count = await insert_if_not_exists(session, AppMetric, APP_METRICS_DATA, ["metric_key"])
+    print(f"  → {count}/{len(APP_METRICS_DATA)} app_metrics")
 
 async def seed_invoices(session):
-    for data in INVOICES_DATA: session.add(Invoice(**data))
-    print(f"  → {len(INVOICES_DATA)} invoices")
+    count = await insert_ignore_duplicates(session, Invoice, INVOICES_DATA)
+    print(f"  → {count}/{len(INVOICES_DATA)} invoices")
 
 async def seed_clinic_usage_metrics(session):
-    for data in CLINIC_USAGE_METRICS_DATA: session.add(ClinicUsageMetric(**data))
-    print(f"  → {len(CLINIC_USAGE_METRICS_DATA)} clinic_usage_metrics")
+    count = await insert_if_not_exists(session, ClinicUsageMetric, CLINIC_USAGE_METRICS_DATA, ["clinic_id", "period"])
+    print(f"  → {count}/{len(CLINIC_USAGE_METRICS_DATA)} clinic_usage_metrics")
 
 async def seed_servers(session):
-    for data in SERVERS_DATA: session.add(Server(**data))
-    print(f"  → {len(SERVERS_DATA)} servers")
+    count = await insert_ignore_duplicates(session, Server, SERVERS_DATA)
+    print(f"  → {count}/{len(SERVERS_DATA)} servers")
 
 async def seed_background_processes(session):
-    for data in BACKGROUND_PROCESSES_DATA: session.add(BackgroundProcess(**data))
-    print(f"  → {len(BACKGROUND_PROCESSES_DATA)} background_processes")
+    count = await insert_ignore_duplicates(session, BackgroundProcess, BACKGROUND_PROCESSES_DATA)
+    print(f"  → {count}/{len(BACKGROUND_PROCESSES_DATA)} background_processes")
+
+# ── CORREGIDAS: insert_if_not_exists para tablas con ID auto-generado ────────
 
 async def seed_mrr_snapshots(session):
-    for data in MRR_SNAPSHOTS_DATA: session.add(MrrSnapshot(**data))
-    print(f"  → {len(MRR_SNAPSHOTS_DATA)} mrr_snapshots")
+    count = await insert_if_not_exists(session, MrrSnapshot, MRR_SNAPSHOTS_DATA, ["period_month", "period_year"])
+    print(f"  → {count}/{len(MRR_SNAPSHOTS_DATA)} mrr_snapshots")
 
 async def seed_churn_risk_regions(session):
-    for data in CHURN_RISK_REGIONS_DATA: session.add(ChurnRiskRegion(**data))
-    print(f"  → {len(CHURN_RISK_REGIONS_DATA)} churn_risk_regions")
+    count = await insert_if_not_exists(session, ChurnRiskRegion, CHURN_RISK_REGIONS_DATA, ["region"])
+    print(f"  → {count}/{len(CHURN_RISK_REGIONS_DATA)} churn_risk_regions")
 
 async def seed_app_usage_stats(session):
-    for data in APP_USAGE_STATS_DATA: session.add(AppUsageStat(**data))
-    print(f"  → {len(APP_USAGE_STATS_DATA)} app_usage_stats")
+    count = await insert_if_not_exists(session, AppUsageStat, APP_USAGE_STATS_DATA, ["app_type", "period"])
+    print(f"  → {count}/{len(APP_USAGE_STATS_DATA)} app_usage_stats")
 
 async def seed_feature_adoption(session):
-    for data in FEATURE_ADOPTION_DATA: session.add(FeatureAdoption(**data))
-    print(f"  → {len(FEATURE_ADOPTION_DATA)} feature_adoption")
+    count = await insert_if_not_exists(session, FeatureAdoption, FEATURE_ADOPTION_DATA, ["feature_name", "period"])
+    print(f"  → {count}/{len(FEATURE_ADOPTION_DATA)} feature_adoption")
 
 async def seed_adherence_snapshots(session):
-    for data in ADHERENCE_SNAPSHOTS_DATA: session.add(AdherenceSnapshot(**data))
-    print(f"  → {len(ADHERENCE_SNAPSHOTS_DATA)} adherence_snapshots")
+    count = await insert_if_not_exists(session, AdherenceSnapshot, ADHERENCE_SNAPSHOTS_DATA, ["period"])
+    print(f"  → {count}/{len(ADHERENCE_SNAPSHOTS_DATA)} adherence_snapshots")
 
 async def seed_cohort_retention(session):
-    for data in COHORT_RETENTION_DATA: session.add(CohortRetention(**data))
-    print(f"  → {len(COHORT_RETENTION_DATA)} cohort_retention")
+    count = await insert_if_not_exists(session, CohortRetention, COHORT_RETENTION_DATA, ["cohort_month", "cohort_year"])
+    print(f"  → {count}/{len(COHORT_RETENTION_DATA)} cohort_retention")
 
 async def seed_soap_quality_metrics(session):
-    for data in SOAP_QUALITY_METRICS_DATA: session.add(SoapQualityMetric(**data))
-    print(f"  → {len(SOAP_QUALITY_METRICS_DATA)} soap_quality_metrics")
+    count = await insert_if_not_exists(session, SoapQualityMetric, SOAP_QUALITY_METRICS_DATA, ["period"])
+    print(f"  → {count}/{len(SOAP_QUALITY_METRICS_DATA)} soap_quality_metrics")
 
 async def seed_ai_cost_snapshots(session):
-    for data in AI_COST_SNAPSHOTS_DATA: session.add(AiCostSnapshot(**data))
-    print(f"  → {len(AI_COST_SNAPSHOTS_DATA)} ai_cost_snapshots")
+    count = await insert_if_not_exists(session, AiCostSnapshot, AI_COST_SNAPSHOTS_DATA, ["period"])
+    print(f"  → {count}/{len(AI_COST_SNAPSHOTS_DATA)} ai_cost_snapshots")
 
 async def seed_ai_latency_metrics(session):
-    for data in AI_LATENCY_METRICS_DATA: session.add(AiLatencyMetric(**data))
-    print(f"  → {len(AI_LATENCY_METRICS_DATA)} ai_latency_metrics")
+    count = await insert_if_not_exists(session, AiLatencyMetric, AI_LATENCY_METRICS_DATA, ["service", "period"])
+    print(f"  → {count}/{len(AI_LATENCY_METRICS_DATA)} ai_latency_metrics")
 
 async def seed_pose_analysis_snapshots(session):
-    for data in POSE_ANALYSIS_SNAPSHOTS_DATA: session.add(PoseAnalysisSnapshot(**data))
-    print(f"  → {len(POSE_ANALYSIS_SNAPSHOTS_DATA)} pose_analysis_snapshots")
+    count = await insert_if_not_exists(session, PoseAnalysisSnapshot, POSE_ANALYSIS_SNAPSHOTS_DATA, ["period"])
+    print(f"  → {count}/{len(POSE_ANALYSIS_SNAPSHOTS_DATA)} pose_analysis_snapshots")
 
 async def seed_app_versions(session):
-    for data in APP_VERSIONS_DATA: session.add(AppVersion(**data))
-    print(f"  → {len(APP_VERSIONS_DATA)} app_versions")
-
-async def seed_platform_settings(session):
-    for data in PLATFORM_SETTINGS_DATA: session.add(PlatformSetting(**data))
-    print(f"  → {len(PLATFORM_SETTINGS_DATA)} platform_settings")
-
-# ── FUNCIONES DE SEED EXISTENTES (antes de este PR) ────────────────────────────
-async def seed_impersonate_audit_log(session):
-    for data in IMPERSONATE_AUDIT_LOG_DATA:
-        session.add(ImpersonateAuditLog(**data))
-    print(f"  → {len(IMPERSONATE_AUDIT_LOG_DATA)} impersonate_audit_log")
-
-async def seed_needs_attention_items(session):
-    for data in NEEDS_ATTENTION_ITEMS_DATA:
-        session.add(NeedsAttentionItem(**data))
-    print(f"  → {len(NEEDS_ATTENTION_ITEMS_DATA)} needs_attention_items")
+    count = await insert_if_not_exists(session, AppVersion, APP_VERSIONS_DATA, ["app_type", "version"])
+    print(f"  → {count}/{len(APP_VERSIONS_DATA)} app_versions")
 
 async def seed_infrastructure_cost_snapshots(session):
-    for data in INFRASTRUCTURE_COST_SNAPSHOTS_DATA:
-        session.add(InfrastructureCostSnapshot(**data))
-    print(f"  → {len(INFRASTRUCTURE_COST_SNAPSHOTS_DATA)} infrastructure_cost_snapshots")
+    count = await insert_if_not_exists(session, InfrastructureCostSnapshot, INFRASTRUCTURE_COST_SNAPSHOTS_DATA, ["period_month", "period_year"])
+    print(f"  → {count}/{len(INFRASTRUCTURE_COST_SNAPSHOTS_DATA)} infrastructure_cost_snapshots")
 
-async def seed_infra_nodes(session):
-    for data in INFRA_NODES_DATA:
-        session.add(InfraNode(**data))
-    print(f"  → {len(INFRA_NODES_DATA)} infra_nodes")
-
-# ── FUNCIONES DE SEED NUEVAS (tablas sincronizadas desde MongoDB) ──────────────
 async def seed_clinician_summaries(session):
-    for data in CLINICIAN_SUMMARIES_DATA:
-        session.add(ClinicianSummary(**data))
-    print(f"  → {len(CLINICIAN_SUMMARIES_DATA)} clinician_summaries")
+    count = await insert_if_not_exists(session, ClinicianSummary, CLINICIAN_SUMMARIES_DATA, ["clinic_id"])
+    print(f"  → {count}/{len(CLINICIAN_SUMMARIES_DATA)} clinician_summaries")
 
 async def seed_patient_health_summaries(session):
-    for data in PATIENT_HEALTH_DATA:
-        session.add(PatientHealthSummary(**data))
-    print(f"  → {len(PATIENT_HEALTH_DATA)} patient_health_summaries")
+    count = await insert_if_not_exists(session, PatientHealthSummary, PATIENT_HEALTH_DATA, ["clinic_id"])
+    print(f"  → {count}/{len(PATIENT_HEALTH_DATA)} patient_health_summaries")
+
+# ── Sin cambios ──────────────────────────────────────────────────────────────
+
+async def seed_platform_settings(session):
+    count = await insert_ignore_duplicates(session, PlatformSetting, PLATFORM_SETTINGS_DATA)
+    print(f"  → {count}/{len(PLATFORM_SETTINGS_DATA)} platform_settings")
+
+async def seed_impersonate_audit_log(session):
+    count = await insert_ignore_duplicates(session, ImpersonateAuditLog, IMPERSONATE_AUDIT_LOG_DATA)
+    print(f"  → {count}/{len(IMPERSONATE_AUDIT_LOG_DATA)} impersonate_audit_log")
+
+async def seed_needs_attention_items(session):
+    count = await insert_ignore_duplicates(session, NeedsAttentionItem, NEEDS_ATTENTION_ITEMS_DATA)
+    print(f"  → {count}/{len(NEEDS_ATTENTION_ITEMS_DATA)} needs_attention_items")
+
+async def seed_infra_nodes(session):
+    count = await insert_ignore_duplicates(session, InfraNode, INFRA_NODES_DATA)
+    print(f"  → {count}/{len(INFRA_NODES_DATA)} infra_nodes")
 
 async def seed_responders(session):
-    for data in RESPONDERS_DATA:
-        session.add(Responder(**data))
-    print(f"  → {len(RESPONDERS_DATA)} responders")
+    count = await insert_ignore_duplicates(session, Responder, RESPONDERS_DATA)
+    print(f"  → {count}/{len(RESPONDERS_DATA)} responders")
 
 async def seed_support_tickets(session):
-    for data in SUPPORT_TICKETS_DATA:
-        session.add(SupportTicket(**data))
-    print(f"  → {len(SUPPORT_TICKETS_DATA)} support_tickets")
+    count = await insert_ignore_duplicates(session, SupportTicket, SUPPORT_TICKETS_DATA)
+    print(f"  → {count}/{len(SUPPORT_TICKETS_DATA)} support_tickets")
 
+async def seed_ticket_categories(session):
+    count = await insert_ignore_duplicates(session, TicketCategory, TICKET_CATEGORIES_DATA)
+    print(f"  → {count}/{len(TICKET_CATEGORIES_DATA)} categorías agregadas")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RUNNER
+# ══════════════════════════════════════════════════════════════════════════════
 
 async def run_seed():
-    print("\n🌱 Iniciando seed de WellQ Admin...\n")
+    print("\n🌱 Iniciando seed NO DESTRUCTIVO de WellQ Admin...\n")
 
     await create_tables()
 
     async with AsyncSessionLocal() as session:
-        from sqlalchemy import text
-        await session.execute(text(
-            "TRUNCATE TABLE alerts, notifications, jobs, admin_users, scheduled_changes, "
-            "clinic_plans, plan_features, plans, features, clinics, "
-            "kpi_snapshots, app_metrics, "
-            "invoices, clinic_usage_metrics, servers, background_processes, "
-            "mrr_snapshots, churn_risk_regions, app_usage_stats, feature_adoption, "
-            "adherence_snapshots, cohort_retention, soap_quality_metrics, ai_cost_snapshots, "
-            "ai_latency_metrics, pose_analysis_snapshots, app_versions, platform_settings, "
-            "impersonate_audit_log, needs_attention_items, infrastructure_cost_snapshots, infra_nodes, "
-            # ── NUEVAS TABLAS ────────────────────────────────────────────────
-            "clinician_summaries, patient_health_summaries, responders, support_tickets, "
-            "force_update_config "
-            "RESTART IDENTITY CASCADE"
-        ))
-        await session.commit()
-    print("🧹 Tablas limpiadas\n")
-
-    async with AsyncSessionLocal() as session:
-        print("\n📥 Insertando datos:")
+        print("\n📥 Insertando datos (se omiten duplicados):")
         await seed_clinics(session)
         await seed_features(session)
         await seed_plans(session)
@@ -1271,20 +1049,17 @@ async def run_seed():
         await seed_pose_analysis_snapshots(session)
         await seed_app_versions(session)
         await seed_platform_settings(session)
-        # ── EXISTENTES (antes de este PR) ────────────────────────────────────
         await seed_impersonate_audit_log(session)
         await seed_needs_attention_items(session)
         await seed_infrastructure_cost_snapshots(session)
         await seed_infra_nodes(session)
-        # ── NUEVOS (tablas sincronizadas desde MongoDB) ───────────────────────
         await seed_clinician_summaries(session)
         await seed_patient_health_summaries(session)
         await seed_responders(session)
         await seed_support_tickets(session)
+        await seed_ticket_categories(session)
 
-        await session.commit()
-
-    print("\n✅ Seed completado. Todas las tablas tienen datos en Neon.\n")
+    print("\n✅ Seed completado de forma segura.\n")
     await engine.dispose()
 
 

@@ -9,7 +9,6 @@ importan la instancia singleton `settings` desde este módulo.
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
-
 class Settings(BaseSettings):
     """
     Clase de configuración principal.
@@ -17,11 +16,9 @@ class Settings(BaseSettings):
     Los tipos y valores por defecto sirven como documentación y validación.
     """
 
-
     # ── Neon PostgreSQL ────────────────────────────────────────────────────────────
-    database_url: str = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+    database_url: str 
     
-
     # ── Configuración general ──────────────────────────────────────────────────
     app_env: str = "development"       # Entorno de ejecución
     app_port: int = 8000               # Puerto del servidor
@@ -53,7 +50,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,      # Variables de entorno son case-insensitive
     )
-
         
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
@@ -61,9 +57,6 @@ class Settings(BaseSettings):
     smtp_app_password: str = ""
     smtp_from_name: str = "WellQ Admin"
     smtp_from_email: str = ""
-
-
-
 
     @property
     def cors_origins(self) -> list[str]:
@@ -80,7 +73,6 @@ class Settings(BaseSettings):
         """Issuer esperado en los tokens JWT emitidos por Keycloak."""
         return f"{self.keycloak_url}/realms/{self.keycloak_realm}"
 
-
 @lru_cache()
 def get_settings() -> Settings:
     """
@@ -93,7 +85,6 @@ def get_settings() -> Settings:
         settings = get_settings()
     """
     return Settings()
-
 
 # Instancia global para uso directo en módulos
 settings = get_settings()

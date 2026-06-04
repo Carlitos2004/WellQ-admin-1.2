@@ -11,9 +11,14 @@ Tablas #33–35 nuevas (sincronizadas desde MongoDB de la empresa):
 
 Campos nuevos en tablas existentes:
   - clinics.mongo_clinic_id            → _id de MongoDB para joins en sync
+  - clinics.is_deleted / deleted_at    → soft delete (nunca borrar registros médicos)
   - clinic_usage_metrics.appointments_this_month → fuente: appointments
   - clinic_usage_metrics.notes_generated         → fuente: clinical_notes
   - clinic_usage_metrics.exercises_assigned      → fuente: patient_programs
+  - responders.email                   → notificaciones de asignación de tickets
+
+Tablas #37 nueva (pedido empresa):
+  - ticket_categories → categorías dinámicas con emails de notificación por categoría
 """
 
 from sqlmodel import SQLModel, Field
@@ -54,6 +59,13 @@ class Clinic(SQLModel, table=True):
     # Referencia a clinics._id en MongoDB Atlas. Permite hacer lookup directo
     # al sincronizar clinician_summaries y patient_health_summaries.
     mongo_clinic_id: Optional[str] = Field(default=None, index=True)
+    # ── NUEVO: Soft delete — la empresa pidió nunca borrar registros ──────────
+    # Razones: (1) evita borrar en cascada todos los registros asociados,
+    # (2) la información médica debe conservarse por temas legales y de auditoría.
+    # Al "eliminar" una clínica, se marca is_deleted=True y se guarda deleted_at.
+    # Todos los SELECTs deben filtrar WHERE is_deleted = FALSE.
+    is_deleted: bool               = Field(default=False, index=True)
+    deleted_at: Optional[datetime] = Field(default=None)
 
 
 # ── 2. FEATURES ────────────────────────────────────────────────────────────────
@@ -665,6 +677,46 @@ class Responder(SQLModel, table=True):
     team: str = Field(index=True)                       # Ej: "Financiero", "Técnico"
     username: str = Field(unique=True)
     password: str = Field()                             # Hashed password
+    # ── NUEVO: email para notificaciones de asignación ────────────────────────
+    # Cuando se asigna un ticket a este responder, se le envía un correo a esta
+    # dirección. Puede ser distinto al username (que era solo para login interno).
+    email: Optional[str] = Field(default=None, index=True)
+
+
+# ── 37. TICKET_CATEGORIES ─────────────────────────────────────────────────────
+class TicketCategory(SQLModel, table=True):
+    """
+    Categorías dinámicas de tickets de soporte.
+
+    Reemplaza la lista hardcodeada ['Bug', 'Billing', 'Feature', 'Request']
+    del frontend. Permite crear, editar y eliminar categorías desde el panel
+    de configuración de soporte, sin necesidad de tocar código.
+
+    Campos clave:
+      - name   → nombre visible en el formulario y los filtros (único)
+      - team   → nombre del equipo de responders por defecto para esta categoría.
+                 Debe coincidir con Responder.team para que el dropdown del
+                 drawer/modal filtre correctamente.
+                 Ej: category "Billing" → team "Financiero"
+      - emails → JSON array de correos que reciben notificación al crear un
+                 ticket de esta categoría.
+                 Ej: '["billing@wellq.co", "contabilidad@wellq.co"]'
+                 Permite que, además del responder asignado, llegue copia
+                 automática al equipo dueño de esa categoría.
+      - is_active → False oculta la categoría del formulario sin borrarla.
+                    Útil para desactivar temporalmente sin perder el historial
+                    de tickets asociados a esa categoría.
+    """
+    __tablename__ = "ticket_categories"
+
+    id: Optional[int]         = Field(default=None, primary_key=True)
+    category_id: str          = Field(unique=True, index=True)   # "cat-uuid"
+    name: str                 = Field(unique=True)               # "Billing" | "Social Media" | etc.
+    team: Optional[str]       = Field(default=None, index=True)  # → join con Responder.team
+    emails: Optional[str]     = Field(default=None, sa_column=Column(Text))  # JSON: '["a@b.co"]'
+    is_active: bool           = Field(default=True)              # False → oculto en formularios
+    created_at: datetime      = Field(default_factory=datetime.utcnow)
+    updated_at: datetime      = Field(default_factory=datetime.utcnow)
 
 
 # ── FORCE UPDATE CONFIG ────────────────────────────────────────────────────────

@@ -124,7 +124,6 @@ const NotificationPanel = ({ onClose }) => {
     const fetchNotifs = async () => {
       try {
         setLoading(true);
-        // ✨ AQUÍ AGREGAMOS ${API_BASE} ✨
         const res  = await fetch(`${API_BASE}/api/notifications?limit=30`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
@@ -151,7 +150,6 @@ const NotificationPanel = ({ onClose }) => {
   const handleDelete = async (id) => {
     setDeletingId(id);
     try {
-      // ✨ AQUÍ TAMBIÉN AGREGAMOS ${API_BASE} ✨
       const res = await fetch(`${API_BASE}/api/notifications/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
@@ -1047,9 +1045,23 @@ export default function App() {
             apiClinics={apiClinics}
             clinicsLoading={clinicsLoading}
             onImpersonate={handleImpersonate}
-            onRefreshClinics={async () => {
-              const res = await apiFetch('/api/clinics');
-              if (res?.data) setApiClinics(res.data);
+            // 🔥 ¡AQUÍ ESTÁ EL CAMBIO PRINCIPAL PARA RECIBIR LOS PARÁMETROS!
+            onRefreshClinics={async (params = {}) => {
+              setClinicsLoading(true);
+              try {
+                // Convertimos el objeto params en un query string
+                const qs = new URLSearchParams(
+                  Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
+                ).toString();
+                const endpoint = `/api/clinics${qs ? `?${qs}` : ''}`;
+                
+                const res = await apiFetch(endpoint);
+                if (res?.data) setApiClinics(res.data);
+              } catch (err) {
+                console.error('Error fetching clinics:', err);
+              } finally {
+                setClinicsLoading(false);
+              }
             }}
           />
         );

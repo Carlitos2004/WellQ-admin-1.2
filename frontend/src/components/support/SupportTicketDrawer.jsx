@@ -1,14 +1,15 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Bug, CreditCard, Sparkles, MessageSquare,
-  Calendar, Building2, User, Mail, CheckCircle2,
+  Building2, User, Mail, CheckCircle2,
   Clock, Send, ArrowRight, Hash, UserCheck,
-  ChevronDown, Loader2, AlertCircle, UserCog,
+  ChevronDown, Loader2, AlertCircle, UserCog, Trash2,
+  Info, Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchSupportTicket, fetchResponders, patchSupportTicket } from '../../api/client';
+import { fetchSupportTicket, fetchSupportResponders, patchSupportTicket, deleteSupportTicket } from '../../api/client';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -43,8 +44,8 @@ const CATEGORY_META = {
   Request: { icon: MessageSquare, cls: 'text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10' },
 };
 
-// Mapeo categoría → grupo de responders (ajusta los nombres según tu BD)
-const CATEGORY_TO_GROUP = {
+// Fallback hardcodeado — se usa sólo si no se reciben categorías dinámicas desde la API
+const CATEGORY_TO_GROUP_FALLBACK = {
   Billing: 'Financiero',
   Bug:     'Técnico',
   Feature: 'Técnico',
@@ -72,19 +73,37 @@ const fmtRelative = (iso) => {
 };
 
 // ─── Drawer component ─────────────────────────────────────────────────────────
-export const SupportTicketDrawer = ({ ticketId, onClose }) => {
+export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories = [] }) => {
   const { t } = useLanguage();
 
-  const [ticket,     setTicket]     = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState(null);
+  const [ticket,      setTicket]     = useState(null);
+  const [loading,     setLoading]    = useState(true);
+  const [error,       setError]      = useState(null);
 
   // Acciones
-  const [responders,    setResponders]    = useState([]);   // lista completa
-  const [selectedResp,  setSelectedResp]  = useState('');   // id del responder elegido
-  const [solution,      setSolution]      = useState('');
-  const [saving,        setSaving]        = useState(false);
-  const [actionError,   setActionError]   = useState(null);
+  const [responders,   setResponders]   = useState([]);
+  const [selectedResp, setSelectedResp] = useState('');
+  const [solution,     setSolution]     = useState('');
+  const [saving,       setSaving]       = useState(false);
+  const [actionError,  setActionError]  = useState(null);
+
+  // Eliminar ticket
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting,      setDeleting]      = useState(false);
+
+  // Tab navigation
+  const [activeTab, setActiveTab] = useState('info');
+
+  const isClosed = ticket?.status === 'Closed';
+  const isSent   = ticket?.status === 'Sent';
+  const isOpen   = ticket?.status === 'Open';
+
+  // Evitar quedar en una pestaña inexistente al cerrar el ticket
+  useEffect(() => {
+    if (isClosed && activeTab === 'gestionar') {
+      setActiveTab('info');
+    }
+  }, [isClosed, activeTab]);
 
   // Lock body scroll
   useEffect(() => {
@@ -101,12 +120,13 @@ export const SupportTicketDrawer = ({ ticketId, onClose }) => {
 
   // Fetch ticket y responders en paralelo
   useEffect(() => {
+    setActiveTab('info'); // reset tab on each ticket load
     if (!ticketId) return;
     setLoading(true);
     setError(null);
     Promise.all([
       fetchSupportTicket(ticketId),
-      fetchResponders().catch(() => ({ responders: [] })), // no bloquear si falla
+      fetchSupportResponders().catch(() => ({ responders: [] })), // no bloquear si falla
     ])
       .then(([tk, resp]) => {
         setTicket(tk);
@@ -118,26 +138,43 @@ export const SupportTicketDrawer = ({ ticketId, onClose }) => {
       .finally(() => setLoading(false));
   }, [ticketId]);
 
-  // Responders filtrados según categoría del ticket
+  // ── Mapeo categoría → grupo
+  const categoryToGroup = useMemo(() => {
+    if (!categories || categories.length === 0) return CATEGORY_TO_GROUP_FALLBACK;
+    const dynamic = categories.reduce((acc, cat) => {
+      if (cat.name && cat.team) acc[cat.name] = cat.team; 
+      return acc;
+    }, {});
+    return Object.keys(dynamic).length > 0 ? dynamic : CATEGORY_TO_GROUP_FALLBACK;
+  }, [categories]);
+
+  // ── Responder actualmente asignado
+  const assignedResponder = useMemo(() => {
+    if (!ticket?.responder_id || responders.length === 0) return null;
+    return responders.find((r) => r.id === ticket.responder_id) ?? null;
+  }, [ticket?.responder_id, responders]);
+
+  // Responders filtrados
   const filteredResponders = useCallback(() => {
     if (!ticket?.category || responders.length === 0) return responders;
-    const targetGroup = CATEGORY_TO_GROUP[ticket.category];
+    const targetGroup = categoryToGroup[ticket.category];
     if (!targetGroup) return responders;
     const filtered = responders.filter((r) => r.group === targetGroup);
-    return filtered.length > 0 ? filtered : responders; // fallback a todos si no hay match
-  }, [ticket, responders]);
+    return filtered.length > 0 ? filtered : responders; 
+  }, [ticket, responders, categoryToGroup]);
 
-  // ── Acción central: llama PATCH y actualiza el ticket local ──────────────
+  // ── Acción central
   const handleAction = async (body, successMsg) => {
     setSaving(true);
     setActionError(null);
     try {
-      const updated = await patchSupportTicket(ticketId, body);
-      // Refrescamos el ticket completo para tener todos los campos actualizados
+      await patchSupportTicket(ticketId, body);
       const fresh = await fetchSupportTicket(ticketId);
       setTicket(fresh);
       setSolution(fresh?.solution ?? '');
+      setSelectedResp(fresh?.responder_id ?? '');
       toast.success(successMsg);
+      onUpdated?.();
     } catch (err) {
       const msg = err.message ?? 'Error al actualizar el ticket';
       setActionError(msg);
@@ -188,14 +225,25 @@ export const SupportTicketDrawer = ({ ticketId, onClose }) => {
     );
   };
 
-  const status  = ticket ? (STATUS_META[ticket.status]     ?? STATUS_META.Open)    : null;
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteSupportTicket(ticketId);
+      toast.success('Ticket eliminado correctamente');
+      onUpdated?.();
+      onClose(true);
+    } catch (err) {
+      toast.error(err.message ?? 'Error al eliminar el ticket');
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const status  = ticket ? (STATUS_META[ticket.status]     ?? STATUS_META.Open)     : null;
   const catMeta = ticket ? (CATEGORY_META[ticket.category] ?? CATEGORY_META.Request) : null;
   const CatIcon    = catMeta?.icon ?? MessageSquare;
   const StatusIcon = status?.icon  ?? Clock;
-
-  const isClosed = ticket?.status === 'Closed';
-  const isSent   = ticket?.status === 'Sent';
-  const isOpen   = ticket?.status === 'Open';
 
   return createPortal(
     <>
@@ -265,8 +313,49 @@ export const SupportTicketDrawer = ({ ticketId, onClose }) => {
           </button>
         </div>
 
+        {/* ── Tab bar dinámico ── */}
+        {!loading && ticket && (
+          <div className="flex-shrink-0 flex items-end gap-0 px-6 border-b border-wellq-gray/10 dark:border-white/5 bg-white dark:bg-wellq-dark">
+            {[
+              { id: 'info',      label: 'Info',      Icon: Info },
+              ...(!isClosed ? [{ id: 'gestionar', label: 'Gestionar', Icon: Settings }] : []),
+              { id: 'avanzado',  label: 'Avanzado',  Icon: AlertCircle }
+            ].map(({ id, label, Icon: TabIcon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`relative flex items-center gap-1.5 py-3.5 px-1 mr-7 text-[11px] font-bold uppercase tracking-widest transition-colors cursor-pointer ${
+                  activeTab === id
+                    ? id === 'avanzado' 
+                        ? 'text-red-500 dark:text-red-400'
+                        : 'text-wellq-dark dark:text-white'
+                    : 'text-wellq-gray/50 hover:text-wellq-gray dark:hover:text-white/60'
+                }`}
+              >
+                <TabIcon size={11} strokeWidth={2.5} />
+                {label}
+                {/* Urgency dot on Gestionar when ticket is Sent */}
+                {id === 'gestionar' && isSent && activeTab !== 'gestionar' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                )}
+                {activeTab === id && (
+                  <motion.div
+                    layoutId="tab-indicator"
+                    className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full ${
+                      id === 'avanzado' 
+                        ? 'bg-red-500 dark:bg-red-400' 
+                        : 'bg-wellq-dark dark:bg-white' // ACÁ ESTÁ EL CAMBIO: Color minimalista en lugar del degradado celeste
+                    }`}
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Body — scrolleable */}
-        <div className="flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-wellq-dark">
+        <div className="flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-wellq-dark [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full dark:[&::-webkit-scrollbar-thumb]:bg-white/10">
 
           {loading && (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
@@ -285,202 +374,264 @@ export const SupportTicketDrawer = ({ ticketId, onClose }) => {
           )}
 
           {!loading && ticket && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, delay: 0.05, ease: 'easeOut' }}
-              className="px-6 py-6 space-y-8"
-            >
-              {/* Category pill */}
-              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border shadow-sm ${catMeta.cls}`}>
-                <CatIcon size={12} strokeWidth={2.5} />
-                {ticket.category}
-              </div>
+            <AnimatePresence mode="wait">
 
-              {/* Description */}
-              {ticket.description && (
-                <Section label={t('support.description')}>
-                  <div className="bg-wellq-gray/5 dark:bg-white/[0.02] rounded-xl p-5 border border-wellq-gray/10 dark:border-white/5 shadow-sm">
-                    <p className="text-sm font-medium text-wellq-dark dark:text-white/90 leading-relaxed whitespace-pre-wrap tracking-tight">
-                      {ticket.description}
-                    </p>
+              {/* ══════════════════════════════════════════════════════════════
+                  INFO TAB — visible when activeTab === 'info'
+                ══════════════════════════════════════════════════════════════ */}
+              {(activeTab === 'info') && (
+                <motion.div
+                  key="tab-info"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="px-6 py-6 space-y-8"
+                >
+                  {/* Category pill */}
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border shadow-sm ${catMeta.cls}`}>
+                    <CatIcon size={12} strokeWidth={2.5} />
+                    {ticket.category}
                   </div>
-                </Section>
-              )}
 
-              {/* Solution — solo lectura si ya existe */}
-              {ticket.solution && (
-                <Section label={t('support.solution')} accent="emerald">
-                  <div className="bg-emerald-50/80 dark:bg-emerald-500/5 rounded-xl p-5 border border-emerald-200/70 dark:border-emerald-500/20 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0 mt-0.5" strokeWidth={2.2} />
-                      <p className="text-sm font-bold text-emerald-900 dark:text-emerald-400 leading-relaxed whitespace-pre-wrap tracking-tight">
-                        {ticket.solution}
+                  {/* Description */}
+                  {ticket.description && (
+                    <Section label={t('support.description')}>
+                      <div className="bg-wellq-gray/5 dark:bg-white/[0.02] rounded-xl p-5 border border-wellq-gray/10 dark:border-white/5 shadow-sm">
+                        <p className="text-sm font-medium text-wellq-dark dark:text-white/90 leading-relaxed whitespace-pre-wrap tracking-tight">
+                          {ticket.description}
+                        </p>
+                      </div>
+                    </Section>
+                  )}
+
+                  {/* Solution — solo lectura si ya existe */}
+                  {ticket.solution && (
+                    <Section label={t('support.solution')} accent="emerald">
+                      <div className="bg-emerald-50/80 dark:bg-emerald-500/5 rounded-xl p-5 border border-emerald-200/70 dark:border-emerald-500/20 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0 mt-0.5" strokeWidth={2.2} />
+                          <p className="text-sm font-bold text-emerald-900 dark:text-emerald-400 leading-relaxed whitespace-pre-wrap tracking-tight">
+                            {ticket.solution}
+                          </p>
+                        </div>
+                      </div>
+                    </Section>
+                  )}
+
+                  {/* Details grid */}
+                  <Section label="Details">
+                    <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 overflow-hidden divide-y divide-wellq-gray/10 dark:divide-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
+                      <DetailRow icon={Building2} label={t('support.clinic')}   value={ticket.clinic_name ?? ticket.clinic_id} />
+                      <DetailRow icon={User}      label={t('support.reporter')} value={ticket.reporter_name ?? '—'} />
+                      <DetailRow icon={Mail}      label={t('support.email')}    value={ticket.reporter_email ?? '—'} isEmail />
+                      {ticket.responder_name && (
+                        <DetailRow icon={UserCheck} label={t('support.responder')} value={ticket.responder_name} accent />
+                      )}
+                      {assignedResponder?.email && (
+                        <DetailRow
+                          icon={Mail}
+                          label={t('support.responderEmail', 'Email responder')}
+                          value={assignedResponder.email}
+                          isEmail
+                          accent
+                        />
+                      )}
+                    </div>
+                  </Section>
+
+                  {/* Timeline */}
+                  <Section label="Timeline">
+                    <div className="space-y-0 relative mt-2">
+                      {ticket.closed_at && (
+                        <div className="absolute left-[15px] top-[30px] bottom-[30px] w-[2px] bg-wellq-gray/10 dark:bg-white/10 rounded-full" />
+                      )}
+                      <TimelineItem
+                        Icon={StatusIcon}
+                        label={t('support.reportedAt')}
+                        dateShort={fmtShort(ticket.reported_at)}
+                        dateLong={fmtLong(ticket.reported_at)}
+                        relative={fmtRelative(ticket.reported_at)}
+                        dotColor={status.dot}
+                        active
+                      />
+                      {ticket.closed_at && (
+                        <TimelineItem
+                          Icon={CheckCircle2}
+                          label={t('support.closedAt')}
+                          dateShort={fmtShort(ticket.closed_at)}
+                          dateLong={fmtLong(ticket.closed_at)}
+                          relative={fmtRelative(ticket.closed_at)}
+                          dotColor="bg-emerald-500"
+                          active
+                        />
+                      )}
+                    </div>
+                  </Section>
+
+                  {/* ── Closed-only blocks (banner) ── */}
+                  {isClosed && (
+                    <div className="flex items-center gap-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-500/5 border border-emerald-200/70 dark:border-emerald-500/20 px-5 py-4">
+                      <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" strokeWidth={2.5} />
+                      <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        Ticket cerrado — no requiere acciones adicionales
                       </p>
                     </div>
-                  </div>
-                </Section>
-              )}
-
-              {/* Details grid */}
-              <Section label="Details">
-                <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 overflow-hidden divide-y divide-wellq-gray/10 dark:divide-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
-                  <DetailRow icon={Building2} label={t('support.clinic')}    value={ticket.clinic_name ?? ticket.clinic_id} />
-                  <DetailRow icon={User}      label={t('support.reporter')}  value={ticket.reporter_name ?? '—'} />
-                  <DetailRow icon={Mail}      label={t('support.email')}     value={ticket.reporter_email ?? '—'} isEmail />
-                  {ticket.responder_name && (
-                    <DetailRow icon={UserCheck} label={t('support.responder')} value={ticket.responder_name} accent />
                   )}
-                </div>
-              </Section>
-
-              {/* Timeline */}
-              <Section label="Timeline">
-                <div className="space-y-0 relative mt-2">
-                  {ticket.closed_at && (
-                    <div className="absolute left-[15px] top-[30px] bottom-[30px] w-[2px] bg-wellq-gray/10 dark:bg-white/10 rounded-full" />
-                  )}
-                  <TimelineItem
-                    Icon={StatusIcon}
-                    label={t('support.reportedAt')}
-                    dateShort={fmtShort(ticket.reported_at)}
-                    dateLong={fmtLong(ticket.reported_at)}
-                    relative={fmtRelative(ticket.reported_at)}
-                    dotColor={status.dot}
-                    active
-                  />
-                  {ticket.closed_at && (
-                    <TimelineItem
-                      Icon={CheckCircle2}
-                      label={t('support.closedAt')}
-                      dateShort={fmtShort(ticket.closed_at)}
-                      dateLong={fmtLong(ticket.closed_at)}
-                      relative={fmtRelative(ticket.closed_at)}
-                      dotColor="bg-emerald-500"
-                      active
-                    />
-                  )}
-                </div>
-              </Section>
-            </motion.div>
-          )}
-        </div>
-
-        {/* ── Panel de acciones — sticky al fondo, solo si el ticket no está Closed ── */}
-        {!loading && ticket && !isClosed && (
-          <div className="flex-shrink-0 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] px-6 py-5 space-y-4">
-
-            {/* Error de acción */}
-            <AnimatePresence>
-              {actionError && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  className="flex items-center gap-2 text-xs font-bold text-red-500 bg-red-50 dark:bg-red-500/10 border border-red-200/60 dark:border-red-500/20 rounded-xl px-4 py-2.5"
-                >
-                  <AlertCircle size={14} strokeWidth={2.5} className="flex-shrink-0" />
-                  {actionError}
                 </motion.div>
               )}
+
+              {/* ══════════════════════════════════════════════════════════════
+                  GESTIONAR TAB — only when ticket is open/sent
+                ══════════════════════════════════════════════════════════════ */}
+              {activeTab === 'gestionar' && !isClosed && (
+                <motion.div
+                  key="tab-gestionar"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                >
+                  {/* Form fields — scrollable region */}
+                  <div className="px-6 pt-6 pb-4 space-y-5">
+
+                    {/* Error de acción */}
+                    <AnimatePresence>
+                      {actionError && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          className="flex items-center gap-2 text-xs font-bold text-red-500 bg-red-50 dark:bg-red-500/10 border border-red-200/60 dark:border-red-500/20 rounded-xl px-4 py-2.5"
+                        >
+                          <AlertCircle size={14} strokeWidth={2.5} className="flex-shrink-0" />
+                          {actionError}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Selector de responder */}
+                    {responders.length > 0 && (
+                      <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] p-5 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
+                            <UserCog size={11} strokeWidth={2.5} />
+                            {isSent ? 'Asignar a' : 'Reasignar a'}
+                          </label>
+                          {ticket.category && (
+                            <span className="text-[9px] font-bold text-wellq-gray/50 tracking-normal bg-wellq-gray/10 dark:bg-white/5 px-2 py-0.5 rounded-md">
+                              Equipo sugerido: {categoryToGroup[ticket.category] ?? 'General'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <select
+                            value={selectedResp}
+                            onChange={(e) => { setSelectedResp(e.target.value); setActionError(null); }}
+                            disabled={saving}
+                            className="w-full appearance-none pl-4 pr-9 py-2.5 text-sm font-bold rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50 dark:[color-scheme:dark]"
+                          >
+                            <option value="">— Seleccionar responder —</option>
+                            {filteredResponders().map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name}{r.group ? ` (${r.group})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown size={14} strokeWidth={2.5} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-wellq-gray" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Área de solución — solo en Open */}
+                    {isOpen && (
+                      <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] p-5 space-y-3">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
+                          <CheckCircle2 size={11} strokeWidth={2.5} />
+                          Solución
+                        </label>
+                        <textarea
+                          value={solution}
+                          onChange={(e) => { setSolution(e.target.value); setActionError(null); }}
+                          disabled={saving}
+                          placeholder="Describe cómo se resolvió el problema…"
+                          rows={5}
+                          className="w-full resize-none px-4 py-3 text-sm font-medium rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white placeholder:text-wellq-gray/50 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Botones de acción — sticky al fondo del scroll area ── */}
+                  <div className="sticky bottom-0 bg-white dark:bg-wellq-dark border-t border-wellq-gray/10 dark:border-white/5 px-6 py-4">
+                    <div className="flex gap-2.5">
+                      {isSent && (
+                        <ActionButton
+                          onClick={handleTakeTicket}
+                          loading={saving}
+                          icon={UserCheck}
+                          label="Tomar ticket"
+                          variant="primary"
+                        />
+                      )}
+                      {isOpen && (
+                        <>
+                          <ActionButton
+                            onClick={handleReassign}
+                            loading={saving}
+                            icon={UserCog}
+                            label="Reasignar"
+                            variant="secondary"
+                            disabled={!selectedResp}
+                          />
+                          <ActionButton
+                            onClick={handleCloseTicket}
+                            loading={saving}
+                            icon={CheckCircle2}
+                            label="Cerrar ticket"
+                            variant="success"
+                            disabled={!solution.trim()}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ══════════════════════════════════════════════════════════════
+                  AVANZADO TAB — Siempre visible, contiene Danger Zone
+                ══════════════════════════════════════════════════════════════ */}
+              {activeTab === 'avanzado' && (
+                <motion.div
+                  key="tab-avanzado"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="px-6 py-6 space-y-6"
+                >
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-bold text-wellq-dark dark:text-white tracking-tight">
+                      Opciones Avanzadas
+                    </h3>
+                    <p className="text-xs font-medium text-wellq-gray leading-relaxed">
+                      Acciones críticas y configuraciones adicionales del ticket.
+                    </p>
+                  </div>
+
+                  <DangerZone
+                    confirmDelete={confirmDelete}
+                    setConfirmDelete={setConfirmDelete}
+                    deleting={deleting}
+                    onDelete={handleDelete}
+                  />
+                </motion.div>
+              )}
+
             </AnimatePresence>
-
-            {/* Selector de responder (aparece en Sent y Open) */}
-            {responders.length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
-                  <UserCog size={11} strokeWidth={2.5} />
-                  {isSent ? 'Asignar a' : 'Reasignar a'}
-                  {ticket.category && (
-                    <span className="ml-auto text-[9px] font-bold opacity-60 normal-case tracking-normal">
-                      Equipo sugerido: {CATEGORY_TO_GROUP[ticket.category] ?? 'General'}
-                    </span>
-                  )}
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedResp}
-                    onChange={(e) => { setSelectedResp(e.target.value); setActionError(null); }}
-                    disabled={saving}
-                    className="w-full appearance-none pl-4 pr-9 py-2.5 text-sm font-bold rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50"
-                  >
-                    <option value="">— Seleccionar responder —</option>
-                    {filteredResponders().map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}{r.group ? ` (${r.group})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} strokeWidth={2.5} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-wellq-gray" />
-                </div>
-              </div>
-            )}
-
-            {/* Área de solución — solo en Open */}
-            {isOpen && (
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
-                  <CheckCircle2 size={11} strokeWidth={2.5} />
-                  Solución
-                </label>
-                <textarea
-                  value={solution}
-                  onChange={(e) => { setSolution(e.target.value); setActionError(null); }}
-                  disabled={saving}
-                  placeholder="Describe cómo se resolvió el problema…"
-                  rows={3}
-                  className="w-full resize-none px-4 py-3 text-sm font-medium rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white placeholder:text-wellq-gray/50 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50"
-                />
-              </div>
-            )}
-
-            {/* Botones de acción */}
-            <div className="flex gap-2.5">
-              {/* Ticket en Sent → solo "Tomar ticket" */}
-              {isSent && (
-                <ActionButton
-                  onClick={handleTakeTicket}
-                  loading={saving}
-                  icon={UserCheck}
-                  label="Tomar ticket"
-                  variant="primary"
-                />
-              )}
-
-              {/* Ticket en Open → "Reasignar" + "Cerrar ticket" */}
-              {isOpen && (
-                <>
-                  <ActionButton
-                    onClick={handleReassign}
-                    loading={saving}
-                    icon={UserCog}
-                    label="Reasignar"
-                    variant="secondary"
-                    disabled={!selectedResp}
-                  />
-                  <ActionButton
-                    onClick={handleCloseTicket}
-                    loading={saving}
-                    icon={CheckCircle2}
-                    label="Cerrar ticket"
-                    variant="success"
-                    disabled={!solution.trim()}
-                  />
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Mensaje si el ticket está Closed */}
-        {!loading && ticket && isClosed && (
-          <div className="flex-shrink-0 border-t border-wellq-gray/10 dark:border-white/5 bg-emerald-50/60 dark:bg-emerald-500/5 px-6 py-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 size={14} strokeWidth={2.5} />
-              Ticket cerrado — no requiere acciones adicionales
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </motion.aside>
     </>,
     document.body
@@ -564,3 +715,60 @@ const TimelineItem = ({ Icon, label, dateShort, dateLong, relative, dotColor, ac
     </div>
   </div>
 );
+
+// ─── Danger Zone ──────────────────────────────────────────────────────────────
+const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => {
+  return (
+    <div className="rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50/50 dark:bg-red-500/5 p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <Trash2 size={16} className="text-red-500" strokeWidth={2.5} />
+        <h3 className="text-sm font-bold text-red-600 dark:text-red-400">Zona de Peligro</h3>
+      </div>
+      <p className="text-xs font-medium text-red-600/80 dark:text-red-400/80 leading-relaxed">
+        Eliminar un ticket es una acción irreversible. Todos los datos asociados se perderán permanentemente.
+      </p>
+      <AnimatePresence mode="wait">
+        {!confirmDelete ? (
+          <motion.div
+            key="btn-delete"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="pt-2"
+          >
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-white dark:bg-wellq-dark border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+            >
+              Eliminar ticket
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="confirm-actions"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="pt-2 flex gap-2"
+          >
+            <button
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+              className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-wellq-gray/10 dark:bg-white/10 text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={deleting}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-sm shadow-red-500/20 disabled:opacity-50"
+            >
+              {deleting ? <Loader2 size={14} strokeWidth={2.5} className="animate-spin" /> : <Trash2 size={14} strokeWidth={2.5} />}
+              Sí, eliminar
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};

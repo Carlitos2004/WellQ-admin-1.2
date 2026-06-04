@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, AlertCircle,
   Bug, CreditCard, Sparkles, MessageSquare,
   SlidersHorizontal, Clock, CheckCircle2, Send, X, ChevronDown,
+  User, Tag, Building
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -117,27 +119,125 @@ const Chip = ({ icon: Icon, label, className, onClick, active, size = 'sm' }) =>
 };
 
 // ─── Filter Bar ───────────────────────────────────────────────────────────────
-const FilterBar = ({ filters, clinics, onFilterChange }) => {
+const FilterBar = ({
+  filters,
+  clinics,
+  onFilterChange,
+  categories = [],
+}) => {
   const { t } = useLanguage();
 
+  // Estados para panel de categorías
+  const [catPanelOpen, setCatPanelOpen] = useState(false);
+  const catButtonRef = useRef(null);
+  const catPanelRef = useRef(null); 
+  const [catPanelPos, setCatPanelPos] = useState({ top: 0, right: 0 });
+
+  // Estados para panel de clínicas
+  const [clinicPanelOpen, setClinicPanelOpen] = useState(false);
+  const clinicButtonRef = useRef(null);
+  const clinicPanelRef = useRef(null); 
+  const [clinicPanelPos, setClinicPanelPos] = useState({ top: 0, left: 0 });
+
+  // 1. Cerrar al hacer clic afuera
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        catPanelOpen &&
+        catPanelRef.current && !catPanelRef.current.contains(e.target) &&
+        catButtonRef.current && !catButtonRef.current.contains(e.target)
+      ) {
+        setCatPanelOpen(false);
+      }
+      if (
+        clinicPanelOpen &&
+        clinicPanelRef.current && !clinicPanelRef.current.contains(e.target) &&
+        clinicButtonRef.current && !clinicButtonRef.current.contains(e.target)
+      ) {
+        setClinicPanelOpen(false);
+      }
+    };
+
+    if (catPanelOpen || clinicPanelOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [catPanelOpen, clinicPanelOpen]);
+
+  // 2. Cerrar al hacer scroll (EXCEPTO si estás scrolleando dentro del menú)
+  useEffect(() => {
+    const handleScroll = (e) => {
+      // Verificamos si el scroll viene desde adentro del panel abierto
+      const isInsideCat = catPanelRef.current?.contains(e.target);
+      const isInsideClinic = clinicPanelRef.current?.contains(e.target);
+
+      // Si el usuario está scrolleando la lista interna del panel, lo dejamos tranquilo
+      if (isInsideCat || isInsideClinic) {
+        return; 
+      }
+
+      // Si scrollea la página de fondo, cerramos los paneles
+      if (catPanelOpen) setCatPanelOpen(false);
+      if (clinicPanelOpen) setClinicPanelOpen(false);
+    };
+
+    if (catPanelOpen || clinicPanelOpen) {
+      window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    }
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+    };
+  }, [catPanelOpen, clinicPanelOpen]);
+
+  const handleToggleCatPanel = () => {
+    if (!catPanelOpen && catButtonRef.current) {
+      const rect = catButtonRef.current.getBoundingClientRect();
+      setCatPanelPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    }
+    if (clinicPanelOpen) setClinicPanelOpen(false);
+    setCatPanelOpen(v => !v);
+  };
+
+  const handleToggleClinicPanel = () => {
+    if (!clinicPanelOpen && clinicButtonRef.current) {
+      const rect = clinicButtonRef.current.getBoundingClientRect();
+      setClinicPanelPos({ top: rect.bottom + 8, left: rect.left });
+    }
+    if (catPanelOpen) setCatPanelOpen(false);
+    setClinicPanelOpen(v => !v);
+  };
+
   const OFF = 'border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-gray hover:border-wellq-gray/40 dark:hover:border-white/20 hover:text-wellq-dark dark:hover:text-white';
+  const DEFAULT_CAT_ON = 'border-wellq-blue/30 bg-wellq-blue/10 text-wellq-blue dark:border-wellq-blue/20 dark:bg-wellq-blue/10 dark:text-wellq-blue';
+  const DEFAULT_CLINIC_ON = 'border-wellq-cyan/30 bg-wellq-cyan/10 text-wellq-cyan dark:border-wellq-cyan/20 dark:bg-wellq-cyan/10 dark:text-wellq-cyan';
 
   const STATUS_OPTIONS = [
     { value: 'Open',   label: t('support.statusOpen'),   icon: Clock,        on: STATUS_STYLE.Open.chip },
     { value: 'Closed', label: t('support.statusClosed'), icon: CheckCircle2, on: STATUS_STYLE.Closed.chip },
     { value: 'Sent',   label: t('support.statusSent'),   icon: Send,         on: STATUS_STYLE.Sent.chip },
   ];
-  const CATEGORY_OPTIONS = [
-    { value: 'Bug',     label: 'Bug',     icon: Bug,           on: CATEGORY_META.Bug.chip },
-    { value: 'Billing', label: 'Billing', icon: CreditCard,    on: CATEGORY_META.Billing.chip },
-    { value: 'Feature', label: 'Feature', icon: Sparkles,      on: CATEGORY_META.Feature.chip },
-    { value: 'Request', label: 'Request', icon: MessageSquare, on: CATEGORY_META.Request.chip },
-  ];
+
+  const CATEGORY_OPTIONS = categories.length > 0
+    ? categories.map((cat) => ({
+        value: cat.name,
+        label: cat.name,
+        icon:  CATEGORY_META[cat.name]?.icon  ?? MessageSquare,
+        on:    CATEGORY_META[cat.name]?.chip  ?? DEFAULT_CAT_ON,
+      }))
+    : [
+        { value: 'Bug',     label: 'Bug',     icon: Bug,           on: CATEGORY_META.Bug.chip },
+        { value: 'Billing', label: 'Billing', icon: CreditCard,    on: CATEGORY_META.Billing.chip },
+        { value: 'Feature', label: 'Feature', icon: Sparkles,      on: CATEGORY_META.Feature.chip },
+        { value: 'Request', label: 'Request', icon: MessageSquare, on: CATEGORY_META.Request.chip },
+      ];
 
   const toggle = (key, val) =>
     onFilterChange?.({ ...filters, [key]: filters[key] === val ? undefined : val, page: 1 });
 
   const hasActive = !!(filters.status || filters.category || filters.clinic_id);
+  const activeCatOption = CATEGORY_OPTIONS.find(o => o.value === filters.category);
+  const activeClinicOption = clinics.find(c => c.clinic_id === filters.clinic_id);
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
@@ -146,6 +246,7 @@ const FilterBar = ({ filters, clinics, onFilterChange }) => {
         <SlidersHorizontal size={14} className="text-wellq-dark dark:text-white" strokeWidth={2.2} />
       </div>
 
+      {/* Status chips */}
       {STATUS_OPTIONS.map(({ value, label, icon, on }) => {
         const active = filters.status === value;
         return (
@@ -160,41 +261,150 @@ const FilterBar = ({ filters, clinics, onFilterChange }) => {
         );
       })}
 
-      {/* Divider */}
       <span className="w-px h-5 bg-wellq-gray/10 dark:bg-white/10 mx-1 flex-shrink-0" />
 
-      {CATEGORY_OPTIONS.map(({ value, label, icon, on }) => {
-        const active = filters.category === value;
-        return (
-          <Chip
-            key={value}
-            icon={icon}
-            label={label}
-            active={active}
-            onClick={() => toggle('category', value)}
-            className={active ? on : OFF}
+      {/* PANEL DE CATEGORÍA */}
+      <div className="relative flex-shrink-0">
+        <motion.button
+          ref={catButtonRef}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleToggleCatPanel}
+          className={`inline-flex items-center font-bold tracking-wide rounded-lg border cursor-pointer select-none transition-all px-3 py-1.5 text-[11px] gap-1.5 ${
+            filters.category ? (activeCatOption?.on ?? DEFAULT_CAT_ON) : OFF
+          }`}
+        >
+          <Tag size={11} strokeWidth={2.5} />
+          {activeCatOption ? activeCatOption.label : t('support.category', 'Categoría')}
+          <ChevronDown
+            size={10}
+            strokeWidth={2.5}
+            className={`transition-transform duration-200 ${catPanelOpen ? 'rotate-180' : ''}`}
           />
-        );
-      })}
+        </motion.button>
 
-      {/* Clinic select */}
+        {createPortal(
+          <AnimatePresence>
+            {catPanelOpen && (
+              <motion.div
+                ref={catPanelRef}
+                key="cat-panel"
+                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0,  scale: 1 }}
+                exit={{   opacity: 0, y: -8,  scale: 0.96 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                style={{ top: catPanelPos.top, right: catPanelPos.right }}
+                // Reduje la altura máxima a max-h-[240px] para asegurar que haga scroll interno
+                className="fixed z-[200] bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden min-w-[200px] max-h-[240px] flex flex-col"
+              >
+                <div className="px-4 pt-3.5 pb-2 border-b border-wellq-gray/10 dark:border-white/5 flex-shrink-0">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-wellq-gray/70">
+                    {t('support.filterByCategory', 'Filtrar por categoría')}
+                  </p>
+                </div>
+                <div 
+                  className="flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto" 
+                >
+                  {CATEGORY_OPTIONS.map(({ value, label, icon: CatIcon, on }) => {
+                    const active = filters.category === value;
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => { toggle('category', value); setCatPanelOpen(false); }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                          active ? on : OFF
+                        }`}
+                      >
+                        <CatIcon size={11} strokeWidth={2.5} />
+                        <span className="flex-1">{label}</span>
+                        {active && <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+      </div>
+
+      {/* PANEL DE CLÍNICAS */}
       {clinics.length > 0 && (
         <>
           <span className="w-px h-5 bg-wellq-gray/10 dark:bg-white/10 mx-1 flex-shrink-0" />
-          <div className="relative">
-            <select
-              value={filters.clinic_id ?? ''}
-              onChange={(e) =>
-                onFilterChange?.({ ...filters, clinic_id: e.target.value || undefined, page: 1 })
-              }
-              className="appearance-none pl-3 pr-8 py-1.5 text-[11px] font-bold tracking-wide rounded-lg border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-gray focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan cursor-pointer transition-all hover:border-wellq-gray/40 dark:hover:border-white/20 hover:text-wellq-dark dark:hover:text-white"
+          <div className="relative flex-shrink-0">
+            <motion.button
+              ref={clinicButtonRef}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleToggleClinicPanel}
+              className={`inline-flex items-center font-bold tracking-wide rounded-lg border cursor-pointer select-none transition-all px-3 py-1.5 text-[11px] gap-1.5 ${
+                filters.clinic_id ? DEFAULT_CLINIC_ON : OFF
+              }`}
             >
-              <option value="">{t('support.allClinics')}</option>
-              {clinics.map((c) => (
-                <option key={c.clinic_id} value={c.clinic_id}>{c.name}</option>
-              ))}
-            </select>
-            <ChevronDown size={12} strokeWidth={2.5} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-wellq-gray" />
+              <Building size={11} strokeWidth={2.5} />
+              {activeClinicOption ? activeClinicOption.name : t('support.allClinics', 'Todas las Clínicas')}
+              <ChevronDown
+                size={10}
+                strokeWidth={2.5}
+                className={`transition-transform duration-200 ${clinicPanelOpen ? 'rotate-180' : ''}`}
+              />
+            </motion.button>
+
+            {createPortal(
+              <AnimatePresence>
+                {clinicPanelOpen && (
+                  <motion.div
+                    ref={clinicPanelRef}
+                    key="clinic-panel"
+                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0,  scale: 1 }}
+                    exit={{   opacity: 0, y: -8,  scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    style={{ top: clinicPanelPos.top, left: clinicPanelPos.left }}
+                    // Límite interno de max-h-[240px]
+                    className="fixed z-[200] bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden min-w-[200px] max-h-[240px] flex flex-col"
+                  >
+                    <div className="px-4 pt-3.5 pb-2 border-b border-wellq-gray/10 dark:border-white/5 flex-shrink-0">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-wellq-gray/70">
+                        {t('support.filterByClinic', 'Filtrar por clínica')}
+                      </p>
+                    </div>
+                    <div 
+                      className="flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto"
+                    >
+                      <button
+                        onClick={() => { onFilterChange?.({ ...filters, clinic_id: undefined, page: 1 }); setClinicPanelOpen(false); }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                          !filters.clinic_id ? DEFAULT_CLINIC_ON : OFF
+                        }`}
+                      >
+                        <span className="flex-1">{t('support.allClinics', 'Todas las Clínicas')}</span>
+                        {!filters.clinic_id && <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />}
+                      </button>
+
+                      {clinics.map((c) => {
+                        const active = filters.clinic_id === c.clinic_id;
+                        return (
+                          <button
+                            key={c.clinic_id}
+                            onClick={() => { onFilterChange?.({ ...filters, clinic_id: c.clinic_id, page: 1 }); setClinicPanelOpen(false); }}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                              active ? DEFAULT_CLINIC_ON : OFF
+                            }`}
+                          >
+                            <span className="flex-1">{c.name}</span>
+                            {active && <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>,
+              document.body
+            )}
           </div>
         </>
       )}
@@ -207,7 +417,11 @@ const FilterBar = ({ filters, clinics, onFilterChange }) => {
             initial={{ opacity: 0, scale: 0.85, width: 0 }}
             animate={{ opacity: 1, scale: 1, width: 'auto' }}
             exit={{   opacity: 0, scale: 0.85, width: 0 }}
-            onClick={() => onFilterChange?.({ page: 1 })}
+            onClick={() => { 
+              onFilterChange?.({ page: 1 }); 
+              setCatPanelOpen(false); 
+              setClinicPanelOpen(false); 
+            }}
             className="inline-flex items-center gap-1.5 text-[11px] font-bold text-wellq-gray hover:text-red-500 dark:hover:text-red-400 transition-colors ml-1 uppercase tracking-wider"
           >
             <X size={12} strokeWidth={2.5} />
@@ -230,17 +444,15 @@ const TicketRow = ({ ticket, index, onSelect }) => {
     <motion.div
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0  }}
-      whileHover={{ y: -2, transition: { duration: 0.2, ease: 'easeOut' } }} // Animación PlatformOps
+      whileHover={{ y: -2, transition: { duration: 0.2, ease: 'easeOut' } }}
       transition={{ duration: 0.25, delay: index * 0.028, ease: 'easeOut' }}
       onClick={() => onSelect?.(ticket)}
       className="group relative flex items-center gap-4 px-5 py-4 cursor-pointer bg-white dark:bg-wellq-dark hover:bg-wellq-gray/3 dark:hover:bg-white/[0.02] hover:shadow-md hover:z-10 transition-all rounded-xl border border-transparent hover:border-wellq-gray/10 dark:hover:border-white/5"
     >
-      {/* Left accent line on hover (MANTENIDO) */}
       <span
         className={`absolute left-0 top-3 bottom-3 w-[3px] ${status.accent} rounded-r-full opacity-0 group-hover:opacity-100 transition-opacity duration-200`}
       />
 
-      {/* Avatar */}
       <div
         className={`w-10 h-10 rounded-xl ${avatar.bg} ${avatar.text} flex items-center justify-center text-xs font-black flex-shrink-0 ring-1 ring-wellq-gray/10 dark:ring-white/5 shadow-sm`}
         title={ticket.reporter_name}
@@ -248,12 +460,11 @@ const TicketRow = ({ ticket, index, onSelect }) => {
         {getInitials(ticket.reporter_name)}
       </div>
 
-      {/* Title + meta */}
       <div className="flex-1 min-w-0 pr-4">
         <p className="text-sm font-bold text-wellq-dark dark:text-white leading-tight tracking-tight truncate group-hover:text-wellq-cyan transition-colors">
           {ticket.title}
         </p>
-        <div className="flex items-center gap-1.5 mt-1">
+        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
           <span className="text-[11px] font-semibold text-wellq-gray dark:text-wellq-gray/80 truncate max-w-[140px] uppercase tracking-wider">
             {ticket.reporter_name || '—'}
           </span>
@@ -265,27 +476,32 @@ const TicketRow = ({ ticket, index, onSelect }) => {
               </span>
             </>
           )}
+          {ticket.responder_name && (
+            <>
+              <span className="text-wellq-gray/40 dark:text-wellq-gray/30 text-xs">•</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-wellq-blue dark:text-wellq-blue/80 truncate max-w-[120px]">
+                <User size={10} strokeWidth={2.5} className="flex-shrink-0" />
+                {ticket.responder_name}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Category chip */}
       <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 shadow-sm ${cat.chip}`}>
         <CatIcon size={12} strokeWidth={2.2} />
         {ticket.category}
       </div>
 
-      {/* Status badge */}
       <div className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 shadow-sm ${status.badge}`}>
         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
         {ticket.status}
       </div>
 
-      {/* Date */}
       <span className="hidden md:block text-xs font-bold text-wellq-gray w-20 text-right flex-shrink-0 tabular-nums tracking-tight">
         {fmtDate(ticket.reported_at)}
       </span>
 
-      {/* Arrow (MANTENIDO) */}
       <ChevronRight
         size={16}
         strokeWidth={2.5}
@@ -311,7 +527,6 @@ const Pagination = ({ page, totalPages, total, pageSize, onPageChange, t }) => {
   const start = (page - 1) * pageSize + 1;
   const end   = Math.min(page * pageSize, total);
 
-  // Build visible page numbers (at most 5, centered around current)
   const buildPages = () => {
     if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
     const delta = 2;
@@ -382,6 +597,7 @@ export const SupportTicketTable = ({
   loading = false,
   filters = {},
   clinics = [],
+  categories = [],
   onFilterChange,
   onPageChange,
   onSelectTicket,
@@ -392,12 +608,15 @@ export const SupportTicketTable = ({
   return (
     <div className="bg-white dark:bg-wellq-dark rounded-2xl border border-wellq-gray/20 dark:border-white/5 overflow-visible shadow-sm">
 
-      {/* Filter bar */}
       <div className="px-6 py-4 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] rounded-t-2xl">
-        <FilterBar filters={filters} clinics={clinics} onFilterChange={onFilterChange} />
+        <FilterBar
+          filters={filters}
+          clinics={clinics}
+          onFilterChange={onFilterChange}
+          categories={categories}
+        />
       </div>
 
-      {/* Content */}
       <div className="flex flex-col py-2 px-2 divide-y divide-wellq-gray/5 dark:divide-white/5">
         {loading ? (
           Array.from({ length: 7 }).map((_, i) => <SkeletonRow key={i} index={i} />)
@@ -415,7 +634,6 @@ export const SupportTicketTable = ({
         )}
       </div>
 
-      {/* Pagination */}
       {!loading && totalPages > 1 && (
         <div className="rounded-b-2xl overflow-hidden">
           <Pagination
