@@ -33,6 +33,7 @@ pip install bcrypt
 
 # 6. Cargamos los datos iniciales a la base de datos
 python seed.py
+
 # 7. eliminar duplicados 
 python cleanup_duplicates.py
 
@@ -52,6 +53,8 @@ cd frontend
 
 # 2. Instalamos todas las dependencias base del proyecto (comando hermano necesario)
 npm install
+
+npm install sweetalert2
 
 # 3. Instalamos la librería específica para manejar archivos Excel
 npm install xlsx

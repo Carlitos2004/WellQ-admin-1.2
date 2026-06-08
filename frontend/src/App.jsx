@@ -17,6 +17,7 @@ import { AnalyticsView }   from './views/AnalyticsView';
 import { PlansView }       from './views/PlansView';
 import { SettingsView }    from './views/SettingsView';
 import { SupportView }     from './views/SupportView';
+import ClinicPortalPage    from './views/ClinicPortalPage';
 
 import LoginPage from "./components/login/LoginPage";
 
@@ -1005,6 +1006,10 @@ export default function App() {
   };
 
   const visibleW = open ? SIDEBAR_W : SIDEBAR_COL;
+
+  if (window.location.pathname === '/clinic-portal') {
+    return <ClinicPortalPage />;
+  }
 
   if (!isAuthenticated) {
     return <LoginPage onLoginSuccess={() => {

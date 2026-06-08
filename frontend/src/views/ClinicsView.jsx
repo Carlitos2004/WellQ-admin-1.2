@@ -8,9 +8,10 @@ import {
   ChevronLeft, ChevronRight, Plus, Trash2
 } from 'lucide-react';
 import { Skeleton } from '../components/ui';
-import { ClinicRow } from '../components/clinics/ClinicRow';
-import { ClinicDrawer } from '../components/clinics/ClinicDrawer';
-import { API_BASE } from '../api/client';
+import { ClinicRow }        from '../components/clinics/ClinicRow';
+import { ClinicDrawer }     from '../components/clinics/ClinicDrawer';
+import { ImpersonateModal } from '../components/clinics/ImpersonateModal'; // ← NUEVO
+import { API_BASE, apiFetch } from '../api/client';
 import { useLanguage } from '../contexts/LanguageContext';
 
 // ─── Animaciones ─────────────────────────────────────────────────────────────
@@ -51,9 +52,8 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
     setSending(true);
     setError(null);
     try {
-      const res = await fetch('/api/notifications', {
+      await apiFetch('/api/notifications', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title:             subject,
           message:           message,
@@ -61,9 +61,9 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
           recipientClinicId: 'all',
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSent(true);
-    } catch {
+    } catch (err) {
+      if (err.status === 403) return; // Si es 403, SweetAlert se encarga, no muestra error genérico
       setError(t('clinics.sendError'));
     } finally {
       setSending(false);
@@ -178,11 +178,10 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
   );
 };
 
-// ─── DeleteClinicModal (NUEVO MODAL INTELIGENTE) ─────────────────────────────
+// ─── DeleteClinicModal ────────────────────────────────────────────────────────
 const DeleteClinicModal = ({ clinic, onClose, onConfirm, deleting }) => {
   if (!clinic) return null;
 
-  // Verificamos si la clínica ya estaba en la papelera
   const isChurned = (clinic.status || '').toLowerCase() === 'churned';
 
   return createPortal(
@@ -268,29 +267,23 @@ const CreateClinicModal = ({ onClose, onSuccess }) => {
 
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Bloqueos de teclado para que NO entren letras
   const handleStrictNumberKeyDown = (e) => {
-    // Permite Backspace, Delete, Tabs, Flechas
     if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    // Si no es un número del 0 al 9, bloquea
     if (!/^[0-9]$/.test(e.key)) e.preventDefault();
   };
 
   const handleFloatKeyDown = (e) => {
     if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    // Permite números y un solo punto
     if (!/^[0-9.]$/.test(e.key)) e.preventDefault();
   };
 
   const handleRutKeyDown = (e) => {
     if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    // RUT en Chile: Números, k o K, y guion
     if (!/^[0-9kK-]$/.test(e.key)) e.preventDefault();
   };
 
   const handlePhoneKeyDown = (e) => {
     if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    // Teléfonos: Números, espacios y el signo más
     if (!/^[0-9 +]$/.test(e.key)) e.preventDefault();
   };
 
@@ -299,9 +292,8 @@ const CreateClinicModal = ({ onClose, onSuccess }) => {
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/clinics`, {
+      await apiFetch('/api/clinics', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name:           form.name.trim(),
           tier:           form.tier,
@@ -319,10 +311,10 @@ const CreateClinicModal = ({ onClose, onSuccess }) => {
           internal_notes: form.internal_notes || null,
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setCreated(true);
       onSuccess?.();
-    } catch {
+    } catch (err) {
+      if (err.status === 403) return;
       setError('Error al crear la clínica. Verifica los datos e intenta de nuevo.');
     } finally {
       setCreating(false);
@@ -650,15 +642,16 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const [selected,       setSelected]       = useState(null);
-  const [settingsClinic, setSettingsClinic] = useState(null);
-  const [invoiceClinic,  setInvoiceClinic]  = useState(null);
-  
+  const [selected,         setSelected]         = useState(null);
+  const [settingsClinic,   setSettingsClinic]   = useState(null);
+  const [invoiceClinic,    setInvoiceClinic]    = useState(null);
+  const [impersonateTarget, setImpersonateTarget] = useState(null); // ← NUEVO
+
   const [bulkOpen,       setBulkOpen]       = useState(false);
   const [createOpen,     setCreateOpen]     = useState(false);
-  
+
   const [deleteTarget,   setDeleteTarget]   = useState(null);
-  const [exportState,    setExportState]    = useState('idle'); 
+  const [exportState,    setExportState]    = useState('idle');
   const [deleting,       setDeleting]       = useState(false);
 
   const clinics  = apiClinics.length > 0 ? apiClinics : HARDCODED_CLINICS;
@@ -679,12 +672,14 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
     const id = deleteTarget.clinic_id ?? deleteTarget.id;
     setDeleting(true);
     try {
-      const res = await fetch(`${API_BASE}/api/clinics/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await apiFetch(`/api/clinics/${id}`, { method: 'DELETE' });
       setDeleteTarget(null);
-      // 🔥 AQUI ESTÁ EL CAMBIO: Recarga según la pestaña actual
       onRefreshClinics && onRefreshClinics(filter === 'churned' ? { status: 'churned' } : {});
     } catch (err) {
+      if (err.status === 403) {
+        setDeleteTarget(null);
+        return;
+      }
       console.error('Delete error:', err);
     } finally {
       setDeleting(false);
@@ -1075,7 +1070,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             ].map(({ key, label }) => (
               <button
                 key={key}
-                // 🔥 AQUI ESTÁ EL CAMBIO: Al cambiar la pestaña notifica al padre
                 onClick={() => {
                   setFilter(key);
                   if (onRefreshClinics) {
@@ -1191,7 +1185,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               <Mail size={14} strokeWidth={2.2} /> {t('clinics.bulkEmail')}
             </button>
 
-            {/* BOTÓN CREAR CLÍNICA: Iguala el estilo de Bulk Email */}
             <button
               onClick={() => setCreateOpen(true)}
               className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
@@ -1205,7 +1198,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
           <table className="w-full">
             <thead className="bg-wellq-gray/4 dark:bg-white/[0.02] border-b border-wellq-gray/15 dark:border-wellq-gray/20 sticky top-0">
               <tr>
-                {/* Cabeceras de tabla sin Checkbox */}
                 {[
                   t('clinics.columns.clinic'),
                   t('clinics.columns.plan'),
@@ -1225,7 +1217,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               {clinicsLoading
                 ? [...Array(4)].map((_, i) => (
                     <tr key={i} className="border-b border-wellq-gray/10 dark:border-wellq-gray/30">
-                      {/* Ahora son 7 columnas porque quitamos el checkbox */}
                       <td colSpan={7} className="py-3 px-4">
                         <Skeleton className="h-8 w-full" />
                       </td>
@@ -1240,7 +1231,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                         selected?.clinic_id === clinic.clinic_id ||
                         selected?.id === clinic.id
                       }
-                      onImpersonate={setSelected}
+                      onImpersonate={setImpersonateTarget} // ← CORREGIDO
                       onSettings={(c) => { closeAll(); setSettingsClinic(c); }}
                       onInvoices={(c) => { closeAll(); setInvoiceClinic(c); }}
                       onDelete={setDeleteTarget}
@@ -1250,7 +1241,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             </tbody>
           </table>
 
-          {/* Footer de la tabla limpio (Sin Checkboxes) */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
             <span className="text-xs font-semibold text-wellq-gray">
               Mostrando <span className="font-bold text-wellq-dark dark:text-white">{filtered.length > 0 ? '1' : '0'}–{filtered.length}</span> de {filtered.length} clínicas
@@ -1268,7 +1258,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         </div>
       </motion.div>
 
-      {/* ── Drawers (Menú lateral de facturas y settings) ── */}
+      {/* ── Drawer lateral ── */}
       <AnimatePresence>
         {activeDrawer && (
           <>
@@ -1283,6 +1273,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               clinic={activeDrawer}
               mode={settingsClinic ? 'settings' : invoiceClinic ? 'invoices' : 'overview'}
               onClose={closeAll}
+              onImpersonate={setImpersonateTarget} // ← NUEVO: permite lanzar el modal desde el drawer
             />
           </>
         )}
@@ -1300,18 +1291,32 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
       {createOpen && (
         <CreateClinicModal
           onClose={() => setCreateOpen(false)}
-          // 🔥 AQUI ESTÁ EL CAMBIO: Mantiene el filtro de la pestaña actual después de crear
           onSuccess={() => { onRefreshClinics && onRefreshClinics(filter === 'churned' ? { status: 'churned' } : {}); }}
         />
       )}
 
-      {/* ── Modal Eliminar (RE-DISEÑADO) ── */}
-      <DeleteClinicModal 
+      {/* ── Modal Eliminar ── */}
+      <DeleteClinicModal
         clinic={deleteTarget}
         deleting={deleting}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteConfirm}
       />
+
+      {/* ── Modal Impersonation (Acceso de Soporte) ── */}
+      {impersonateTarget && (
+        <ImpersonateModal
+          clinic={impersonateTarget}
+          onClose={() => setImpersonateTarget(null)}
+          onSuccess={(data) => {
+            setImpersonateTarget(null);
+            if (data?.clinic_portal_url) {
+              window.open(data.clinic_portal_url, '_blank', 'noopener,noreferrer');
+            }
+            onImpersonate?.(impersonateTarget, data);
+          }}
+        />
+      )}
     </motion.div>
   );
 };

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,6 +20,8 @@ ACCESS_EXPIRES  = timedelta(hours=1)
 REFRESH_EXPIRES = timedelta(days=7)
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticación y Seguridad"])
+
+_bearer = HTTPBearer()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -216,15 +219,13 @@ async def refresh_token(body: dict = Body(...), db: AsyncSession = Depends(get_d
     summary="Obtener perfil del usuario autenticado (requiere Bearer token)",
 )
 async def get_me(
-    token: str = Depends(
-        # Extrae el token del header Authorization: Bearer <token>
-        lambda authorization=Depends(
-            __import__("fastapi.security", fromlist=["HTTPBearer"]).HTTPBearer()
-        ): authorization.credentials
-    ),
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
 ):
-    payload = decode_token(token)
+    payload = decode_token(credentials.credentials)
+
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
 
     result = await db.execute(select(AdminUser).where(AdminUser.email == payload["email"]))
     user: AdminUser | None = result.scalars().first()
@@ -240,4 +241,3 @@ async def get_me(
         "status":     user.status,
         "last_login": user.last_login.isoformat() if user.last_login else None,
     }
-

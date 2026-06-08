@@ -21,12 +21,9 @@ export const ClinicRow = ({
     `}
     onClick={() => onSelect(clinic)}
   >
-    {/* ELIMINADO: La columna del Checkbox ha sido borrada para alinear perfectamente con el Header de ClinicsView */}
-
     {/* Clinic Name & Avatar */}
     <td className="py-4 px-4">
       <div className="flex items-center gap-3.5">
-        {/* Avatar alineado con el ícono del header de Analytics */}
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center text-wellq-dark text-sm font-black shadow-md shadow-wellq-cyan/20 ring-1 ring-white/10 group-hover:scale-105 transition-transform duration-300">
           {(clinic.name ?? '?').charAt(0).toUpperCase()}
         </div>
@@ -41,7 +38,7 @@ export const ClinicRow = ({
       </div>
     </td>
 
-    {/* Tier Badge (Inspirado en los tags de adopción de features) */}
+    {/* Tier Badge */}
     <td className="py-4 px-4">
       {clinic.tier ? (
         <span
@@ -76,12 +73,12 @@ export const ClinicRow = ({
       <HealthBadge score={clinic.healthScore ?? 0} />
     </td>
 
-    {/* Last Login (Estilo tabular-nums para consistencia de datos) */}
+    {/* Last Login */}
     <td className="py-4 px-4 text-xs text-wellq-gray font-semibold tabular-nums">
       {clinic.lastLogin ?? '-'}
     </td>
 
-    {/* Actions (Ahora siempre visibles y limpias) */}
+    {/* Actions */}
     <td className="py-4 px-4">
       <div className="flex items-center gap-1 transition-opacity duration-200">
         <ActionBtn
@@ -96,11 +93,12 @@ export const ClinicRow = ({
           hoverClass="hover:bg-wellq-green/10 hover:text-wellq-green"
           onClick={(e) => { e.stopPropagation(); onInvoices && onInvoices(clinic); }}
         />
+        {/* ── Eye → Acceso de Soporte (antes abría el drawer, ahora lanza el ImpersonateModal) ── */}
         <ActionBtn
           icon={Eye}
-          title="Ver Overview"
-          hoverClass="hover:bg-wellq-cyan/10 hover:text-wellq-cyan"
-          onClick={(e) => { e.stopPropagation(); onSelect && onSelect(clinic); }}
+          title="Acceso de Soporte"
+          hoverClass="hover:bg-amber-500/10 hover:text-amber-500"
+          onClick={(e) => { e.stopPropagation(); onImpersonate && onImpersonate(clinic); }}
         />
         <ActionBtn
           icon={Trash2}
@@ -113,12 +111,11 @@ export const ClinicRow = ({
   </motion.tr>
 );
 
-// ─── Subcomponente botón de acción refinado ───────────────────────────────────
+// ─── Subcomponente botón de acción ────────────────────────────────────────────
 const ActionBtn = ({ icon: Icon, title, hoverClass, onClick }) => (
   <button
     onClick={onClick}
     title={title}
-    // CORRECCIÓN: Color ajustado para que sea legible siempre sin tener que pasar el mouse
     className={`p-2 rounded-xl transition-all duration-200 text-wellq-gray dark:text-wellq-gray/80 ${hoverClass} cursor-pointer hover:scale-105`}
   >
     <Icon size={16} strokeWidth={2.5} />

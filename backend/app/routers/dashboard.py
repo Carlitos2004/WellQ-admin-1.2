@@ -3,13 +3,14 @@ routers/dashboard.py — MÓDULO 2: OVERVIEW KPIs (DASHBOARD)
 ===========================================================
 Fusión de dashboard.py + kpis.py.
 Todos los endpoints soportan filtros por fecha (start_date, end_date).
+Ahora también soportan filtro por clínica (clinic_id) para métricas segmentadas.
 
 CAMBIOS vs versión anterior:
-  - /arr            → incluye trend_graph real desde KpiSnapshot
-  - /system-health  → usa tabla servers real + latencia desde AiLatencyMetric
-  - /users/dormant  → fix NULL: last_login IS NULL se cuenta como dormant
-  - /users/active-now → fallback a AppUsageStat si AppMetric está vacío
-  - /downloads/total  → fallback a AppUsageStat si AppMetric está vacío
+  - /arr            → incluye trend_graph real desde KpiSnapshot, ahora con filtro clinic_id
+  - /system-health  → usa tabla servers real + latencia desde AiLatencyMetric (sin cambios)
+  - /users/dormant  → fix NULL: last_login IS NULL se cuenta como dormant, ahora con filtro clinic_id
+  - /users/active-now → fallback a AppUsageStat si AppMetric está vacío (sin cambios, métrica global)
+  - /downloads/total  → fallback a AppUsageStat si AppMetric está vacío (sin cambios, métrica global)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -43,25 +44,27 @@ def parse_date(date_str: str | None, end_of_day: bool = False) -> datetime | Non
 async def get_arr(
     start_date: str = Query(None),
     end_date:   str = Query(None),
+    clinic_id:  str | None = Query(None),            # ← FILTRO UNIVERSAL
     db: AsyncSession = Depends(get_db),
 ):
     """
     ARR del snapshot más cercano a end_date.
+    Si se pasa clinic_id, devuelve el ARR de esa clínica; si no, el global.
     Fallback: calcula desde MRR de clínicas activas si no hay snapshots.
-    Devuelve trend_graph con los últimos 12 meses.
+    Devuelve trend_graph con los últimos 12 meses (filtrado por clínica si aplica).
     """
-    result = await db.execute(
-        select(KpiSnapshot).order_by(
-            KpiSnapshot.year.desc(),
-            KpiSnapshot.id.desc(),
-        )
-    )
+    query = select(KpiSnapshot).order_by(KpiSnapshot.year.desc(), KpiSnapshot.id.desc())
+    if clinic_id:
+        query = query.where(KpiSnapshot.clinic_id == clinic_id)
+    result = await db.execute(query)
     snapshots = result.scalars().all()
 
     if not snapshots:
-        total_mrr = await db.scalar(
-            select(func.sum(Clinic.mrr)).where(Clinic.status == "active")
-        )
+        # Fallback con Clinic
+        mrr_query = select(func.sum(Clinic.mrr)).where(Clinic.status == "active")
+        if clinic_id:
+            mrr_query = mrr_query.where(Clinic.clinic_id == clinic_id)
+        total_mrr = await db.scalar(mrr_query)
         current_arr = round((total_mrr or 0) * 12, 2)
         return {
             "current_arr":       current_arr,
@@ -69,6 +72,7 @@ async def get_arr(
             "growth_percentage": 0,
             "currency":          "USD",
             "trend_graph":       [],
+            "clinic_id":         clinic_id,
         }
 
     latest = snapshots[0]
@@ -88,6 +92,7 @@ async def get_arr(
         "growth_percentage": growth,
         "currency":          "USD",
         "trend_graph":       trend,
+        "clinic_id":         clinic_id,
     }
 
 
@@ -96,19 +101,25 @@ async def get_arr(
 async def get_active_clinics(
     start_date: str = Query(None),
     end_date:   str = Query(None),
+    clinic_id:  str | None = Query(None),            # ← FILTRO UNIVERSAL
     db: AsyncSession = Depends(get_db),
 ):
     """
     Total de clínicas activas al final del período (end_date).
-    Nuevas clínicas y churn ocurridos dentro del rango [start_date, end_date].
+    Si se pasa clinic_id, devuelve la info de esa clínica.
     """
     end   = parse_date(end_date, end_of_day=True) or datetime.utcnow()
     start = parse_date(start_date)
 
+    # Base query con filtro opcional de clínica
+    base = select(Clinic)
+    if clinic_id:
+        base = base.where(Clinic.clinic_id == clinic_id)
+
+    # Total activas al final del período
     total_active = (await db.execute(
-        select(func.count()).where(
-            Clinic.status == "active",
-            Clinic.created_at <= end,
+        select(func.count()).select_from(
+            base.where(Clinic.status == "active", Clinic.created_at <= end).subquery()
         )
     )).scalar() or 0
 
@@ -116,36 +127,43 @@ async def get_active_clinics(
 
     if start:
         new_clinics = (await db.execute(
-            select(func.count()).where(
-                Clinic.status == "active",
-                Clinic.created_at >= start,
-                Clinic.created_at <= end,
+            select(func.count()).select_from(
+                base.where(
+                    Clinic.status == "active",
+                    Clinic.created_at >= start,
+                    Clinic.created_at <= end,
+                ).subquery()
             )
         )).scalar() or 0
 
         churned_clinics = (await db.execute(
-            select(func.count()).where(
-                Clinic.status == "churned",
-                Clinic.updated_at >= start,
-                Clinic.updated_at <= end,
+            select(func.count()).select_from(
+                base.where(
+                    Clinic.status == "churned",
+                    Clinic.updated_at >= start,
+                    Clinic.updated_at <= end,
+                ).subquery()
             )
         )).scalar() or 0
     else:
-        # Sin rango: nuevas y churned en el mes actual
         now = datetime.utcnow()
         new_clinics = (await db.execute(
-            select(func.count()).where(
-                Clinic.status == "active",
-                func.extract("month", Clinic.created_at) == now.month,
-                func.extract("year",  Clinic.created_at) == now.year,
+            select(func.count()).select_from(
+                base.where(
+                    Clinic.status == "active",
+                    func.extract("month", Clinic.created_at) == now.month,
+                    func.extract("year",  Clinic.created_at) == now.year,
+                ).subquery()
             )
         )).scalar() or 0
 
         churned_clinics = (await db.execute(
-            select(func.count()).where(
-                Clinic.status == "churned",
-                func.extract("month", Clinic.updated_at) == now.month,
-                func.extract("year",  Clinic.updated_at) == now.year,
+            select(func.count()).select_from(
+                base.where(
+                    Clinic.status == "churned",
+                    func.extract("month", Clinic.updated_at) == now.month,
+                    func.extract("year",  Clinic.updated_at) == now.year,
+                ).subquery()
             )
         )).scalar() or 0
 
@@ -160,6 +178,7 @@ async def get_active_clinics(
         "new_clinics_month":     new_clinics,
         "churned_clinics_month": churned_clinics,
         "state":                 state,
+        "clinic_id":             clinic_id,
     }
 
 
@@ -168,37 +187,39 @@ async def get_active_clinics(
 async def get_total_patients(
     start_date: str = Query(None),
     end_date:   str = Query(None),
+    clinic_id:  str | None = Query(None),            # ← FILTRO UNIVERSAL
     db: AsyncSession = Depends(get_db),
 ):
     """
     Suma de patients_used de clínicas activas.
-    active_in_treatment: clínicas con health_score >= 60.
-    new_this_week: clínicas creadas en el rango start-end.
+    Si se pasa clinic_id, solo de esa clínica.
     """
     end   = parse_date(end_date, end_of_day=True) or datetime.utcnow()
     start = parse_date(start_date) if start_date else end - timedelta(days=7)
 
+    base = select(Clinic).where(Clinic.status == "active", Clinic.created_at <= end)
+    if clinic_id:
+        base = base.where(Clinic.clinic_id == clinic_id)
+
     total_patients = int((await db.execute(
-        select(func.sum(Clinic.patients_used)).where(
-            Clinic.status == "active",
-            Clinic.created_at <= end,
-        )
+        select(func.sum(Clinic.patients_used)).select_from(base.subquery())
     )).scalar() or 0)
 
     active_in_treatment = int((await db.execute(
-        select(func.sum(Clinic.patients_used)).where(
-            Clinic.status == "active",
-            Clinic.health_score >= 60,
-            Clinic.created_at <= end,
+        select(func.sum(Clinic.patients_used)).select_from(
+            base.where(Clinic.health_score >= 60).subquery()
         )
     )).scalar() or 0)
 
+    new_base = select(Clinic).where(
+        Clinic.status == "active",
+        Clinic.created_at >= start,
+        Clinic.created_at <= end,
+    )
+    if clinic_id:
+        new_base = new_base.where(Clinic.clinic_id == clinic_id)
     new_this_week = int((await db.execute(
-        select(func.sum(Clinic.patients_used)).where(
-            Clinic.status == "active",
-            Clinic.created_at >= start,
-            Clinic.created_at <= end,
-        )
+        select(func.sum(Clinic.patients_used)).select_from(new_base.subquery())
     )).scalar() or 0)
 
     return {
@@ -206,6 +227,7 @@ async def get_total_patients(
         "active_in_treatment": active_in_treatment,
         "new_this_week":       new_this_week,
         "avg_per_clinic":      0,
+        "clinic_id":           clinic_id,
     }
 
 
@@ -214,15 +236,14 @@ async def get_total_patients(
 async def get_nrr(
     start_date: str = Query(None),
     end_date:   str = Query(None),
+    clinic_id:  str | None = Query(None),            # ← FILTRO UNIVERSAL
     db: AsyncSession = Depends(get_db),
 ):
-    """NRR del snapshot más reciente. Incluye historial."""
-    result = await db.execute(
-        select(KpiSnapshot).order_by(
-            KpiSnapshot.year.desc(),
-            KpiSnapshot.id.desc(),
-        )
-    )
+    """NRR del snapshot más reciente. Filtrable por clínica."""
+    query = select(KpiSnapshot).order_by(KpiSnapshot.year.desc(), KpiSnapshot.id.desc())
+    if clinic_id:
+        query = query.where(KpiSnapshot.clinic_id == clinic_id)
+    result = await db.execute(query)
     snapshots = result.scalars().all()
 
     if not snapshots:
@@ -237,6 +258,7 @@ async def get_nrr(
         "status":         latest.nrr_status,
         "month":          latest.month,
         "year":           latest.year,
+        "clinic_id":      clinic_id,
         "history": [
             {
                 "month":          s.month,
@@ -251,6 +273,7 @@ async def get_nrr(
 
 
 # ── 5. GET /api/kpis/system-health ────────────────────────────────────────────
+# (Métrica global, sin filtro por clínica)
 @router.get("/system-health")
 async def get_system_health(
     start_date: str = Query(None),
@@ -266,7 +289,6 @@ async def get_system_health(
     servers   = servers_q.scalars().all()
 
     if not servers:
-        # Fallback: ping a la DB
         try:
             await db.execute(select(func.count()).select_from(Clinic))
             db_status = "online"
@@ -298,6 +320,7 @@ async def get_system_health(
 
 
 # ── 6. GET /api/kpis/users/active-now ────────────────────────────────────────
+# (Métrica global, sin filtro por clínica)
 @router.get("/users/active-now")
 async def get_users_active_now(
     start_date: str = Query(None),
@@ -317,7 +340,6 @@ async def get_users_active_now(
     result  = await db.execute(select(AppMetric).where(AppMetric.metric_key.in_(keys)))
     metrics = {row.metric_key: int(row.metric_value) for row in result.scalars().all()}
 
-    # Fallback a AppUsageStat si AppMetric está vacío
     if not metrics:
         stats_q = await db.execute(select(AppUsageStat))
         stats   = stats_q.scalars().all()
@@ -347,6 +369,7 @@ async def get_users_active_now(
 
 
 # ── 7. GET /api/kpis/downloads/total ─────────────────────────────────────────
+# (Métrica global, sin filtro por clínica)
 @router.get("/downloads/total")
 async def get_total_downloads(
     start_date: str = Query(None),
@@ -386,44 +409,53 @@ async def get_total_downloads(
 async def get_users_dormant(
     start_date: str = Query(None),
     end_date:   str = Query(None),
+    clinic_id:  str | None = Query(None),            # ← FILTRO UNIVERSAL
     db: AsyncSession = Depends(get_db),
 ):
     """
     Clínicas activas sin login en 30d / 90d.
     FIX: last_login IS NULL se cuenta como dormant (nunca entraron).
+    Ahora filtrable por clínica.
     """
     now        = datetime.utcnow()
     cutoff_30d = now - timedelta(days=30)
     cutoff_90d = now - timedelta(days=90)
 
+    base = select(Clinic).where(Clinic.status == "active")
+    if clinic_id:
+        base = base.where(Clinic.clinic_id == clinic_id)
+
     dormant_30d = (await db.execute(
-        select(func.count()).where(
-            Clinic.status == "active",
-            or_(
-                Clinic.last_login == None,       # nunca logueó → dormant
-                Clinic.last_login < cutoff_30d,
-            ),
+        select(func.count()).select_from(
+            base.where(
+                or_(
+                    Clinic.last_login == None,
+                    Clinic.last_login < cutoff_30d,
+                )
+            ).subquery()
         )
     )).scalar() or 0
 
     dormant_90d = (await db.execute(
-        select(func.count()).where(
-            Clinic.status == "active",
-            or_(
-                Clinic.last_login == None,
-                Clinic.last_login < cutoff_90d,
-            ),
+        select(func.count()).select_from(
+            base.where(
+                or_(
+                    Clinic.last_login == None,
+                    Clinic.last_login < cutoff_90d,
+                )
+            ).subquery()
         )
     )).scalar() or 0
 
     risk_of_churn_clinics = (await db.execute(
-        select(func.count()).where(
-            Clinic.status == "active",
-            Clinic.health_score < 70,
-            or_(
-                Clinic.last_login == None,
-                Clinic.last_login < cutoff_30d,
-            ),
+        select(func.count()).select_from(
+            base.where(
+                Clinic.health_score < 70,
+                or_(
+                    Clinic.last_login == None,
+                    Clinic.last_login < cutoff_30d,
+                )
+            ).subquery()
         )
     )).scalar() or 0
 
@@ -432,4 +464,5 @@ async def get_users_dormant(
         "dormant_90d":                   dormant_90d,
         "risk_of_churn_clinics":         risk_of_churn_clinics,
         "re_engagement_campaign_active": False,
+        "clinic_id":                     clinic_id,
     }

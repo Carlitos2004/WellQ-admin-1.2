@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-// ─── Status & category tokens (Estilo PlatformOps) ───────────────────────────
+// ─── Status & category tokens ─────────────────────────────────────────────────
 const STATUS_STYLE = {
   Open: {
     badge: 'bg-amber-50 text-amber-600 border-amber-200/80 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
@@ -77,7 +77,8 @@ const getInitials = (name) => {
     : name.substring(0, 2).toUpperCase();
 };
 
-const avatarFor = (name = '') => AVATAR_PALETTE[name.charCodeAt(0) % AVATAR_PALETTE.length];
+// FIX: default param '= ""' no protege contra null, solo contra undefined
+const avatarFor = (name) => AVATAR_PALETTE[(name?.charCodeAt(0) ?? 0) % AVATAR_PALETTE.length];
 
 // ─── Skeleton Row ─────────────────────────────────────────────────────────────
 const SkeletonRow = ({ index }) => (
@@ -118,6 +119,17 @@ const Chip = ({ icon: Icon, label, className, onClick, active, size = 'sm' }) =>
   );
 };
 
+// ─── Clases comunes para scrollbar custom (dark-mode friendly) ────────────────
+const SCROLLBAR_CLASSES = [
+  '[&::-webkit-scrollbar]:w-1',
+  '[&::-webkit-scrollbar-track]:bg-transparent',
+  '[&::-webkit-scrollbar-thumb]:rounded-full',
+  '[&::-webkit-scrollbar-thumb]:bg-wellq-gray/25',
+  'dark:[&::-webkit-scrollbar-thumb]:bg-white/10',
+  '[&::-webkit-scrollbar-thumb:hover]:bg-wellq-gray/40',
+  'dark:[&::-webkit-scrollbar-thumb:hover]:bg-white/20',
+].join(' ');
+
 // ─── Filter Bar ───────────────────────────────────────────────────────────────
 const FilterBar = ({
   filters,
@@ -127,67 +139,45 @@ const FilterBar = ({
 }) => {
   const { t } = useLanguage();
 
-  // Estados para panel de categorías
-  const [catPanelOpen, setCatPanelOpen] = useState(false);
-  const catButtonRef = useRef(null);
-  const catPanelRef = useRef(null); 
-  const [catPanelPos, setCatPanelPos] = useState({ top: 0, right: 0 });
-
-  // Estados para panel de clínicas
+  const [catPanelOpen,    setCatPanelOpen]    = useState(false);
   const [clinicPanelOpen, setClinicPanelOpen] = useState(false);
+  const catButtonRef    = useRef(null);
+  const catPanelRef     = useRef(null);
   const clinicButtonRef = useRef(null);
-  const clinicPanelRef = useRef(null); 
+  const clinicPanelRef  = useRef(null);
+  const [catPanelPos,    setCatPanelPos]    = useState({ top: 0, right: 0 });
   const [clinicPanelPos, setClinicPanelPos] = useState({ top: 0, left: 0 });
 
-  // 1. Cerrar al hacer clic afuera
+  // Cerrar al hacer clic afuera
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
         catPanelOpen &&
-        catPanelRef.current && !catPanelRef.current.contains(e.target) &&
-        catButtonRef.current && !catButtonRef.current.contains(e.target)
-      ) {
-        setCatPanelOpen(false);
-      }
+        catPanelRef.current    && !catPanelRef.current.contains(e.target) &&
+        catButtonRef.current   && !catButtonRef.current.contains(e.target)
+      ) setCatPanelOpen(false);
+
       if (
         clinicPanelOpen &&
-        clinicPanelRef.current && !clinicPanelRef.current.contains(e.target) &&
+        clinicPanelRef.current  && !clinicPanelRef.current.contains(e.target) &&
         clinicButtonRef.current && !clinicButtonRef.current.contains(e.target)
-      ) {
-        setClinicPanelOpen(false);
-      }
+      ) setClinicPanelOpen(false);
     };
-
-    if (catPanelOpen || clinicPanelOpen) {
+    if (catPanelOpen || clinicPanelOpen)
       document.addEventListener('mousedown', handleClickOutside);
-    }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [catPanelOpen, clinicPanelOpen]);
 
-  // 2. Cerrar al hacer scroll (EXCEPTO si estás scrolleando dentro del menú)
+  // Cerrar al hacer scroll fuera del panel
   useEffect(() => {
     const handleScroll = (e) => {
-      // Verificamos si el scroll viene desde adentro del panel abierto
-      const isInsideCat = catPanelRef.current?.contains(e.target);
-      const isInsideClinic = clinicPanelRef.current?.contains(e.target);
-
-      // Si el usuario está scrolleando la lista interna del panel, lo dejamos tranquilo
-      if (isInsideCat || isInsideClinic) {
-        return; 
-      }
-
-      // Si scrollea la página de fondo, cerramos los paneles
-      if (catPanelOpen) setCatPanelOpen(false);
+      if (catPanelRef.current?.contains(e.target) || clinicPanelRef.current?.contains(e.target)) return;
+      if (catPanelOpen)    setCatPanelOpen(false);
       if (clinicPanelOpen) setClinicPanelOpen(false);
     };
-
-    if (catPanelOpen || clinicPanelOpen) {
+    if (catPanelOpen || clinicPanelOpen)
       window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
-    }
-    
-    return () => {
-      window.removeEventListener('scroll', handleScroll, { capture: true });
-    };
+    return () => window.removeEventListener('scroll', handleScroll, { capture: true });
   }, [catPanelOpen, clinicPanelOpen]);
 
   const handleToggleCatPanel = () => {
@@ -208,9 +198,9 @@ const FilterBar = ({
     setClinicPanelOpen(v => !v);
   };
 
-  const OFF = 'border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-gray hover:border-wellq-gray/40 dark:hover:border-white/20 hover:text-wellq-dark dark:hover:text-white';
-  const DEFAULT_CAT_ON = 'border-wellq-blue/30 bg-wellq-blue/10 text-wellq-blue dark:border-wellq-blue/20 dark:bg-wellq-blue/10 dark:text-wellq-blue';
-  const DEFAULT_CLINIC_ON = 'border-wellq-cyan/30 bg-wellq-cyan/10 text-wellq-cyan dark:border-wellq-cyan/20 dark:bg-wellq-cyan/10 dark:text-wellq-cyan';
+  const OFF              = 'border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-gray hover:border-wellq-gray/40 dark:hover:border-white/20 hover:text-wellq-dark dark:hover:text-white';
+  const DEFAULT_CAT_ON   = 'border-wellq-blue/30 bg-wellq-blue/10 text-wellq-blue dark:border-wellq-blue/20 dark:bg-wellq-blue/10 dark:text-wellq-blue';
+  const DEFAULT_CLINIC_ON= 'border-wellq-cyan/30 bg-wellq-cyan/10 text-wellq-cyan dark:border-wellq-cyan/20 dark:bg-wellq-cyan/10 dark:text-wellq-cyan';
 
   const STATUS_OPTIONS = [
     { value: 'Open',   label: t('support.statusOpen'),   icon: Clock,        on: STATUS_STYLE.Open.chip },
@@ -222,8 +212,8 @@ const FilterBar = ({
     ? categories.map((cat) => ({
         value: cat.name,
         label: cat.name,
-        icon:  CATEGORY_META[cat.name]?.icon  ?? MessageSquare,
-        on:    CATEGORY_META[cat.name]?.chip  ?? DEFAULT_CAT_ON,
+        icon:  CATEGORY_META[cat.name]?.icon ?? MessageSquare,
+        on:    CATEGORY_META[cat.name]?.chip ?? DEFAULT_CAT_ON,
       }))
     : [
         { value: 'Bug',     label: 'Bug',     icon: Bug,           on: CATEGORY_META.Bug.chip },
@@ -235,35 +225,32 @@ const FilterBar = ({
   const toggle = (key, val) =>
     onFilterChange?.({ ...filters, [key]: filters[key] === val ? undefined : val, page: 1 });
 
-  const hasActive = !!(filters.status || filters.category || filters.clinic_id);
-  const activeCatOption = CATEGORY_OPTIONS.find(o => o.value === filters.category);
+  const hasActive          = !!(filters.status || filters.category || filters.clinic_id);
+  const activeCatOption    = CATEGORY_OPTIONS.find(o => o.value === filters.category);
   const activeClinicOption = clinics.find(c => c.clinic_id === filters.clinic_id);
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
-      {/* Icon label */}
+      {/* Ícono de filtro */}
       <div className="w-8 h-8 rounded-lg bg-wellq-gray/5 dark:bg-white/5 flex items-center justify-center ring-1 ring-wellq-gray/10 dark:ring-white/5 flex-shrink-0">
         <SlidersHorizontal size={14} className="text-wellq-dark dark:text-white" strokeWidth={2.2} />
       </div>
 
       {/* Status chips */}
-      {STATUS_OPTIONS.map(({ value, label, icon, on }) => {
-        const active = filters.status === value;
-        return (
-          <Chip
-            key={value}
-            icon={icon}
-            label={label}
-            active={active}
-            onClick={() => toggle('status', value)}
-            className={active ? on : OFF}
-          />
-        );
-      })}
+      {STATUS_OPTIONS.map(({ value, label, icon, on }) => (
+        <Chip
+          key={value}
+          icon={icon}
+          label={label}
+          active={filters.status === value}
+          onClick={() => toggle('status', value)}
+          className={filters.status === value ? on : OFF}
+        />
+      ))}
 
       <span className="w-px h-5 bg-wellq-gray/10 dark:bg-white/10 mx-1 flex-shrink-0" />
 
-      {/* PANEL DE CATEGORÍA */}
+      {/* ── PANEL DE CATEGORÍA ── */}
       <div className="relative flex-shrink-0">
         <motion.button
           ref={catButtonRef}
@@ -294,7 +281,6 @@ const FilterBar = ({
                 exit={{   opacity: 0, y: -8,  scale: 0.96 }}
                 transition={{ duration: 0.15, ease: 'easeOut' }}
                 style={{ top: catPanelPos.top, right: catPanelPos.right }}
-                // Reduje la altura máxima a max-h-[240px] para asegurar que haga scroll interno
                 className="fixed z-[200] bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden min-w-[200px] max-h-[240px] flex flex-col"
               >
                 <div className="px-4 pt-3.5 pb-2 border-b border-wellq-gray/10 dark:border-white/5 flex-shrink-0">
@@ -302,9 +288,7 @@ const FilterBar = ({
                     {t('support.filterByCategory', 'Filtrar por categoría')}
                   </p>
                 </div>
-                <div 
-                  className="flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto" 
-                >
+                <div className={`flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
                   {CATEGORY_OPTIONS.map(({ value, label, icon: CatIcon, on }) => {
                     const active = filters.category === value;
                     return (
@@ -329,7 +313,7 @@ const FilterBar = ({
         )}
       </div>
 
-      {/* PANEL DE CLÍNICAS */}
+      {/* ── PANEL DE CLÍNICAS ── */}
       {clinics.length > 0 && (
         <>
           <span className="w-px h-5 bg-wellq-gray/10 dark:bg-white/10 mx-1 flex-shrink-0" />
@@ -363,40 +347,59 @@ const FilterBar = ({
                     exit={{   opacity: 0, y: -8,  scale: 0.96 }}
                     transition={{ duration: 0.15, ease: 'easeOut' }}
                     style={{ top: clinicPanelPos.top, left: clinicPanelPos.left }}
-                    // Límite interno de max-h-[240px]
-                    className="fixed z-[200] bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden min-w-[200px] max-h-[240px] flex flex-col"
+                    className="fixed z-[200] bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden min-w-[220px] max-h-[260px] flex flex-col"
                   >
                     <div className="px-4 pt-3.5 pb-2 border-b border-wellq-gray/10 dark:border-white/5 flex-shrink-0">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-wellq-gray/70">
                         {t('support.filterByClinic', 'Filtrar por clínica')}
                       </p>
                     </div>
-                    <div 
-                      className="flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto"
-                    >
+
+                    <div className={`flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
+
+                      {/* Opción "Todas" */}
                       <button
                         onClick={() => { onFilterChange?.({ ...filters, clinic_id: undefined, page: 1 }); setClinicPanelOpen(false); }}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
                           !filters.clinic_id ? DEFAULT_CLINIC_ON : OFF
                         }`}
                       >
+                        <span className="w-6 h-6 rounded-lg bg-wellq-cyan/10 dark:bg-wellq-cyan/10 text-wellq-cyan flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-gray/10 dark:ring-white/5">
+                          <Building size={11} strokeWidth={2.5} />
+                        </span>
                         <span className="flex-1">{t('support.allClinics', 'Todas las Clínicas')}</span>
-                        {!filters.clinic_id && <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />}
+                        {!filters.clinic_id && (
+                          <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />
+                        )}
                       </button>
 
+                      {/* Lista de clínicas con avatar de iniciales */}
                       {clinics.map((c) => {
-                        const active = filters.clinic_id === c.clinic_id;
+                        const active   = filters.clinic_id === c.clinic_id;
+                        const color    = avatarFor(c.name);
+                        const initials = c.name
+                          ? c.name.trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+                          : '?';
                         return (
-                          <button
+                          <motion.button
                             key={c.clinic_id}
+                            whileHover={{ x: 2 }}
+                            transition={{ duration: 0.15 }}
                             onClick={() => { onFilterChange?.({ ...filters, clinic_id: c.clinic_id, page: 1 }); setClinicPanelOpen(false); }}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
                               active ? DEFAULT_CLINIC_ON : OFF
                             }`}
                           >
-                            <span className="flex-1">{c.name}</span>
-                            {active && <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />}
-                          </button>
+                            <span
+                              className={`w-6 h-6 rounded-lg ${color.bg} ${color.text} text-[9px] font-black flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-gray/10 dark:ring-white/5`}
+                            >
+                              {initials}
+                            </span>
+                            <span className="flex-1 truncate">{c.name}</span>
+                            {active && (
+                              <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />
+                            )}
+                          </motion.button>
                         );
                       })}
                     </div>
@@ -417,10 +420,10 @@ const FilterBar = ({
             initial={{ opacity: 0, scale: 0.85, width: 0 }}
             animate={{ opacity: 1, scale: 1, width: 'auto' }}
             exit={{   opacity: 0, scale: 0.85, width: 0 }}
-            onClick={() => { 
-              onFilterChange?.({ page: 1 }); 
-              setCatPanelOpen(false); 
-              setClinicPanelOpen(false); 
+            onClick={() => {
+              onFilterChange?.({ page: 1 });
+              setCatPanelOpen(false);
+              setClinicPanelOpen(false);
             }}
             className="inline-flex items-center gap-1.5 text-[11px] font-bold text-wellq-gray hover:text-red-500 dark:hover:text-red-400 transition-colors ml-1 uppercase tracking-wider"
           >
@@ -438,6 +441,7 @@ const TicketRow = ({ ticket, index, onSelect }) => {
   const status  = STATUS_STYLE[ticket.status]    ?? STATUS_STYLE.Open;
   const cat     = CATEGORY_META[ticket.category] ?? CATEGORY_META.Request;
   const CatIcon = cat.icon ?? MessageSquare;
+  // FIX: avatarFor ya maneja null/undefined sin explotar
   const avatar  = avatarFor(ticket.reporter_name);
 
   return (
@@ -617,7 +621,9 @@ export const SupportTicketTable = ({
         />
       </div>
 
-      <div className="flex flex-col py-2 px-2 divide-y divide-wellq-gray/5 dark:divide-white/5">
+      {/* FIX: min-h-[320px] garantiza espacio para que el dropdown no se corte
+              aunque haya pocos tickets en la lista */}
+      <div className="flex flex-col py-2 px-2 divide-y divide-wellq-gray/5 dark:divide-white/5 min-h-[320px]">
         {loading ? (
           Array.from({ length: 7 }).map((_, i) => <SkeletonRow key={i} index={i} />)
         ) : tickets.length === 0 ? (

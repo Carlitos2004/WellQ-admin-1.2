@@ -5,17 +5,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, asc, or_, delete
 from app.db.neon import get_db
 from app.models_db import Plan, PlanFeature, ClinicPlan
+from .dependencies import require_super_admin
 
 router = APIRouter(prefix="/api/plans", tags=["Constructor de Planes"])
 
 
 async def _get_active_clinics_count(db: AsyncSession, plan_id: str) -> int:
+    """Solo clínicas con asignación vigente (effective_to IS NULL)."""
     count_stmt = select(func.count(ClinicPlan.id)).where(
         ClinicPlan.plan_id == plan_id,
         ClinicPlan.effective_to.is_(None)
     )
     result = await db.execute(count_stmt)
     return result.scalar() or 0
+
+
+# ── NUEVO ─────────────────────────────────────────────────────────────────────
+async def _get_historical_clinics_count(db: AsyncSession, plan_id: str) -> int:
+    """
+    Todas las asignaciones: activas + pasadas (effective_to IS NOT NULL).
+    Protege el audit trail financiero: si un plan tuvo clínicas en cualquier
+    momento, no puede eliminarse físicamente. Usar 'Archivar' en su lugar.
+    """
+    count_stmt = select(func.count(ClinicPlan.id)).where(
+        ClinicPlan.plan_id == plan_id
+    )
+    result = await db.execute(count_stmt)
+    return result.scalar() or 0
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 async def _get_plan_features(db: AsyncSession, plan_id: str) -> list:
@@ -37,8 +54,13 @@ async def _save_plan_features(db: AsyncSession, plan_id: str, features: list):
 
 async def _serialize_plan(db: AsyncSession, p: Plan) -> dict:
     active_clinics = await _get_active_clinics_count(db, p.plan_id)
+    # ── NUEVO: historial completo para la tab "Archivados" ────────────────────
+    historical_clinics = await _get_historical_clinics_count(db, p.plan_id)
+    # ─────────────────────────────────────────────────────────────────────────
     monthly_price = p.monthly_price or 0.0
     arr = active_clinics * monthly_price * 12
+    # arr_at_risk = ARR ligado a clínicas activas que siguen en un plan archivado
+    arr_at_risk = active_clinics * monthly_price * 12
     features = await _get_plan_features(db, p.plan_id)
 
     eff_date_str = None
@@ -59,7 +81,12 @@ async def _serialize_plan(db: AsyncSession, p: Plan) -> dict:
         "currency": p.currency or "USD",
         "effectiveDate": eff_date_str,
         "features": features,
-        "metrics": {"activeClinics": active_clinics, "arr": arr},
+        "metrics": {
+            "activeClinics": active_clinics,
+            "historicalClinics": historical_clinics,   # NUEVO
+            "arr": arr,
+            "arrAtRisk": arr_at_risk,                  # NUEVO
+        },
         "createdAt": p.created_at.isoformat() + "Z" if p.created_at else None,
         "updatedAt": p.updated_at.isoformat() + "Z" if p.updated_at else None,
         "archivedAt": p.archived_at.isoformat() + "Z" if p.archived_at else None,
@@ -106,7 +133,7 @@ async def list_plans(
     total = (await db.execute(count_stmt)).scalar() or 0
 
     sort_column = Plan.name
-    if sortBy == "monthlyPrice":   sort_column = Plan.monthly_price
+    if sortBy == "monthlyPrice":    sort_column = Plan.monthly_price
     elif sortBy == "effectiveDate": sort_column = Plan.effective_date
     elif sortBy == "createdAt":     sort_column = Plan.created_at
 
@@ -133,7 +160,7 @@ async def list_plans(
 async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
-    
+
     if not plan:
         return {
             "status": "success",
@@ -148,7 +175,7 @@ async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
                 "currency": "USD",
                 "effectiveDate": None,
                 "features": [],
-                "metrics": {"activeClinics": 0, "arr": 0},
+                "metrics": {"activeClinics": 0, "historicalClinics": 0, "arr": 0, "arrAtRisk": 0},
                 "createdAt": datetime.utcnow().isoformat() + "Z",
                 "updatedAt": datetime.utcnow().isoformat() + "Z",
                 "archivedAt": None,
@@ -156,13 +183,17 @@ async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
                 "updatedBy": {"email": "", "name": ""},
             }
         }
-        
+
     return await _serialize_plan(db, plan)
 
 
 # ─── POST /api/plans ──────────────────────────────────────────────────────────
 @router.post("", summary="Crear un nuevo plan", status_code=status.HTTP_201_CREATED)
-async def create_plan(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+async def create_plan(
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_super_admin),
+):
     name = body.get("name", "").strip()
     if not name or len(name) < 3:
         return {"error": {"code": "VALIDATION_ERROR", "message": "El campo 'name' debe tener entre 3 y 60 caracteres"}}
@@ -201,7 +232,7 @@ async def create_plan(body: dict = Body(...), db: AsyncSession = Depends(get_db)
         updated_at=now,
     )
     db.add(new_plan)
-    await db.flush() 
+    await db.flush()
 
     await _save_plan_features(db, new_plan_id, features)
     await db.commit()
@@ -240,13 +271,13 @@ async def update_plan(
     if "currency" in body and body["currency"] != plan.currency and active_clinics > 0:
         return {"error": {"code": "PLAN_CURRENCY_LOCKED", "message": "El plan tiene asignaciones activas y la moneda es inmutable"}}
 
-    if "name" in body:        plan.name = body["name"]
-    if "description" in body: plan.description = body["description"]
-    if "tagColor" in body:    plan.tag_color = body["tagColor"]
-    if "status" in body:      plan.status = body["status"]
-    if "setupPrice" in body:  plan.setup_price = body["setupPrice"]
+    if "name" in body:         plan.name = body["name"]
+    if "description" in body:  plan.description = body["description"]
+    if "tagColor" in body:     plan.tag_color = body["tagColor"]
+    if "status" in body:       plan.status = body["status"]
+    if "setupPrice" in body:   plan.setup_price = body["setupPrice"]
     if "monthlyPrice" in body: plan.monthly_price = body["monthlyPrice"]
-    if "currency" in body:    plan.currency = body["currency"]
+    if "currency" in body:     plan.currency = body["currency"]
     if "effectiveDate" in body and body["effectiveDate"]:
         try:
             plan.effective_date = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
@@ -295,7 +326,7 @@ async def duplicate_plan(
         try:
             effective_date_val = datetime.strptime(body["effectiveDate"][:10], "%Y-%m-%d")
         except ValueError:
-            pass  
+            pass
 
     duplicated = Plan(
         plan_id=new_plan_id,
@@ -374,21 +405,37 @@ async def restore_plan(planId: str = Path(...), db: AsyncSession = Depends(get_d
 
 # ─── DELETE /api/plans/{planId} ───────────────────────────────────────────────
 @router.delete("/{planId}", summary="Eliminar un plan permanentemente")
-async def delete_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
+async def delete_plan(
+    planId: str = Path(...),
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_super_admin),
+):
     result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()
     if not plan:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    active_clinics = await _get_active_clinics_count(db, planId)
-    if active_clinics > 0:
+    # ── ANTES: solo contaba asignaciones ACTIVAS (effective_to IS NULL) ───────
+    # ── AHORA: cuenta TODO el historial — activas Y pasadas ──────────────────
+    # Razón: un plan que fue usado históricamente (effective_to != NULL) aún
+    # tiene referencias en clinic_plans. Borrarlo físicamente destruiría el
+    # audit trail financiero y fallaría auditorías fiscales. Solo se permite
+    # hard-delete si el plan nunca fue asignado a ninguna clínica.
+    any_history = await _get_historical_clinics_count(db, planId)
+
+    if any_history > 0:
         return {
             "error": {
-                "code": "PLAN_HAS_ACTIVE_CLINICS",
-                "message": f"No se puede eliminar: el plan tiene {active_clinics} clínica(s) activa(s). Archívalo primero."
+                "code": "PLAN_HAS_CLINIC_HISTORY",
+                "message": (
+                    f"No se puede eliminar permanentemente: el plan tiene "
+                    f"{any_history} asignación(es) histórica(s) en clínicas. "
+                    f"Usa 'Archivar' para mantener la integridad financiera del registro."
+                ),
             }
         }
 
+    # Solo llega aquí si plan_id NO aparece en clinic_plans (plan nunca asignado)
     await db.execute(delete(PlanFeature).where(PlanFeature.plan_id == planId))
     await db.execute(delete(Plan).where(Plan.plan_id == planId))
     await db.commit()

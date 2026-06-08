@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Smartphone, Building2, Activity, FileText, TrendingUp, Zap,
   HardDrive, Calendar, Download, Database, Headphones, Globe,
   DollarSign, Package, Plus, Trash2, GripVertical, Edit3, Copy,
   Archive, Save, Tag, Box, Layers, Search, X, CheckCircle,
-  AlertCircle, Loader2, RefreshCw, ChevronDown, CheckCircle2
+  AlertCircle, Loader2, RefreshCw, ChevronDown, CheckCircle2,
+  AlertTriangle, RotateCcw,
 } from 'lucide-react';
 import { SegmentedControl } from '../components/ui';
 import { useLanguage } from '../contexts/LanguageContext';
 import { toast } from 'sonner';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import { apiFetch } from '../api/client';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// ─── Animaciones Base ────────────────────────────────────────────────────────
+// ─── Animaciones Base ─────────────────────────────────────────────────────────
 const tabVariants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
   enter: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.3, ease: 'easeOut' } },
@@ -45,7 +48,7 @@ const safeOptions = (options) => {
   return [];
 };
 
-// ─── Icon map (feature.icon viene como string desde la API) ───────────────────
+// ─── Icon map ─────────────────────────────────────────────────────────────────
 const ICON_COMPONENTS = {
   Users, Smartphone, Building2, Activity, FileText, TrendingUp, Zap,
   HardDrive, Calendar, Download, Database, Headphones, Globe,
@@ -53,7 +56,7 @@ const ICON_COMPONENTS = {
 const getIcon = (iconStr) =>
   ICON_COMPONENTS[iconStr] || ICON_COMPONENTS[iconStr?.charAt(0)?.toUpperCase() + iconStr?.slice(1)] || Zap;
 
-// ─── Colores por categoría (Estilo Premium) ───────────────────────────────────
+// ─── Colores por categoría ────────────────────────────────────────────────────
 const CATEGORY_COLORS = {
   'Patients & Licenses':    { bg: 'bg-wellq-cyan/10', text: 'text-wellq-cyan', iconBg: 'bg-wellq-cyan/10 dark:bg-wellq-cyan/20', iconText: 'text-wellq-cyan' },
   'AI Capabilities':        { bg: 'bg-wellq-blue/10', text: 'text-wellq-blue', iconBg: 'bg-wellq-blue/10 dark:bg-wellq-blue/20', iconText: 'text-wellq-blue' },
@@ -67,16 +70,6 @@ const PLAN_TAG_COLORS = {
   blue:   'bg-wellq-blue/10 text-wellq-blue border border-wellq-blue/20',
   indigo: 'bg-wellq-cyan/10 text-wellq-cyan border border-wellq-cyan/20',
   slate:  'bg-wellq-gray/10 text-wellq-dark dark:text-white border border-wellq-gray/20 dark:border-white/10',
-};
-
-// ─── API helpers ──────────────────────────────────────────────────────────────
-const apiFetch = async (path, opts = {}) => {
-  const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
 };
 
 // ─── Hook: features ───────────────────────────────────────────────────────────
@@ -102,7 +95,7 @@ const useFeatures = () => {
   return { features, loading, error, reload: load, setFeatures };
 };
 
-// ─── Hook: plans ─────────────────────────────────────────────────────────────
+// ─── Hook: planes activos ─────────────────────────────────────────────────────
 const usePlans = () => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +106,29 @@ const usePlans = () => {
       setLoading(true);
       setError(null);
       const data = await apiFetch('/api/plans?includeArchived=false&pageSize=100');
+      setPlans(data.data || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  return { plans, loading, error, reload: load };
+};
+
+// ─── Hook: planes archivados (NUEVO) ─────────────────────────────────────────
+const useArchivedPlans = () => {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await apiFetch('/api/plans?includeArchived=true&status=archived&pageSize=100');
       setPlans(data.data || []);
     } catch (e) {
       setError(e.message);
@@ -136,14 +152,210 @@ const LoadingSpinner = ({ text }) => (
 const ErrorBanner = ({ message, onRetry, errorLabel, retryLabel }) => (
   <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-red-700 dark:text-red-400">
     <AlertCircle size={18} />
-    <span className="flex-1 text-sm font-semibold">{errorLabel ?? 'Error loading data'}: {message}</span>
+    <span className="flex-1 text-sm font-semibold">{errorLabel ?? 'Error'}: {message}</span>
     {onRetry && (
       <button onClick={onRetry} className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider hover:underline">
-        <RefreshCw size={14} /> {retryLabel ?? 'Retry'}
+        <RefreshCw size={14} /> {retryLabel ?? 'Reintentar'}
       </button>
     )}
   </motion.div>
 );
+
+
+// ─── PlanActionOverlay ── Portal que cubre TODA la pantalla (sidebar incluida) ─
+// Usa createPortal(content, document.body) para escapar de cualquier
+// overflow/z-index del árbol de componentes padre. Mismo patrón que
+// "Force Update Options" en AnalyticsView.
+const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
+  const isDelete = type === 'delete';
+  const activeClinics   = plan?.metrics?.activeClinics   ?? 0;
+  const historicalClinics = plan?.metrics?.historicalClinics ?? 0;
+  const arrAtRisk       = plan?.metrics?.arrAtRisk       ?? 0;
+
+  // Hard delete solo permitido si el plan NUNCA fue asignado a ninguna clínica
+  const canHardDelete = historicalClinics === 0;
+
+  // Bloquear scroll del body mientras el overlay está abierto
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  return createPortal(
+    <AnimatePresence>
+      {open && plan && (
+        <motion.div
+          key="plan-action-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            backgroundColor: 'rgba(0, 0, 0, 0.62)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+        >
+          <motion.div
+            initial={{ scale: 0.88, opacity: 0, y: 24 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.88, opacity: 0, y: 24 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            style={{ width: '100%', maxWidth: '420px', margin: '0 16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Card */}
+            <div className={`rounded-2xl overflow-hidden shadow-[0_32px_64px_rgba(0,0,0,0.45)] bg-white dark:bg-[#111318] border ${
+              isDelete
+                ? 'border-red-200 dark:border-red-500/25'
+                : 'border-amber-200 dark:border-amber-500/25'
+            }`}>
+              {/* Accent bar */}
+              <div className={`h-1.5 w-full ${
+                isDelete
+                  ? 'bg-gradient-to-r from-red-600 to-red-400'
+                  : 'bg-gradient-to-r from-amber-500 to-amber-400'
+              }`} />
+
+              <div className="p-6 space-y-5">
+                {/* Header icon + title */}
+                <div className="flex items-start gap-4">
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                    isDelete
+                      ? 'bg-red-50 dark:bg-red-500/10'
+                      : 'bg-amber-50 dark:bg-amber-500/10'
+                  }`}>
+                    {isDelete
+                      ? <Trash2 size={19} className="text-red-500" />
+                      : <Archive size={19} className="text-amber-500" />
+                    }
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-black text-wellq-dark dark:text-white leading-tight">
+                      {isDelete ? 'Eliminar permanentemente' : 'Archivar plan'}
+                    </h3>
+                    <p className="text-sm font-semibold text-wellq-gray mt-0.5 truncate max-w-[260px]">
+                      "{plan?.name}"
+                    </p>
+                  </div>
+                </div>
+
+                {/* Impact metrics panel */}
+                {(activeClinics > 0 || (isDelete && historicalClinics > 0)) && (
+                  <div className={`rounded-xl overflow-hidden border ${
+                    isDelete
+                      ? 'border-red-100 dark:border-red-500/20'
+                      : 'border-amber-100 dark:border-amber-500/20'
+                  }`}>
+                    <div className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider ${
+                      isDelete
+                        ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+                        : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                    }`}>
+                      Impacto detectado
+                    </div>
+                    <div className="px-4 py-3.5 space-y-3 bg-white dark:bg-white/[0.015]">
+                      {activeClinics > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-sm font-semibold text-wellq-dark dark:text-white">
+                            <AlertTriangle size={13} className={isDelete ? 'text-red-400' : 'text-amber-400'} />
+                            Clínicas activas en este plan
+                          </span>
+                          <span className={`text-sm font-black tabular-nums ${
+                            isDelete ? 'text-red-500' : 'text-amber-500'
+                          }`}>
+                            {activeClinics}
+                          </span>
+                        </div>
+                      )}
+                      {arrAtRisk > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-wellq-dark dark:text-white">
+                            ARR en riesgo
+                          </span>
+                          <span className="text-sm font-black tabular-nums text-red-500 dark:text-red-400">
+                            ${arrAtRisk.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {isDelete && historicalClinics > 0 && (
+                        <div className="flex items-center justify-between border-t border-wellq-gray/10 dark:border-white/5 pt-3">
+                          <span className="text-sm font-semibold text-wellq-dark dark:text-white">
+                            Historial total (activas + pasadas)
+                          </span>
+                          <span className="text-sm font-black tabular-nums text-wellq-gray">
+                            {historicalClinics}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Explanation text */}
+                <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/80 leading-relaxed">
+                  {isDelete
+                    ? !canHardDelete
+                      ? `Este plan tiene ${historicalClinics} asignación${historicalClinics !== 1 ? 'es' : ''} en clínicas (activas o históricas). Para preservar el audit trail financiero, no se puede eliminar. Usa "Archivar".`
+                      : 'Esta acción es irreversible. El plan y toda su configuración serán eliminados permanentemente de la base de datos.'
+                    : activeClinics > 0
+                      ? `Las ${activeClinics} clínicas actualmente en este plan no se verán afectadas de inmediato, pero deberán ser migradas a otro plan.`
+                      : 'El plan dejará de estar disponible para nuevas asignaciones. Las clínicas no se verán afectadas.'
+                  }
+                </p>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={onCancel}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-wellq-gray/20 dark:border-white/10 text-sm font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+
+                  {isDelete && !canHardDelete ? (
+                    // Bloqueado: hay historial → mostrar botón deshabilitado
+                    <div className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-wellq-gray/40 dark:text-white/20 bg-wellq-gray/5 dark:bg-white/[0.02] cursor-not-allowed select-none border border-wellq-gray/10 dark:border-white/5">
+                      <AlertTriangle size={14} />
+                      Eliminar (bloqueado)
+                    </div>
+                  ) : (
+                    <button
+                      onClick={onConfirm}
+                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.97] shadow-lg ${
+                        isDelete
+                          ? 'bg-red-500 hover:bg-red-600 shadow-red-500/25'
+                          : 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/25'
+                      }`}
+                    >
+                      {isDelete
+                        ? <><Trash2 size={15} /> Eliminar plan</>
+                        : <><Archive size={15} /> Archivar plan</>
+                      }
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+};
+
 
 // ─── FeatureChip ──────────────────────────────────────────────────────────────
 const FeatureChip = ({ feature, alreadyAdded }) => {
@@ -235,6 +447,204 @@ const PlanFeatureRow = ({ feature, limit, onChangeLimit, onRemove }) => {
   );
 };
 
+
+// ─── ArchivedPlanCard (NUEVO) ─────────────────────────────────────────────────
+const ArchivedPlanCard = ({ plan, onRestore }) => {
+  const activeClinics = plan.metrics?.activeClinics ?? 0;
+  const arrAtRisk     = plan.metrics?.arrAtRisk ?? 0;
+  const hasActive     = activeClinics > 0;
+
+  const archivedDate = plan.archivedAt
+    ? new Date(plan.archivedAt).toLocaleDateString('es-CL', {
+        day: 'numeric', month: 'short', year: 'numeric',
+      })
+    : '—';
+
+  return (
+    <motion.div
+      variants={itemVariants}
+      className="flex flex-col bg-white dark:bg-wellq-dark rounded-[20px] border border-wellq-gray/15 dark:border-white/[0.06] hover:border-wellq-gray/25 dark:hover:border-white/10 transition-all duration-300 overflow-hidden group"
+    >
+      {/* Top grayscale bar — visual cue de "inactivo" */}
+      <div className="h-0.5 w-full bg-gradient-to-r from-wellq-gray/20 via-wellq-gray/10 to-transparent" />
+
+      <div className="p-5 flex flex-col flex-1">
+        {/* Name + status badge */}
+        <div className="flex items-start justify-between mb-3 gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-black text-wellq-dark dark:text-white/70 truncate">{plan.name}</h3>
+            {plan.description && (
+              <p className="text-[11px] font-medium text-wellq-gray mt-0.5 line-clamp-1">{plan.description}</p>
+            )}
+          </div>
+          <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-wellq-gray/10 dark:bg-white/[0.05] text-wellq-gray/60 dark:text-white/30 border border-wellq-gray/10 dark:border-white/5">
+            Archived
+          </span>
+        </div>
+
+        {/* Price + Archived date row */}
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-wellq-gray/10 dark:border-white/5">
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-wellq-dark dark:text-white/50 tabular-nums">
+              ${(plan.monthlyPrice || 0).toLocaleString()}
+            </span>
+            <span className="text-xs font-bold text-wellq-gray">/mo</span>
+          </div>
+          <div className="text-right">
+            <div className="text-[9px] font-bold text-wellq-gray uppercase tracking-wider">Archived el</div>
+            <div className="text-xs font-bold text-wellq-gray dark:text-white/40 mt-0.5">{archivedDate}</div>
+          </div>
+        </div>
+
+        {/* Metrics */}
+        <div className="space-y-2 flex-1 mb-4">
+          {/* Clínicas aún en este plan */}
+          <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${
+            hasActive
+              ? 'bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/15'
+              : 'bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5'
+          }`}>
+            <div className="flex items-center gap-2">
+              {hasActive && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
+              <span className={`text-xs font-bold ${
+                hasActive ? 'text-amber-700 dark:text-amber-400' : 'text-wellq-gray'
+              }`}>
+                Clínicas aún en este plan
+              </span>
+            </div>
+            <span className={`text-sm font-black tabular-nums ${
+              hasActive ? 'text-amber-600 dark:text-amber-400' : 'text-wellq-gray'
+            }`}>
+              {activeClinics}
+            </span>
+          </div>
+
+          {/* ARR en riesgo */}
+          {arrAtRisk > 0 ? (
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/15">
+              <span className="text-xs font-bold text-red-700 dark:text-red-400">ARR en riesgo</span>
+              <span className="text-sm font-black tabular-nums text-red-600 dark:text-red-400">
+                ${arrAtRisk.toLocaleString()}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5">
+              <span className="text-xs font-bold text-wellq-gray">ARR en riesgo</span>
+              <span className="text-sm font-black tabular-nums text-wellq-gray">$0</span>
+            </div>
+          )}
+        </div>
+
+        {/* Restore button */}
+        <button
+          onClick={() => onRestore(plan)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.03] hover:bg-wellq-green/10 dark:hover:bg-wellq-green/10 text-wellq-gray hover:text-wellq-green dark:hover:text-wellq-green rounded-xl text-sm font-bold transition-all active:scale-[0.98] border border-wellq-gray/10 dark:border-white/5"
+        >
+          <RotateCcw size={14} strokeWidth={2.5} />
+          Restaurar plan
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
+
+// ─── ArchivedPlansView (NUEVO) ────────────────────────────────────────────────
+const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
+  const totalArchived     = plans.length;
+  const totalActiveClinics = plans.reduce((s, p) => s + (p.metrics?.activeClinics ?? 0), 0);
+  const totalArrAtRisk    = plans.reduce((s, p) => s + (p.metrics?.arrAtRisk ?? 0), 0);
+
+  if (loading) return (
+    <motion.div variants={tabVariants} initial="hidden" animate="enter" exit="exit">
+      <LoadingSpinner text="Cargando planes archivados…" />
+    </motion.div>
+  );
+  if (error) return <ErrorBanner message={error} onRetry={onReload} />;
+
+  return (
+    <motion.div key="archivados" variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="space-y-6">
+      {/* Section header */}
+      <div>
+        <h2 className="text-lg font-bold text-wellq-dark dark:text-white">Planes en desuso</h2>
+        <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/80">
+          Planes archivados — visibilidad del impacto operativo y financiero
+        </p>
+      </div>
+
+      {/* KPI bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total archivados */}
+        <div className="bg-white dark:bg-wellq-dark rounded-2xl p-5 border border-wellq-gray/15 dark:border-white/[0.06]">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-2">
+            Planes archivados
+          </div>
+          <div className="text-3xl font-black text-wellq-dark dark:text-white tabular-nums">{totalArchived}</div>
+        </div>
+
+        {/* Clínicas afectadas */}
+        <div className={`rounded-2xl p-5 border transition-colors ${
+          totalActiveClinics > 0
+            ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20'
+            : 'bg-white dark:bg-wellq-dark border-wellq-gray/15 dark:border-white/[0.06]'
+        }`}>
+          <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
+            totalActiveClinics > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-wellq-gray'
+          }`}>
+            Clínicas con plan obsoleto
+          </div>
+          <div className={`text-3xl font-black tabular-nums ${
+            totalActiveClinics > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-wellq-dark dark:text-white'
+          }`}>
+            {totalActiveClinics}
+          </div>
+        </div>
+
+        {/* ARR en riesgo */}
+        <div className={`rounded-2xl p-5 border transition-colors ${
+          totalArrAtRisk > 0
+            ? 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20'
+            : 'bg-white dark:bg-wellq-dark border-wellq-gray/15 dark:border-white/[0.06]'
+        }`}>
+          <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
+            totalArrAtRisk > 0 ? 'text-red-600 dark:text-red-400' : 'text-wellq-gray'
+          }`}>
+            ARR en riesgo
+          </div>
+          <div className={`text-3xl font-black tabular-nums ${
+            totalArrAtRisk > 0 ? 'text-red-600 dark:text-red-400' : 'text-wellq-dark dark:text-white'
+          }`}>
+            ${totalArrAtRisk.toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* Grid de planes archivados / Empty state */}
+      {plans.length === 0 ? (
+        <div className="py-28 flex flex-col items-center justify-center text-center">
+          <div className="w-16 h-16 rounded-2xl bg-wellq-gray/10 dark:bg-white/[0.04] flex items-center justify-center mb-4">
+            <Archive size={26} className="text-wellq-gray/30 dark:text-white/15" />
+          </div>
+          <p className="text-base font-bold text-wellq-dark dark:text-white">Sin planes archivados</p>
+          <p className="text-sm font-medium text-wellq-gray mt-1">Los planes que archives aparecerán aquí</p>
+        </div>
+      ) : (
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+        >
+          {plans.map((plan) => (
+            <ArchivedPlanCard key={plan.id} plan={plan} onRestore={onRestore} />
+          ))}
+        </motion.div>
+      )}
+    </motion.div>
+  );
+};
+
+
 // ─── PlanBuilder ──────────────────────────────────────────────────────────────
 const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
   const { t, tVal } = useLanguage();
@@ -273,7 +683,6 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
     }));
   };
 
-  // 🔧 Manejador para inputs de precio que evita ceros fantasma
   const handlePriceChange = (key, rawValue) => {
     if (rawValue === '' || rawValue === null || rawValue === undefined) {
       setDraft((d) => ({ ...d, [key]: '' }));
@@ -477,7 +886,7 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Financial Projection Cards */}
             <div className="mt-6 pt-6 border-t border-wellq-gray/10 dark:border-white/5 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative bg-gradient-to-br from-wellq-cyan/5 to-wellq-blue/5 dark:from-wellq-cyan/10 dark:to-wellq-blue/10 rounded-2xl p-5 border border-wellq-cyan/20 overflow-hidden">
@@ -505,6 +914,7 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
     </motion.div>
   );
 };
+
 
 // ─── PlansLibrary ─────────────────────────────────────────────────────────────
 const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelete, onNew, loading, error, onReload }) => {
@@ -543,7 +953,7 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
               </div>
               <h3 className="text-2xl font-black text-wellq-dark dark:text-white mb-2 tracking-tight relative z-10">{plan.name}</h3>
               <p className="text-sm font-medium text-wellq-gray mb-5 min-h-[40px] relative z-10">{plan.description}</p>
-              
+
               <div className="flex items-baseline gap-1 mb-6 relative z-10">
                 <span className="text-4xl font-black text-wellq-dark dark:text-white tracking-tight">${(plan.monthlyPrice || 0).toLocaleString()}</span>
                 <span className="text-sm font-bold text-wellq-gray">/{t('plans.mo')}</span>
@@ -558,7 +968,6 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
                 <div className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-3">
                   {t('plans.includes')} {plan.features.length} {t('plans.features')}
                 </div>
-                {/* 🔴 SOLUCIÓN DEL CARRUSEL: Se eliminó el "max-h-[140px] overflow-auto" de esta caja */}
                 <div className="space-y-2 pr-2">
                   {plan.features.slice(0, 5).map((pf) => {
                     const f = featuresById[pf.featureId];
@@ -631,6 +1040,7 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
   );
 };
 
+
 // ─── FeatureCatalog ───────────────────────────────────────────────────────────
 const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature }) => {
   const { t, tVal } = useLanguage();
@@ -644,9 +1054,7 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
     'AI Capabilities':        t('values.ai_capabilities'),
     'Storage & Data':         t('values.storage_data'),
   };
-
   const translateCategory = (c) => CATEGORY_MAP[c] ?? c;
-
   const categories = ['All', ...new Set(features.map((f) => f.category))];
   const categoriesLabels = categories.map((c) => CATEGORY_MAP[c] ?? c);
 
@@ -656,7 +1064,7 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
       (f.name.toLowerCase().includes(search.toLowerCase()) ||
         f.description.toLowerCase().includes(search.toLowerCase()))
   );
-  
+
   if (loading) return <motion.div variants={tabVariants} initial="hidden" animate="enter" exit="exit"><LoadingSpinner text={t('plans.loadingFeatures')} /></motion.div>;
   if (error) return <ErrorBanner message={error} onRetry={onReload} errorLabel={t('common.error')} retryLabel={t('common.retry')} />;
 
@@ -750,19 +1158,30 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
   );
 };
 
+
+// ─── PlansView ─────────────────────────────────────────────────────────────────
 export const PlansView = () => {
   const { t } = useLanguage();
   const [tab, setTab] = useState('library');
   const [editingPlan, setEditingPlan] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // ── Estados para ConfirmDialogs ───────────────────────────────────────────
-  const [confirmArchive, setConfirmArchive] = useState({ open: false, plan: null });
-  const [confirmDeleteFeat, setConfirmDeleteFeat] = useState({ open: false, feature: null });
-  const [confirmDeletePlan, setConfirmDeletePlan] = useState({ open: false, plan: null });
+  // ── Overlay state — archive / delete (usan PlanActionOverlay) ────────────
+  const [confirmArchive,     setConfirmArchive]     = useState({ open: false, plan: null });
+  const [confirmDeletePlan,  setConfirmDeletePlan]  = useState({ open: false, plan: null });
+  // ── ConfirmDialog state — feature deletion (less critical) ────────────────
+  const [confirmDeleteFeat,  setConfirmDeleteFeat]  = useState({ open: false, feature: null });
 
   const { features, loading: featLoading, error: featError, reload: reloadFeatures, setFeatures } = useFeatures();
   const { plans, loading: plansLoading, error: plansError, reload: reloadPlans } = usePlans();
+
+  // ── Planes archivados (NUEVO) ─────────────────────────────────────────────
+  const {
+    plans:   archivedPlans,
+    loading: archivedLoading,
+    error:   archivedError,
+    reload:  reloadArchivedPlans,
+  } = useArchivedPlans();
 
   const newBlank = () => ({
     id: null,
@@ -776,7 +1195,7 @@ export const PlansView = () => {
     features: [],
   });
 
-  const startNew = () => { setEditingPlan(newBlank()); setTab('builder'); };
+  const startNew  = () => { setEditingPlan(newBlank()); setTab('builder'); };
   const startEdit = (plan) => { setEditingPlan({ ...plan, features: [...plan.features] }); setTab('builder'); };
 
   const startDuplicate = async (plan) => {
@@ -787,14 +1206,13 @@ export const PlansView = () => {
       setEditingPlan({ ...res.data, features: [...(res.data.features || [])] });
       setTab('builder');
     } catch (e) {
+      if (e.status === 403) return;
       toast.error(t('plans.errorDuplicate'));
     }
   };
 
-  // ── archivePlan abre el ConfirmDialog ─────────────────────────────────────
-  const archivePlan = (plan) => {
-    setConfirmArchive({ open: true, plan });
-  };
+  // ── Archive ──────────────────────────────────────────────────────────────
+  const archivePlan   = (plan) => setConfirmArchive({ open: true, plan });
 
   const doArchivePlan = async () => {
     const plan = confirmArchive.plan;
@@ -803,28 +1221,48 @@ export const PlansView = () => {
       const res = await apiFetch(`/api/plans/${plan.id}/archive`, { method: 'POST', body: '{}' });
       if (res.error) { toast.error(res.error.message); return; }
       await reloadPlans();
+      await reloadArchivedPlans(); // refrescar tab archivados
       toast.success(t('plans.archivedSuccess').replace('{{name}}', plan.name));
     } catch (e) {
+      if (e.status === 403) return;
       toast.error(t('plans.errorArchive'));
     }
   };
 
-  const deletePlan = (plan) => {
-    setConfirmDeletePlan({ open: true, plan });
-  };
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const deletePlan   = (plan) => setConfirmDeletePlan({ open: true, plan });
 
   const doDeletePlan = async () => {
     const plan = confirmDeletePlan.plan;
     setConfirmDeletePlan({ open: false, plan: null });
     try {
-      await apiFetch(`/api/plans/${plan.id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/plans/${plan.id}`, { method: 'DELETE' });
+      // ── ANTES: no existía este chequeo → error silencioso ─────────────────
+      // ── AHORA: si el backend devuelve {error:{...}}, mostramos el mensaje ─
+      if (res.error) { toast.error(res.error.message); return; }
       await reloadPlans();
-      toast.success(`"${plan.name}" deleted permanently`);
+      toast.success(`"${plan.name}" eliminado permanentemente`);
     } catch (e) {
-      toast.error('Failed to delete plan');
+      if (e.status === 403) return;
+      toast.error('Error al eliminar el plan');
     }
   };
 
+  // ── Restore (no necesita confirmación — acción no destructiva) ────────────
+  const doRestorePlan = async (plan) => {
+    try {
+      const res = await apiFetch(`/api/plans/${plan.id}/restore`, { method: 'POST', body: '{}' });
+      if (res.error) { toast.error(res.error.message); return; }
+      await reloadPlans();
+      await reloadArchivedPlans();
+      toast.success(`"${plan.name}" restaurado exitosamente`);
+    } catch (e) {
+      if (e.status === 403) return;
+      toast.error('Error al restaurar el plan');
+    }
+  };
+
+  // ── Save plan ────────────────────────────────────────────────────────────
   const savePlan = async (draft) => {
     setSaving(true);
     try {
@@ -840,15 +1278,9 @@ export const PlansView = () => {
 
       let res;
       if (draft.id) {
-        res = await apiFetch(`/api/plans/${draft.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        res = await apiFetch(`/api/plans/${draft.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       } else {
-        res = await apiFetch('/api/plans', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+        res = await apiFetch('/api/plans', { method: 'POST', body: JSON.stringify(payload) });
       }
 
       if (res.error) { toast.error(res.error.message); return; }
@@ -857,16 +1289,15 @@ export const PlansView = () => {
       setTab('library');
       toast.success(t('plans.savedSuccess'));
     } catch (e) {
+      if (e.status === 403) return;
       toast.error(t('plans.errorSave'));
     } finally {
       setSaving(false);
     }
   };
 
-  // ── deleteFeature abre el ConfirmDialog ───────────────────────────────────
-  const deleteFeature = (feature) => {
-    setConfirmDeleteFeat({ open: true, feature });
-  };
+  // ── Delete feature ───────────────────────────────────────────────────────
+  const deleteFeature   = (feature) => setConfirmDeleteFeat({ open: true, feature });
 
   const doDeleteFeature = async () => {
     const feature = confirmDeleteFeat.feature;
@@ -876,18 +1307,21 @@ export const PlansView = () => {
       setFeatures((fs) => fs.filter((f) => f.id !== feature.id));
       toast.success(t('plans.featureDeleted').replace('{{name}}', feature.name));
     } catch (e) {
+      if (e.status === 403) return;
       toast.error(t('plans.errorDeleteFeature'));
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-  <div className="space-y-6 font-sans" style={{ minHeight: '85vh' }}>
-      {/* Tabs */}
+    <div className="space-y-6 font-sans" style={{ minHeight: '85vh' }}>
+      {/* Tab navigation */}
       <div className="flex items-center gap-1.5 p-1.5 bg-wellq-gray/5 dark:bg-white/[0.03] border border-wellq-gray/10 dark:border-white/5 shadow-inner rounded-xl w-fit">
         {[
-          { id: 'library', label: t('plans.library'), icon: Layers },
-          { id: 'builder', label: t('plans.builder'), icon: Box },
-          { id: 'catalog', label: t('plans.catalog'), icon: Tag },
+          { id: 'library',    label: t('plans.library'),  icon: Layers },
+          { id: 'builder',    label: t('plans.builder'),  icon: Box    },
+          { id: 'catalog',    label: t('plans.catalog'),  icon: Tag    },
+          { id: 'archivados', label: 'Archived',        icon: Archive },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -896,15 +1330,25 @@ export const PlansView = () => {
               if (id !== 'builder') setEditingPlan(null);
               setTab(id);
             }}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 ${
-              tab === id ? 'bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white shadow-sm ring-1 ring-wellq-gray/10 dark:ring-white/10' : 'text-wellq-gray hover:text-wellq-dark dark:hover:text-white'
+            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 ${
+              tab === id
+                ? 'bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white shadow-sm ring-1 ring-wellq-gray/10 dark:ring-white/10'
+                : 'text-wellq-gray hover:text-wellq-dark dark:hover:text-white'
             }`}
           >
-            <Icon size={16} strokeWidth={2.5} /> {label}
+            <Icon size={16} strokeWidth={2.5} />
+            {label}
+            {/* Badge contador en tab archived */}
+            {id === 'archivados' && archivedPlans.length > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-black tabular-nums bg-wellq-gray/15 dark:bg-white/10 text-wellq-gray dark:text-white/60">
+                {archivedPlans.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
+      {/* Tab content */}
       <AnimatePresence mode="wait">
         {tab === 'library' && (
           <PlansLibrary
@@ -938,33 +1382,42 @@ export const PlansView = () => {
             onDeleteFeature={deleteFeature}
           />
         )}
+        {tab === 'archivados' && (
+          <ArchivedPlansView
+            plans={archivedPlans}
+            loading={archivedLoading}
+            error={archivedError}
+            onReload={reloadArchivedPlans}
+            onRestore={doRestorePlan}
+          />
+        )}
       </AnimatePresence>
 
-      {/* ConfirmDialog — archivar plan */}
-      <ConfirmDialog
+      {/* ── PlanActionOverlay — archive (portal a document.body, blur total) ── */}
+      <PlanActionOverlay
         open={confirmArchive.open}
-        title={t('plans.archiveTitle')}
-        message={t('plans.archiveMessage').replace('{{name}}', confirmArchive.plan?.name ?? '')}
+        type="archive"
+        plan={confirmArchive.plan}
         onConfirm={doArchivePlan}
         onCancel={() => setConfirmArchive({ open: false, plan: null })}
       />
 
-      {/* ConfirmDialog — eliminar feature */}
+      {/* ── PlanActionOverlay — delete permanente (portal a document.body) ─── */}
+      <PlanActionOverlay
+        open={confirmDeletePlan.open}
+        type="delete"
+        plan={confirmDeletePlan.plan}
+        onConfirm={doDeletePlan}
+        onCancel={() => setConfirmDeletePlan({ open: false, plan: null })}
+      />
+
+      {/* ── ConfirmDialog — eliminar feature (menos crítico, ok con dialog) ── */}
       <ConfirmDialog
         open={confirmDeleteFeat.open}
         title={t('plans.deleteFeatureTitle')}
         message={t('plans.deleteFeatureMessage').replace('{{name}}', confirmDeleteFeat.feature?.name ?? '')}
         onConfirm={doDeleteFeature}
         onCancel={() => setConfirmDeleteFeat({ open: false, feature: null })}
-      />
-
-      {/* ConfirmDialog — eliminar plan permanentemente */}
-      <ConfirmDialog
-        open={confirmDeletePlan.open}
-        title="Delete plan permanently"
-        message={`Are you sure you want to permanently delete "${confirmDeletePlan.plan?.name ?? ''}"? This action cannot be undone.`}
-        onConfirm={doDeletePlan}
-        onCancel={() => setConfirmDeletePlan({ open: false, plan: null })}
       />
     </div>
   );

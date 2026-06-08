@@ -21,6 +21,7 @@ from app.routers import (
     password_reset,
     dashboard,
     clinics,
+    clinic_portal,
     platform,
     financials,
     alerts,
@@ -108,6 +109,7 @@ app.include_router(auth.router)
 app.include_router(password_reset.router)
 app.include_router(dashboard.router)       # único owner de /api/kpis/*
 app.include_router(clinics.router)
+app.include_router(clinic_portal.router)
 app.include_router(platform.router)
 app.include_router(notifications.router)
 app.include_router(jobs.router)

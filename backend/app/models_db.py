@@ -19,6 +19,13 @@ Campos nuevos en tablas existentes:
 
 Tablas #37 nueva (pedido empresa):
   - ticket_categories → categorías dinámicas con emails de notificación por categoría
+
+Tablas #38 nueva (auditoría interna — Problema 4):
+  - action_logs → registro append-only de acciones administrativas del Admin Console
+
+Campos nuevos — Filtro Universal Multi-tenant (Problema 5):
+  - kpi_snapshots.clinic_id  → null = snapshot global; str = snapshot de clínica específica
+  - mrr_snapshots.clinic_id  → null = snapshot global; str = snapshot de clínica específica
 """
 
 from sqlmodel import SQLModel, Field
@@ -127,19 +134,19 @@ class PlanFeature(SQLModel, table=True):
 class ClinicPlan(SQLModel, table=True):
     __tablename__ = "clinic_plans"
 
-    id: Optional[int]               = Field(default=None, primary_key=True)
-    assignment_id: str              = Field(unique=True, index=True)
-    clinic_id: str                  = Field(index=True)
-    plan_id: str                    = Field(index=True)
-    plan_snapshot: str              = Field(sa_column=Column(Text))
-    effective_from: datetime        = Field()
-    effective_to: Optional[datetime]= Field(default=None)
-    assigned_by_id: str             = Field(default="usr-001")
-    assigned_by_email: str          = Field(default="admin@wellq.co")
-    assigned_by_name: str           = Field(default="Admin WellQ")
-    reason: Optional[str]           = Field(default=None)
-    notify_clinic: bool             = Field(default=False)
-    created_at: datetime            = Field(default_factory=datetime.utcnow)
+    id: Optional[int]                = Field(default=None, primary_key=True)
+    assignment_id: str               = Field(unique=True, index=True)
+    clinic_id: str                   = Field(index=True)
+    plan_id: str                     = Field(index=True)
+    plan_snapshot: str               = Field(sa_column=Column(Text))
+    effective_from: datetime         = Field()
+    effective_to: Optional[datetime] = Field(default=None)
+    assigned_by_id: str              = Field(default="usr-001")
+    assigned_by_email: str           = Field(default="admin@wellq.co")
+    assigned_by_name: str            = Field(default="Admin WellQ")
+    reason: Optional[str]            = Field(default=None)
+    notify_clinic: bool              = Field(default=False)
+    created_at: datetime             = Field(default_factory=datetime.utcnow)
 
 
 # ── 6. SCHEDULED_CHANGES ───────────────────────────────────────────────────────
@@ -230,20 +237,25 @@ class AdminUser(SQLModel, table=True):
     last_login: Optional[datetime] = Field(default=None)
     created_at: datetime           = Field(default_factory=datetime.utcnow)
 
+
 # ── 11. KPI_SNAPSHOTS ──────────────────────────────────────────────────────────
 class KpiSnapshot(SQLModel, table=True):
     __tablename__ = "kpi_snapshots"
 
-    id: Optional[int]       = Field(default=None, primary_key=True)
-    month: str              = Field()
-    year: int               = Field()
-    arr: float              = Field(default=0.0)
-    mrr: float              = Field(default=0.0)
-    nrr_percentage: float   = Field(default=0.0)
-    expansion_mrr: float    = Field(default=0.0)
-    churn_mrr: float        = Field(default=0.0)
-    nrr_status: str         = Field(default="healthy")
-    created_at: datetime    = Field(default_factory=datetime.utcnow)
+    id: Optional[int]         = Field(default=None, primary_key=True)
+    # ── NUEVO: Filtro Universal Multi-tenant (Problema 5) ─────────────────────
+    # null → snapshot global de toda la empresa WellQ
+    # str  → snapshot de una clínica específica (referencia a clinics.clinic_id)
+    clinic_id: Optional[str]  = Field(default=None, index=True)
+    month: str                = Field()
+    year: int                 = Field()
+    arr: float                = Field(default=0.0)
+    mrr: float                = Field(default=0.0)
+    nrr_percentage: float     = Field(default=0.0)
+    expansion_mrr: float      = Field(default=0.0)
+    churn_mrr: float          = Field(default=0.0)
+    nrr_status: str           = Field(default="healthy")
+    created_at: datetime      = Field(default_factory=datetime.utcnow)
 
 
 # ── 12. APP_METRICS ────────────────────────────────────────────────────────────
@@ -332,6 +344,10 @@ class MrrSnapshot(SQLModel, table=True):
     __tablename__ = "mrr_snapshots"
 
     id: Optional[int]                  = Field(default=None, primary_key=True)
+    # ── NUEVO: Filtro Universal Multi-tenant (Problema 5) ─────────────────────
+    # null → snapshot global de toda la empresa WellQ
+    # str  → snapshot de una clínica específica (referencia a clinics.clinic_id)
+    clinic_id: Optional[str]           = Field(default=None, index=True)
     period_month: str                  = Field()
     period_year: int                   = Field()
     total_mrr: float                   = Field(default=0.0)
@@ -729,21 +745,55 @@ class ForceUpdateConfig(SQLModel, table=True):
     """
     __tablename__ = "force_update_config"
 
-    id: Optional[int]       = Field(default=None, primary_key=True)
-    app_type: str           = Field(unique=True, index=True)   # "patients" | "tablet" | "web"
-    min_version: str        = Field()                          # e.g. "2.1.0"
-    updated_at: datetime    = Field(default_factory=datetime.utcnow)
-    updated_by: Optional[str] = Field(default=None)           # email del admin que lo configuró
+    id: Optional[int]         = Field(default=None, primary_key=True)
+    app_type: str             = Field(unique=True, index=True)   # "patients" | "tablet" | "web"
+    min_version: str          = Field()                          # e.g. "2.1.0"
+    updated_at: datetime      = Field(default_factory=datetime.utcnow)
+    updated_by: Optional[str] = Field(default=None)             # email del admin que lo configuró
+
 
 class PasswordResetToken(SQLModel, table=True):
     __tablename__ = "password_reset_tokens"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    reset_id: str = Field(unique=True, index=True)
-    user_id: str = Field(index=True)
-    email: str = Field(index=True)
-    code_hash: str = Field()
-    attempts: int = Field(default=0)
-    expires_at: datetime = Field(index=True)
-    used_at: Optional[datetime] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    id: Optional[int]              = Field(default=None, primary_key=True)
+    reset_id: str                  = Field(unique=True, index=True)
+    user_id: str                   = Field(index=True)
+    email: str                     = Field(index=True)
+    code_hash: str                 = Field()
+    attempts: int                  = Field(default=0)
+    expires_at: datetime           = Field(index=True)
+    used_at: Optional[datetime]    = Field(default=None)
+    created_at: datetime           = Field(default_factory=datetime.utcnow)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLA NUEVA — AUDITORÍA INTERNA (PROBLEMA 4)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 38. ACTION_LOGS ────────────────────────────────────────────────────────────
+class ActionLog(SQLModel, table=True):
+    """
+    Registro de auditoría de acciones administrativas. Tabla append-only.
+    Los registros nunca se editan ni eliminan: son el historial legal de cambios.
+
+    Cubre cualquier operación crítica sobre entidades del sistema
+    (clinics, plans, features, etc.) realizada desde el Admin Console.
+
+    Estructura del campo changes (JSON string):
+      CREATE      → { "after":  { campo: valor_nuevo } }
+      UPDATE      → { "before": { campo: valor_original }, "after": { campo: valor_nuevo } }
+      SOFT_DELETE → { "before": { campo: valor_original } }
+      HARD_DELETE → { "before": { campo: valor_original } }
+    """
+    __tablename__ = "action_logs"
+
+    id: Optional[int]          = Field(default=None, primary_key=True)
+    log_id: str                = Field(unique=True, index=True)           # "log-{uuid}"
+    admin_user_id: str         = Field(index=True)                         # AdminUser.user_id
+    admin_email: str           = Field(index=True)                         # para búsquedas rápidas
+    action: str                = Field(index=True)                         # "CREATE" | "UPDATE" | "SOFT_DELETE" | "HARD_DELETE"
+    entity_type: str           = Field(index=True)                         # "clinic" | "plan" | "feature" | etc.
+    entity_id: str             = Field(index=True)                         # clinic_id, plan_id, etc.
+    entity_name: Optional[str] = Field(default=None)                      # nombre legible ("Clínica San José")
+    changes: Optional[str]     = Field(default=None, sa_column=Column(Text))  # JSON {"before":{}, "after":{}}
+    created_at: datetime       = Field(default_factory=datetime.utcnow)

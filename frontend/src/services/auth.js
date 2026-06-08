@@ -1,5 +1,11 @@
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FUENTE ÚNICA DE VERDAD para las keys de localStorage.
+// Cualquier archivo que necesite leer o borrar el token debe importar
+// las funciones de este módulo — nunca acceder a localStorage directamente.
+// ─────────────────────────────────────────────────────────────────────────────
+
 const STORAGE = {
   ACCESS:  "wellq_access_token",
   REFRESH: "wellq_refresh_token",
@@ -23,10 +29,11 @@ export function getStoredUser() {
 function saveTokens({ access_token, refresh_token, user }) {
   localStorage.setItem(STORAGE.ACCESS, access_token);
   if (refresh_token) localStorage.setItem(STORAGE.REFRESH, refresh_token);
-  if (user) localStorage.setItem(STORAGE.USER, JSON.stringify(user));
+  if (user)          localStorage.setItem(STORAGE.USER, JSON.stringify(user));
 }
 
-function clearTokens() {
+// ✅ Exportada para que client.js la use en el handler 401
+export function clearTokens() {
   localStorage.removeItem(STORAGE.ACCESS);
   localStorage.removeItem(STORAGE.REFRESH);
   localStorage.removeItem(STORAGE.USER);
@@ -36,9 +43,9 @@ function clearTokens() {
 
 export async function login(email, password) {
   const response = await fetch(`${API_BASE}/api/auth/login`, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body:    JSON.stringify({ email, password }),
   });
 
   if (!response.ok) {
@@ -56,9 +63,9 @@ export async function logout() {
 
   try {
     await fetch(`${API_BASE}/api/auth/logout`, {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token }),
+      body:    JSON.stringify({ refresh_token }),
     });
   } finally {
     clearTokens();
@@ -70,9 +77,9 @@ export async function refreshAccessToken() {
   if (!refresh_token) throw new Error("Sin refresh token");
 
   const response = await fetch(`${API_BASE}/api/auth/refresh`, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token }),
+    body:    JSON.stringify({ refresh_token }),
   });
 
   if (!response.ok) {
@@ -115,15 +122,15 @@ export function isAuthenticated() {
 
 export async function requestPasswordReset(email) {
   const response = await fetch(`${API_BASE}/api/auth/forgot-password`, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body:    JSON.stringify({ email }),
   });
 
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.detail || "No se pudo solicitar recuperacion.");
+    throw new Error(payload.detail || "No se pudo solicitar recuperación.");
   }
 
   return payload;
@@ -131,9 +138,9 @@ export async function requestPasswordReset(email) {
 
 export async function verifyResetCode(email, code) {
   const response = await fetch(`${API_BASE}/api/auth/verify-reset-code`, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body:    JSON.stringify({
       email,
       code,
       new_password: "temporary-password-only-for-validation",
@@ -143,7 +150,7 @@ export async function verifyResetCode(email, code) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.detail || "Codigo invalido o expirado.");
+    throw new Error(payload.detail || "Código inválido o expirado.");
   }
 
   return payload;
@@ -151,19 +158,15 @@ export async function verifyResetCode(email, code) {
 
 export async function resetPassword(email, code, newPassword) {
   const response = await fetch(`${API_BASE}/api/auth/reset-password`, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      code,
-      new_password: newPassword,
-    }),
+    body:    JSON.stringify({ email, code, new_password: newPassword }),
   });
 
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.detail || "No se pudo actualizar la contrasena.");
+    throw new Error(payload.detail || "No se pudo actualizar la contraseña.");
   }
 
   return payload;

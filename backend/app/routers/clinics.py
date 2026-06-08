@@ -1,5 +1,6 @@
 """
 routers/clinics.py — MÓDULO: GESTIÓN DE CLÍNICAS
+
 Endpoints 14 al 25 conectados a Neon (PostgreSQL)
 
 CORRECCIONES APLICADAS:
@@ -7,22 +8,29 @@ CORRECCIONES APLICADAS:
 - Filtro Listado: Oculta clínicas eliminadas (is_deleted=True) a menos que se filtre por "churned".
 - Validación Email: Se protege el endpoint POST y PATCH con regex para correos.
 - Hard Delete: Si se elimina una clínica que ya está en "churned", se borra permanentemente.
+- Impersonate Fix: Se agrega expires_at al registro de auditoría (NOT NULL constraint).
 """
 
 import re
-from fastapi import APIRouter, Depends, HTTPException, Path, Body, status, Query
+import json                                                           # ← MOVIDO aquí desde get_clinic_subscription
+from fastapi import APIRouter, Depends, HTTPException, Path, Body, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, asc
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 
 from app.models_db import (
-    Clinic, ClinicPlan, ClinicUsageMetric, 
-    Invoice, Notification, Job
+    Clinic, ClinicPlan, ClinicUsageMetric,
+    Invoice, Notification, Job, ImpersonateAuditLog,
+    ActionLog                                                         # ← NUEVO
 )
 from app.db.neon import get_db
+from .dependencies import require_super_admin
 
 router = APIRouter(prefix="/api/clinics", tags=["Gestión de Clínicas"])
+
+# Duración de la sesión de soporte técnico
+IMPERSONATE_SESSION_HOURS = 2
 
 
 # ─── Helper de Validación de Correos ─────────────────────────────────────────
@@ -35,6 +43,33 @@ def _validate_email_format(email: str | None, field_label: str = "email") -> Non
             status_code=422,
             detail=f"El {field_label} no tiene formato válido (falta @ o dominio)."
         )
+
+
+# ─── Helper de Auditoría de Acciones ─────────────────────────────────────────
+async def _log_action(
+    db:          AsyncSession,
+    admin_user:  dict,
+    action:      str,
+    entity_type: str,
+    entity_id:   str,
+    entity_name: str | None  = None,
+    changes:     dict | None = None,
+) -> None:
+    """
+    Registra una acción administrativa en action_logs.
+    ⚠️  No llama a db.commit() — el endpoint padre es dueño de la transacción.
+    Ambos registros (el cambio real + el log) se confirman juntos o no se confirman.
+    """
+    db.add(ActionLog(
+        log_id        = f"log-{uuid.uuid4().hex[:10]}",
+        admin_user_id = admin_user.get("user_id", "unknown"),
+        admin_email   = admin_user.get("email",   "unknown"),
+        action        = action,
+        entity_type   = entity_type,
+        entity_id     = entity_id,
+        entity_name   = entity_name,
+        changes       = json.dumps(changes, ensure_ascii=False, default=str) if changes else None,
+    ))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -51,43 +86,34 @@ async def list_clinics(
     sort_order: str = "asc",
     db: AsyncSession = Depends(get_db)
 ):
-    # Construir query base
     query = select(Clinic)
-    
-    # ── LÓGICA DE CHURN Y SOFT DELETE ──
+
     if status_param == "churned":
-        # Si piden ver "churned", mostramos solo las eliminadas/churn
         query = query.where(Clinic.status == "churned")
     else:
-        # Por defecto, ocultamos las eliminadas
         query = query.where(Clinic.is_deleted == False)
         if status_param:
             query = query.where(Clinic.status == status_param)
 
-    # Filtros restantes
     if search:
         query = query.where(Clinic.name.ilike(f"%{search}%"))
     if tier:
         query = query.where(Clinic.tier == tier)
 
-    # Calcular el total para la paginación
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Ordenamiento dinámico
     order_col = getattr(Clinic, sort_by, Clinic.name)
     if sort_order == "desc":
         query = query.order_by(desc(order_col))
     else:
         query = query.order_by(asc(order_col))
 
-    # Paginación
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     clinics = result.scalars().all()
 
-    # Mapear respuesta
     data = []
     for c in clinics:
         data.append({
@@ -100,66 +126,82 @@ async def list_clinics(
                 "phone": getattr(c, 'contact_phone', None),
                 "email": getattr(c, 'contact_email', None)
             },
-            "patient_count": getattr(c, 'patients_used', 0),
-            "patientsUsed": getattr(c, 'patients_used', 0),
-            "patientsLimit": getattr(c, 'patients_limit', 500),
-            "healthScore": getattr(c, 'health_score', 100),
-            "lastLogin": c.last_login.isoformat() if getattr(c, 'last_login', None) else None
+            "patient_count":  getattr(c, 'patients_used', 0),
+            "patientsUsed":   getattr(c, 'patients_used', 0),
+            "patientsLimit":  getattr(c, 'patients_limit', 500),
+            "healthScore":    getattr(c, 'health_score', 100),
+            "lastLogin":      c.last_login.isoformat() if getattr(c, 'last_login', None) else None
         })
 
-    return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "data": data
-    }
+    return {"total": total, "page": page, "page_size": page_size, "data": data}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 15. POST /clinics — Registro de una nueva clínica en el sistema
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("", summary="Registro de una nueva clínica", status_code=status.HTTP_201_CREATED)
-async def create_clinic(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
-    # ── VALIDACIÓN DE CORREOS ──
+async def create_clinic(
+    body:         dict = Body(...),
+    db:           AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_super_admin),           # ← NUEVO (Opción A)
+):
     _validate_email_format(body.get("contact_email"), "correo de contacto")
     _validate_email_format(body.get("billing_email"), "correo de facturación")
 
-    # Generar un ID único para la nueva clínica
     new_clinic_id = f"CL-{uuid.uuid4().hex[:6].upper()}"
-    
-    # Capturamos todos los campos enviados desde React, si no vienen, dejamos defaults
+
     new_clinic = Clinic(
-        clinic_id=new_clinic_id,
-        name=body.get("name", "Nueva Clínica"),
-        tier=body.get("tier", "smb"),
-        status=body.get("status", "active"),
-        patients_limit=body.get("patients_limit", 500),
-        mrr=body.get("mrr", 0.0),
-        location=body.get("location"),
-        contact_name=body.get("contact_name"),
-        contact_email=body.get("contact_email"),
-        contact_phone=body.get("contact_phone"),
-        company_name=body.get("company_name"),
-        tax_id=body.get("tax_id"),
-        billing_email=body.get("billing_email"),
-        address=body.get("address"),
-        internal_notes=body.get("internal_notes")
+        clinic_id      = new_clinic_id,
+        name           = body.get("name", "Nueva Clínica"),
+        tier           = body.get("tier", "smb"),
+        status         = body.get("status", "active"),
+        patients_limit = body.get("patients_limit", 500),
+        mrr            = body.get("mrr", 0.0),
+        location       = body.get("location"),
+        contact_name   = body.get("contact_name"),
+        contact_email  = body.get("contact_email"),
+        contact_phone  = body.get("contact_phone"),
+        company_name   = body.get("company_name"),
+        tax_id         = body.get("tax_id"),
+        billing_email  = body.get("billing_email"),
+        address        = body.get("address"),
+        internal_notes = body.get("internal_notes"),
     )
-    
+
     db.add(new_clinic)
+
+    # ── Log de auditoría (misma transacción) ──────────────────────────────────
+    await _log_action(
+        db          = db,
+        admin_user  = current_user,
+        action      = "CREATE",
+        entity_type = "clinic",
+        entity_id   = new_clinic_id,
+        entity_name = body.get("name", "Nueva Clínica"),
+        changes     = {
+            "after": {
+                "name":           body.get("name", "Nueva Clínica"),
+                "tier":           body.get("tier", "smb"),
+                "status":         body.get("status", "active"),
+                "patients_limit": body.get("patients_limit", 500),
+            }
+        },
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     await db.commit()
     await db.refresh(new_clinic)
 
     return {
-        "status": "success",
+        "status":  "success",
         "message": "Clínica registrada correctamente",
         "data": {
-            "_id": str(new_clinic.id),
+            "_id":       str(new_clinic.id),
             "clinic_id": new_clinic.clinic_id,
-            "name": new_clinic.name,
-            "status": new_clinic.status,
-            "tier": new_clinic.tier
-        }
+            "name":      new_clinic.name,
+            "status":    new_clinic.status,
+            "tier":      new_clinic.tier,
+        },
     }
 
 
@@ -169,23 +211,23 @@ async def create_clinic(body: dict = Body(...), db: AsyncSession = Depends(get_d
 @router.post("/bulk/email", summary="Envío de comunicaciones masivas a clínicas")
 async def bulk_email(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     clinic_ids = body.get('clinic_ids', [])
-    subject = body.get("subject", "Actualización importante")
-    
+    subject    = body.get("subject", "Actualización importante")
+
     notif = Notification(
-        notification_id=f"notif-{uuid.uuid4().hex[:8]}",
-        title=subject,
-        message=f"Mensaje masivo enviado a {len(clinic_ids)} clínicas.",
-        channel="email",
-        status="pending",
-        recipient_clinic_id="multiple",
-        sent_by="admin_system"
+        notification_id   = f"notif-{uuid.uuid4().hex[:8]}",
+        title             = subject,
+        message           = f"Mensaje masivo enviado a {len(clinic_ids)} clínicas.",
+        channel           = "email",
+        status            = "pending",
+        recipient_clinic_id= "multiple",
+        sent_by           = "admin_system"
     )
-    
+
     db.add(notif)
     await db.commit()
 
     return {
-        "status": "success",
+        "status":  "success",
         "message": f"Correos encolados para {len(clinic_ids)} clínicas.",
         "subject": subject
     }
@@ -212,12 +254,12 @@ async def export_clinics(
     C_ALT_ROW = "E6FAFA"
 
     STATUS_COLORS = {
-        "active":    ("D1FAE5", "065F46"),
-        "warning":   ("FEF3C7", "92400E"),
-        "critical":  ("FEE2E2", "991B1B"),
-        "churned":   ("F3F4F6", "374151"),
-        "trial":     ("EDE9FE", "5B21B6"),
-        "onboarding":("DBEAFE", "1E40AF"),
+        "active":      ("D1FAE5", "065F46"),
+        "warning":     ("FEF3C7", "92400E"),
+        "critical":    ("FEE2E2", "991B1B"),
+        "churned":     ("F3F4F6", "374151"),
+        "trial":       ("EDE9FE", "5B21B6"),
+        "onboarding":  ("DBEAFE", "1E40AF"),
     }
     TIER_COLORS = {
         "enterprise": ("1A1A2E", "FFFFFF"),
@@ -233,33 +275,30 @@ async def export_clinics(
         return Border(left=s, right=s, top=s, bottom=s)
 
     query = select(Clinic)
-    
-    # ── LÓGICA DE CHURN IGUAL QUE EN EL LISTADO ──
     if status_param == "churned":
         query = query.where(Clinic.status == "churned")
     else:
         query = query.where(Clinic.is_deleted == False)
         if status_param:
             query = query.where(Clinic.status == status_param)
-
     if tier:
         query = query.where(Clinic.tier == tier)
-        
     query = query.order_by(asc(Clinic.name))
-    result = await db.execute(query)
+
+    result  = await db.execute(query)
     clinics = result.scalars().all()
 
     data = [{
-        "clinic_id": c.clinic_id,
-        "name": c.name,
-        "tier": c.tier,
-        "status": c.status,
+        "clinic_id":    c.clinic_id,
+        "name":         c.name,
+        "tier":         c.tier,
+        "status":       c.status,
         "patientsUsed": getattr(c, 'patients_used', 0),
-        "patientsLimit": getattr(c, 'patients_limit', 0),
-        "healthScore": getattr(c, 'health_score', 0),
-        "mrr": getattr(c, 'mrr', 0),
-        "lastLogin": c.last_login.isoformat() if getattr(c, 'last_login', None) else "",
-        "location": getattr(c, 'location', ""),
+        "patientsLimit":getattr(c, 'patients_limit', 0),
+        "healthScore":  getattr(c, 'health_score', 0),
+        "mrr":          getattr(c, 'mrr', 0),
+        "lastLogin":    c.last_login.isoformat() if getattr(c, 'last_login', None) else "",
+        "location":     getattr(c, 'location', ""),
     } for c in clinics]
 
     wb = Workbook()
@@ -270,9 +309,9 @@ async def export_clinics(
 
     ws.merge_cells("A1:K1")
     t = ws["A1"]
-    t.value = f"WellQ — Reporte de Clínicas   |   {datetime.utcnow().strftime('%d/%m/%Y %H:%M')} UTC"
-    t.font = Font(name="Arial", bold=True, size=13, color=C_WHITE)
-    t.fill = fill(C_DARK)
+    t.value     = f"WellQ — Reporte de Clínicas   |   {datetime.utcnow().strftime('%d/%m/%Y %H:%M')} UTC"
+    t.font      = Font(name="Arial", bold=True, size=13, color=C_WHITE)
+    t.fill      = fill(C_DARK)
     t.alignment = Alignment(horizontal="left", vertical="center", indent=1)
     ws.row_dimensions[1].height = 32
 
@@ -280,17 +319,17 @@ async def export_clinics(
     col_widths = [12,   28,               13,     12,       11,          10,       9,       10,       13,          22,             16]
 
     for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
-        cell = ws.cell(row=2, column=ci, value=h)
-        cell.font      = Font(name="Arial", bold=True, size=10, color=C_WHITE)
-        cell.fill      = fill(C_TEAL)
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border    = border()
+        cell            = ws.cell(row=2, column=ci, value=h)
+        cell.font       = Font(name="Arial", bold=True, size=10, color=C_WHITE)
+        cell.fill       = fill(C_TEAL)
+        cell.alignment  = Alignment(horizontal="center", vertical="center")
+        cell.border     = border()
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.row_dimensions[2].height = 22
 
     for ri, c in enumerate(data, 3):
-        bg   = C_ALT_ROW if ri % 2 == 0 else C_WHITE
-        uso  = round((c["patientsUsed"] / c["patientsLimit"]) * 100, 1) if c["patientsLimit"] > 0 else 0
+        bg  = C_ALT_ROW if ri % 2 == 0 else C_WHITE
+        uso = round((c["patientsUsed"] / c["patientsLimit"]) * 100, 1) if c["patientsLimit"] > 0 else 0
         login_str = ""
         if c["lastLogin"]:
             try: login_str = datetime.fromisoformat(c["lastLogin"].replace("Z","")).strftime("%d/%m/%Y %H:%M")
@@ -301,20 +340,20 @@ async def export_clinics(
                 c["mrr"], login_str, c["location"]]
 
         for ci, val in enumerate(vals, 1):
-            cell = ws.cell(row=ri, column=ci, value=val)
+            cell           = ws.cell(row=ri, column=ci, value=val)
             cell.font      = Font(name="Arial", size=10, color="1F2937")
             cell.fill      = fill(bg)
             cell.border    = border()
             cell.alignment = Alignment(vertical="center")
 
         tbg, tfg = TIER_COLORS.get(c["tier"].lower(), ("E5E7EB", "374151"))
-        tc = ws.cell(row=ri, column=3)
-        tc.fill = fill(tbg); tc.font = Font(name="Arial", size=10, bold=True, color=tfg)
+        tc       = ws.cell(row=ri, column=3)
+        tc.fill  = fill(tbg); tc.font = Font(name="Arial", size=10, bold=True, color=tfg)
         tc.alignment = Alignment(horizontal="center", vertical="center")
 
         sbg, sfg = STATUS_COLORS.get(c["status"].lower(), ("F3F4F6", "374151"))
-        sc = ws.cell(row=ri, column=4)
-        sc.fill = fill(sbg); sc.font = Font(name="Arial", size=10, bold=True, color=sfg)
+        sc       = ws.cell(row=ri, column=4)
+        sc.fill  = fill(sbg); sc.font = Font(name="Arial", size=10, bold=True, color=sfg)
         sc.alignment = Alignment(horizontal="center", vertical="center")
 
         pc = ws.cell(row=ri, column=7)
@@ -324,22 +363,26 @@ async def export_clinics(
         elif uso >= 70: pc.fill = fill("FEF3C7"); pc.font = Font(name="Arial", size=10, bold=True, color="92400E")
         else:           pc.fill = fill("D1FAE5"); pc.font = Font(name="Arial", size=10, color="065F46")
 
-        hs = c["healthScore"]
-        hc = ws.cell(row=ri, column=8)
+        hs      = c["healthScore"]
+        hc      = ws.cell(row=ri, column=8)
         hbg, hfg = ("F0FDF4","065F46") if hs>=80 else ("FFFBEB","92400E") if hs>=60 else ("FFF1F2","991B1B") if hs>0 else ("F9FAFB","9CA3AF")
         hc.fill = fill(hbg); hc.font = Font(name="Arial", size=10, bold=True, color=hfg)
         hc.alignment = Alignment(horizontal="center", vertical="center")
 
         ws.cell(row=ri, column=9).number_format = '"$"#,##0.00'
-        ws.cell(row=ri, column=9).alignment = Alignment(horizontal="right", vertical="center")
-        ws.cell(row=ri, column=10).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=ri, column=9).alignment     = Alignment(horizontal="right", vertical="center")
+        ws.cell(row=ri, column=10).alignment    = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[ri].height = 20
 
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
     filename = f"clinicas_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.xlsx"
-    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -349,18 +392,18 @@ async def export_clinics(
 async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
-    
+
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
     return {
-        "_id": str(clinic.id),
-        "clinic_id": clinic.clinic_id,
-        "name": clinic.name,
-        "status": clinic.status,
-        "tier": clinic.tier,
-        "internal_notes": getattr(clinic, 'internal_notes', None),
-        "created_at": clinic.created_at.isoformat() if clinic.created_at else None
+        "_id":           str(clinic.id),
+        "clinic_id":     clinic.clinic_id,
+        "name":          clinic.name,
+        "status":        clinic.status,
+        "tier":          clinic.tier,
+        "internal_notes":getattr(clinic, 'internal_notes', None),
+        "created_at":    clinic.created_at.isoformat() if clinic.created_at else None
     }
 
 
@@ -369,11 +412,11 @@ async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_
 # ─────────────────────────────────────────────────────────────────────────────
 @router.patch("/{clinic_id}", summary="Actualizar campos de una clínica")
 async def update_clinic(
-    clinic_id: str = Path(...),
-    updates: dict = Body(...),
-    db: AsyncSession = Depends(get_db)
+    clinic_id:    str  = Path(...),
+    updates:      dict = Body(...),
+    db:           AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_super_admin),           # ← NUEVO (Opción A)
 ):
-    # ── VALIDACIÓN DE CORREOS ──
     if "contact_email" in updates:
         _validate_email_format(updates.get("contact_email"), "correo de contacto")
     if "billing_email" in updates:
@@ -386,27 +429,50 @@ async def update_clinic(
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
     field_map = {
-        "name":   "name",
-        "tier":   "tier",
-        "status": "status",
+        "name":          "name",
+        "tier":          "tier",
+        "status":        "status",
         "contact_email": "contact_email",
-        "billing_email": "billing_email"
+        "billing_email": "billing_email",
     }
 
-    updated = []
+    # ── Capturar nombre original ANTES de tocar nada ──────────────────────────
+    original_name = clinic.name
+
+    # ── Un solo loop: captura before/after y aplica el cambio ────────────────
+    before_state: dict = {}
+    after_state:  dict = {}
+    updated:      list = []
+
     for key, value in updates.items():
         model_field = field_map.get(key, key)
         if hasattr(clinic, model_field):
-            setattr(clinic, model_field, value)
+            before_state[key] = getattr(clinic, model_field)   # estado original
+            setattr(clinic, model_field, value)                  # aplica cambio
+            after_state[key]  = value                            # estado nuevo
             updated.append(key)
 
+    # ─────────────────────────────────────────────────────────────────────────
     clinic.updated_at = datetime.utcnow()
+
+    # ── Log de auditoría (misma transacción) ──────────────────────────────────
+    await _log_action(
+        db          = db,
+        admin_user  = current_user,
+        action      = "UPDATE",
+        entity_type = "clinic",
+        entity_id   = clinic_id,
+        entity_name = original_name,
+        changes     = {"before": before_state, "after": after_state},
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     await db.commit()
 
     return {
-        "status": "success",
-        "message": f"Clínica {clinic_id} actualizada correctamente",
-        "updated_fields": updated
+        "status":         "success",
+        "message":        f"Clínica {clinic_id} actualizada correctamente",
+        "updated_fields": updated,
     }
 
 
@@ -415,8 +481,9 @@ async def update_clinic(
 # ─────────────────────────────────────────────────────────────────────────────
 @router.delete("/{clinic_id}", summary="Eliminar clínica del sistema (Soft/Hard Delete)")
 async def delete_clinic(
-    clinic_id: str = Path(...),
-    db: AsyncSession = Depends(get_db)
+    clinic_id:    str  = Path(...),
+    db:           AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_super_admin),           # ← renombrado de _ a current_user
 ):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
@@ -424,24 +491,36 @@ async def delete_clinic(
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
-    # ── LÓGICA DE SOFT DELETE Y HARD DELETE ──
+    # ── Capturar datos ANTES de cualquier modificación ────────────────────────
+    clinic_name   = clinic.name
+    status_before = clinic.status
+
+    # ─────────────────────────────────────────────────────────────────────────
     if getattr(clinic, 'is_deleted', False) or clinic.status == "churned":
-        # Si ya estaba en la papelera (Churned), la borramos para siempre (Hard Delete)
+        action_type = "HARD_DELETE"
         await db.delete(clinic)
         msg = f"Clínica {clinic_id} eliminada permanentemente de la base de datos."
     else:
-        # Si estaba activa, la mandamos a la papelera (Soft Delete)
+        action_type = "SOFT_DELETE"
         clinic.is_deleted = True
         clinic.deleted_at = datetime.utcnow()
-        clinic.status = "churned"
+        clinic.status     = "churned"
         msg = f"Clínica {clinic_id} eliminada y movida a churn correctamente."
 
-    await db.commit()
+    # ── Log de auditoría (misma transacción) ──────────────────────────────────
+    await _log_action(
+        db          = db,
+        admin_user  = current_user,
+        action      = action_type,
+        entity_type = "clinic",
+        entity_id   = clinic_id,
+        entity_name = clinic_name,
+        changes     = {"before": {"status": status_before, "is_deleted": False}},
+    )
+    # ─────────────────────────────────────────────────────────────────────────
 
-    return {
-        "status": "success",
-        "message": msg
-    }
+    await db.commit()
+    return {"status": "success", "message": msg}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -451,22 +530,22 @@ async def delete_clinic(
 async def get_clinic_contact(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
-    
+
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
     return {
-        "clinic_id": clinic.clinic_id,
+        "clinic_id": clinic_id,
         "contact_info": {
-            "primary_name": getattr(clinic, 'contact_name', None),
+            "primary_name":  getattr(clinic, 'contact_name', None),
             "primary_email": getattr(clinic, 'contact_email', None),
             "primary_phone": getattr(clinic, 'contact_phone', None)
         },
         "billing_info": {
-            "company_name": getattr(clinic, 'company_name', None),
-            "tax_id": getattr(clinic, 'tax_id', None),
+            "company_name":  getattr(clinic, 'company_name', None),
+            "tax_id":        getattr(clinic, 'tax_id', None),
             "billing_email": getattr(clinic, 'billing_email', None),
-            "address": getattr(clinic, 'address', None)
+            "address":       getattr(clinic, 'address', None)
         }
     }
 
@@ -483,22 +562,22 @@ async def get_clinic_subscription(clinic_id: str = Path(...), db: AsyncSession =
         .limit(1)
     )
     plan_assignment = result.scalar_one_or_none()
-    
+
     if not plan_assignment:
         raise HTTPException(status_code=404, detail="Sin suscripción activa")
 
-    import json
+    # ── json ya está importado a nivel de módulo ──────────────────────────────
     plan_data = json.loads(plan_assignment.plan_snapshot) if plan_assignment.plan_snapshot else {}
 
     return {
         "clinic_id": clinic_id,
         "subscription": {
-            "plan_name": plan_data.get("name", "Desconocido"),
-            "status": "active",
-            "mrr_value": plan_data.get("monthlyPrice", 0.0),
-            "currency": plan_data.get("currency", "USD"),
-            "started_at": plan_assignment.effective_from.isoformat() if plan_assignment.effective_from else None,
-            "renews_at": plan_assignment.effective_to.isoformat() if plan_assignment.effective_to else None,
+            "plan_name":        plan_data.get("name", "Desconocido"),
+            "status":           "active",
+            "mrr_value":        plan_data.get("monthlyPrice", 0.0),
+            "currency":         plan_data.get("currency", "USD"),
+            "started_at":       plan_assignment.effective_from.isoformat() if plan_assignment.effective_from else None,
+            "renews_at":        plan_assignment.effective_to.isoformat() if plan_assignment.effective_to else None,
             "features_enabled": ["custom_branding", "api_access", "priority_support"]
         }
     }
@@ -516,18 +595,18 @@ async def get_clinic_usage(clinic_id: str = Path(...), db: AsyncSession = Depend
         .limit(1)
     )
     usage = result.scalar_one_or_none()
-    
+
     if not usage:
         raise HTTPException(status_code=404, detail="Métricas no encontradas para esta clínica")
 
     return {
         "clinic_id": clinic_id,
-        "period": usage.period,
+        "period":    usage.period,
         "metrics": {
-            "active_clinicians": usage.active_clinicians,
-            "patient_sessions_completed": usage.patient_sessions_completed,
-            "ai_processing_minutes": usage.ai_processing_minutes,
-            "api_calls": usage.api_calls
+            "active_clinicians":            usage.active_clinicians,
+            "patient_sessions_completed":   usage.patient_sessions_completed,
+            "ai_processing_minutes":        usage.ai_processing_minutes,
+            "api_calls":                    usage.api_calls
         }
     }
 
@@ -539,20 +618,20 @@ async def get_clinic_usage(clinic_id: str = Path(...), db: AsyncSession = Depend
 async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
-    
+
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
-    used = getattr(clinic, 'patients_used', 0)
-    limit = getattr(clinic, 'patients_limit', 0)
+    used        = getattr(clinic, 'patients_used', 0)
+    limit       = getattr(clinic, 'patients_limit', 0)
     utilization = round((used / limit) * 100, 2) if limit > 0 else 0
 
     return {
         "clinic_id": clinic_id,
         "licenses": {
-            "total_limit": limit,
-            "currently_active": used,
-            "available": max(0, limit - used),
+            "total_limit":       limit,
+            "currently_active":  used,
+            "available":         max(0, limit - used),
             "utilization_percentage": utilization
         },
         "warning_threshold_reached": utilization >= 90.0
@@ -574,18 +653,18 @@ async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Dep
     pending_balance = sum(inv.amount for inv in invoices if getattr(inv, 'status', '') != "paid")
 
     return {
-        "clinic_id": clinic_id,
+        "clinic_id":       clinic_id,
         "pending_balance": pending_balance,
         "invoices": [
             {
-                "id": getattr(inv, 'invoice_id', getattr(inv, 'id', None)),
+                "id":         getattr(inv, 'invoice_id', getattr(inv, 'id', None)),
                 "invoice_id": getattr(inv, 'invoice_id', getattr(inv, 'id', None)),
-                "amount": inv.amount,
-                "currency": getattr(inv, 'currency', 'USD'),
-                "status": inv.status,
-                "date": inv.issued_at.isoformat() if inv.issued_at else None,
-                "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
-                "pdf_url": getattr(inv, 'pdf_url', None)
+                "amount":     inv.amount,
+                "currency":   getattr(inv, 'currency', 'USD'),
+                "status":     inv.status,
+                "date":       inv.issued_at.isoformat() if inv.issued_at else None,
+                "issued_at":  inv.issued_at.isoformat() if inv.issued_at else None,
+                "pdf_url":    getattr(inv, 'pdf_url', None)
             } for inv in invoices
         ]
     }
@@ -594,31 +673,63 @@ async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Dep
 # ─────────────────────────────────────────────────────────────────────────────
 # 23. POST /clinics/{clinic_id}/impersonate — Ingreso como soporte técnico
 # ─────────────────────────────────────────────────────────────────────────────
-@router.post("/{clinic_id}/impersonate", summary="Ingreso como soporte técnico", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{clinic_id}/impersonate",
+    summary="Ingreso como soporte técnico",
+    status_code=status.HTTP_201_CREATED
+)
 async def impersonate_clinic(
-    clinic_id: str = Path(...),
-    body: dict = Body(...),
-    db: AsyncSession = Depends(get_db)
+    request:      Request,
+    clinic_id:    str  = Path(...),
+    body:         dict = Body(...),
+    db:           AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_super_admin),
 ):
-    reason = body.get("reason", "")
+    reason = body.get("reason", "").strip()
     if len(reason) < 10:
         return {
             "success": False,
-            "error": "La justificación ética debe tener más de 10 caracteres."
+            "error":   "La justificación ética debe tener más de 10 caracteres."
         }
 
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
-    
+
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
+    session_id = f"sess_{uuid.uuid4().hex[:10]}"
+    temp_token = f"imp_{uuid.uuid4().hex}"
+    now        = datetime.utcnow()
+
+    # ─── Registro de auditoría ────────────────────────────────────────────────
+    audit_log = ImpersonateAuditLog(
+        audit_log_id       = f"audit_{uuid.uuid4().hex[:10]}",
+        clinic_id          = clinic.clinic_id,
+        clinic_name        = clinic.name,
+        admin_user_id      = current_user.get("user_id", "unknown"),
+        admin_email        = current_user.get("email",   "unknown"),
+        reason             = reason,
+        session_token_hash = temp_token,
+        expires_at         = now + timedelta(hours=IMPERSONATE_SESSION_HOURS),  # ✅ FIX
+        created_at         = now,
+    )
+    db.add(audit_log)
+    await db.commit()
+
+    frontend_origin = (request.headers.get("origin") or "http://localhost:5173").rstrip("/")
+    clinic_portal_url = (
+        f"{frontend_origin}/clinic-portal"
+        f"?token={temp_token}&clinic_id={clinic.clinic_id}"
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     return {
-        "success": True,
-        "message": "Impersonation session started successfully.",
-        "session_id": f"sess_{uuid.uuid4().hex[:10]}",
-        "temp_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-        "expires_at": (datetime.utcnow()).isoformat(),
-        "clinic_id": clinic_id,
-        "reason_logged": reason
+        "success":           True,
+        "message":           "Sesión de soporte iniciada correctamente.",
+        "session_id":        session_id,
+        "temp_token":        temp_token,
+        "clinic_id":         clinic.clinic_id,
+        "expires_at":        (now + timedelta(hours=IMPERSONATE_SESSION_HOURS)).isoformat(),
+        "clinic_portal_url": clinic_portal_url
     }
