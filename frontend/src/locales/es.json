@@ -274,14 +274,24 @@
     "errorDeleteUser": "Error al eliminar el usuario",
     "deleteUserTitle": "Eliminar usuario",
     "deleteUserMessage": "¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.",
-    "checking": "Checking...",
-    "online": "Online",
-    "degraded": "Degraded",
-    "unreachable": "Unreachable",
+    "checking": "Revisando...",
+    "online": "En línea",
+    "degraded": "Degradado",
+    "unreachable": "Sin conexión",
     "cloudAuth": "Autenticación para servicios en la nube",
     "teamManagement": "Gestión de usuarios y accesos",
     "technicalContact": "Contacto técnico",
-    "accessConfig": "Configuración de acceso"
+    "accessConfig": "Configuración de acceso",
+    "syncSources": {
+      "clinician_summaries": "Resúmenes de clínicos",
+      "patient_health_summaries": "Resúmenes de salud de pacientes",
+      "support_tickets": "Tickets de soporte",
+      "clinics": "Clínicas",
+      "users": "Usuarios",
+      "plans": "Planes",
+      "invoices": "Facturas",
+      "notifications": "Notificaciones"
+    }
   },
   "support": {
     "title": "Tickets de soporte",

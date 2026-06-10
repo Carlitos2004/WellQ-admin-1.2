@@ -281,7 +281,17 @@
     "cloudAuth": "Cloud services authentication",
     "teamManagement": "User and access management",
     "technicalContact": "Technical contact",
-    "accessConfig": "Access configuration"
+    "accessConfig": "Access configuration",
+    "syncSources": {
+      "clinician_summaries": "Clinician Summaries",
+      "patient_health_summaries": "Patient Health Summaries",
+      "support_tickets": "Support Tickets",
+      "clinics": "Clinics",
+      "users": "Users",
+      "plans": "Plans",
+      "invoices": "Invoices",
+      "notifications": "Notifications"
+    }
   },
   "support": {
     "title": "Support Tickets",

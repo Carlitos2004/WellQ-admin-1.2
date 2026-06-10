@@ -42,6 +42,17 @@ const SYNC_STATUS_META = {
   },
 };
 
+const i18nKey = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const translateValue = (value, t) => t(`values.${i18nKey(value)}`, value ?? '');
+const translateSyncSource = (name, t) => t(`settings.syncSources.${i18nKey(name)}`, name ?? '');
+
 // ─── Animaciones ─────────────────────────────────────────────────────────────
 const tabVariants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
@@ -83,10 +94,10 @@ export const SettingsView = ({
         const health = await apiFetch('/health');
         const latencyMs = Math.floor(Math.random() * 20 + 5);
         setServerStatus({
-          status: health.status === 'ok' ? t('settings.online') : t('settings.degraded'),
+          status: health.status === 'ok' ? t('values.online') : t('values.degraded'),
           version: health.version,
-          environment: health.environment,
-          database: health.database === 'neon_connected' ? t('values.connected') : t('values.disconnected'),
+          environment: translateValue(health.environment, t),
+          database: translateValue(health.database, t),
           latency: `${latencyMs} ms`,
         });
       } catch {
@@ -500,9 +511,9 @@ export const SettingsView = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-wellq-gray">{t('settings.status')}</span>
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                  serverStatus.status === t('settings.online') ? 'bg-wellq-green/10 text-wellq-green border border-wellq-green/20' : 'bg-red-50 text-red-600 border border-red-200'
+                  serverStatus.status === t('values.online') ? 'bg-wellq-green/10 text-wellq-green border border-wellq-green/20' : 'bg-red-50 text-red-600 border border-red-200'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.status === t('settings.online') ? 'bg-wellq-green' : 'bg-red-500 animate-pulse'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.status === t('values.online') ? 'bg-wellq-green' : 'bg-red-500 animate-pulse'}`} />
                   {serverStatus.status}
                 </span>
               </div>
@@ -541,7 +552,7 @@ export const SettingsView = ({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-wellq-gray">{t('settings.status')}</span>
                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-wellq-green/10 text-wellq-green border border-wellq-green/20 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-wellq-green" /> {dbStatus?.status ?? t('common.loading')}
+                    <span className="w-1.5 h-1.5 rounded-full bg-wellq-green" /> {translateValue(dbStatus?.status, t) || t('common.loading')}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -600,7 +611,7 @@ export const SettingsView = ({
                           <SyncIcon size={14} className={meta.text} strokeWidth={2.5} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-wellq-dark dark:text-white truncate">{src.name}</p>
+                          <p className="text-xs font-bold text-wellq-dark dark:text-white truncate">{translateSyncSource(src.name, t)}</p>
                           <p className="text-[10px] font-medium text-wellq-gray truncate mt-0.5">{fmtSync}</p>
                         </div>
                       </div>
