@@ -45,6 +45,18 @@ const APP_ICONS = {
   'web': Globe,
 };
 
+const i18nKey = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const translateAppType = (type, t) => t(`platform.appTypes.${i18nKey(type)}`, type ?? t('values.unknown'));
+const translateServiceName = (service, t) => t(`platform.serviceNames.${i18nKey(service)}`, service ?? '');
+const translateServerName = (name, t) =>
+  t(`platform.serverNames.${i18nKey(name)}`, t(`overview.serverNames.${name}`, name ?? ''));
+
 // ── Animaciones Base ──
 const containerVariants = {
   hidden: {},
@@ -65,7 +77,7 @@ const ForceUpdateModal = ({ versions, onClose }) => {
   const [error, setError] = useState(null);
 
   const byAppType = versions.reduce((acc, v) => {
-    const type = v.app_type ?? v.appType ?? 'Unknown';
+    const type = v.app_type ?? v.appType ?? 'unknown';
     if (!acc[type]) acc[type] = [];
     acc[type].push(v.version);
     return acc;
@@ -161,7 +173,7 @@ const ForceUpdateModal = ({ versions, onClose }) => {
                             <Icon size={20} className="text-wellq-cyan" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-wellq-dark dark:text-white capitalize">{appType}</p>
+                            <p className="text-sm font-bold text-wellq-dark dark:text-white capitalize">{translateAppType(appType, t)}</p>
                             <p className="text-xs font-medium text-wellq-gray mt-0.5">
                               {t('platform.activeVersions')}: {appVersions.join(', ')}
                             </p>
@@ -300,7 +312,7 @@ const AppVersionDistribution = () => {
                 <div className="flex justify-between items-end">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-wellq-dark dark:text-white capitalize">
-                      {v.app_type ?? v.appType}
+                      {translateAppType(v.app_type ?? v.appType, t)}
                     </span>
                     <span className="text-xs font-semibold text-wellq-gray bg-wellq-gray/10 dark:bg-white/5 px-2 py-0.5 rounded-md">
                       v{v.version}
@@ -391,27 +403,30 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
               <PLATFORM_META.latency.icon size={18} className={PLATFORM_META.latency.color} strokeWidth={2.2} />
             </div>
             <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-wellq-gray/10 text-wellq-gray">
-              Live Avg
+              {t('platform.liveAvg')}
             </span>
           </div>
           <div className="relative">
             <p className="text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1">{t('platform.aiLatency')}</p>
             {apiLatency?.metrics && apiLatency.metrics.length > 0 ? (
               <div className="space-y-2.5 mt-3">
-                {apiLatency.metrics.map((m, i) => (
-                  <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-wellq-gray/5 dark:bg-white/[0.02] border border-transparent dark:border-white/5">
-                    <span className="text-xs font-semibold text-wellq-gray dark:text-wellq-gray/90 truncate max-w-[130px]">{m.service}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-black text-wellq-dark dark:text-white tabular-nums">
-                        {m.averageLatencyMs ?? m.average_latency_ms ?? '—'}<span className="text-[10px] text-wellq-gray font-bold">ms</span>
-                      </span>
-                      <span className="relative flex h-2.5 w-2.5">
-                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${m.status === 'healthy' ? 'bg-wellq-green' : 'bg-amber-500'}`}></span>
-                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${m.status === 'healthy' ? 'bg-wellq-green' : 'bg-amber-500'}`}></span>
-                      </span>
+                {apiLatency.metrics.map((m, i) => {
+                  const statusKey = i18nKey(m.status);
+                  return (
+                    <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-wellq-gray/5 dark:bg-white/[0.02] border border-transparent dark:border-white/5">
+                      <span className="text-xs font-semibold text-wellq-gray dark:text-wellq-gray/90 truncate max-w-[130px]">{translateServiceName(m.service, t)}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-wellq-dark dark:text-white tabular-nums">
+                          {m.averageLatencyMs ?? m.average_latency_ms ?? '-'}<span className="text-[10px] text-wellq-gray font-bold">ms</span>
+                        </span>
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${statusKey === 'healthy' ? 'bg-wellq-green' : 'bg-amber-500'}`}></span>
+                          <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${statusKey === 'healthy' ? 'bg-wellq-green' : 'bg-amber-500'}`}></span>
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-4xl font-black text-wellq-dark dark:text-white tabular-nums tracking-tight mt-1">0<span className="text-lg text-wellq-gray font-bold">ms</span></p>
@@ -466,7 +481,9 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
             {(apiServers && apiServers.length > 0
               ? apiServers
               : [{ name: t('platform.waitingDatabase'), status: 'idle' }]
-            ).map((s, i) => (
+            ).map((s, i) => {
+              const statusKey = i18nKey(s.status);
+              return (
               <div
                 key={i}
                 className="flex items-center justify-between p-3.5 rounded-xl bg-wellq-gray/3 dark:bg-white/[0.02] border border-wellq-gray/5 dark:border-white/5 hover:border-wellq-gray/20 dark:hover:border-white/10 transition-colors group"
@@ -475,30 +492,31 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
                   <div className="w-8 h-8 rounded-lg bg-white dark:bg-wellq-dark ring-1 ring-wellq-gray/10 dark:ring-white/10 flex items-center justify-center shadow-sm">
                     <Server size={14} className="text-wellq-gray dark:text-wellq-gray/70" />
                   </div>
-                  <span className="text-sm font-bold text-wellq-dark dark:text-white/90">{s.name}</span>
+                  <span className="text-sm font-bold text-wellq-dark dark:text-white/90">{translateServerName(s.name, t)}</span>
                 </div>
                 <span
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                    s.status === 'healthy'
+                    statusKey === 'healthy'
                       ? 'text-wellq-green bg-wellq-green/10'
-                      : s.status === 'warning'
+                      : statusKey === 'warning'
                       ? 'text-amber-500 bg-amber-500/10'
                       : 'text-wellq-gray bg-wellq-gray/10'
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${
-                      s.status === 'healthy'
+                      statusKey === 'healthy'
                         ? 'bg-wellq-green'
-                        : s.status === 'warning'
+                        : statusKey === 'warning'
                         ? 'bg-amber-500 animate-pulse'
                         : 'bg-wellq-gray/60'
                     }`}
                   />
-                  {s.status ?? t('common.loading')}
+                  {t(`values.${statusKey}`, s.status ?? t('common.loading'))}
                 </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
 

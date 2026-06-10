@@ -156,7 +156,7 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
               <PieChart size={18} className="text-wellq-cyan" /> {t('financials.mrrBreakdown')}
             </h3>
             <p className="text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 mt-1">
-              {t('financials.mrrBreakdownSub') || 'Distribución exacta del ingreso recurrente'}
+              {t('financials.mrrBreakdownSub')}
             </p>
           </div>
 

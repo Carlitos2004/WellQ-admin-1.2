@@ -44,6 +44,25 @@ const METRIC_META = {
   }
 };
 
+const i18nKey = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const translateFeatureName = (name, t) => t(`analytics.featureNames.${i18nKey(name)}`, name ?? '');
+const translateTimeBucket = (value, t) => {
+  const text = String(value ?? '');
+  const day = text.match(/^day\s*(\d+)$/i);
+  if (day) return `${t('analytics.dayPrefix')} ${day[1]}`;
+  const week = text.match(/^week\s*(\d+)$/i);
+  if (week) return `${t('analytics.weekPrefix')} ${week[1]}`;
+  const month = text.match(/^m(?:onth)?\s*(\d+)$/i);
+  if (month) return `${t('analytics.monthPrefix')} ${month[1]}`;
+  return text;
+};
+
 export const AnalyticsView = ({
   appStats, featureAdoption, adherence, cohorts, soapQuality, loading,
 }) => {
@@ -207,7 +226,7 @@ export const AnalyticsView = ({
               <div key={i} className="p-3 rounded-xl border border-transparent hover:border-wellq-gray/10 dark:hover:border-white/5 hover:bg-wellq-gray/3 dark:hover:bg-white/[0.01] transition-all group">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                   <div>
-                    <span className="text-sm font-semibold text-wellq-dark dark:text-white group-hover:text-wellq-cyan transition-colors">{f.feature_name}</span>
+                    <span className="text-sm font-semibold text-wellq-dark dark:text-white group-hover:text-wellq-cyan transition-colors">{translateFeatureName(f.feature_name, t)}</span>
                     <span className="ml-2.5 text-xs font-medium text-wellq-gray bg-wellq-gray/5 dark:bg-white/5 px-2 py-0.5 rounded-md">
                       {f.total_uses?.toLocaleString()} {t('analytics.uses')}
                     </span>
@@ -260,7 +279,7 @@ export const AnalyticsView = ({
                 <div className="text-xs font-medium text-wellq-gray mt-1">
                   {t('analytics.topDropOff')}:{' '}
                   <span className="font-bold text-red-400 bg-red-500/5 border border-red-500/10 px-2 py-0.5 rounded-md ml-1 inline-block">
-                    {adherence?.top_dropping_point ?? t('overview.waitingConnection')}
+                    {adherence?.top_dropping_point ? translateTimeBucket(adherence.top_dropping_point, t) : t('overview.waitingConnection')}
                   </span>
                 </div>
               </div>
@@ -268,7 +287,7 @@ export const AnalyticsView = ({
               <div className="space-y-3.5 pt-2">
                 {(adherence?.breakdown_by_week ?? [{ week: 'Week 1', adherence: 0 }]).map((w, i) => (
                   <div key={i} className="flex items-center gap-3 group">
-                    <span className="text-xs font-bold text-wellq-gray w-14 group-hover:text-wellq-dark dark:group-hover:text-white transition-colors">{w.week}</span>
+                    <span className="text-xs font-bold text-wellq-gray w-14 group-hover:text-wellq-dark dark:group-hover:text-white transition-colors">{translateTimeBucket(w.week, t)}</span>
                     <div className="flex-1 h-2 bg-wellq-gray/10 dark:bg-white/5 rounded-full overflow-hidden">
                       <motion.div
                         className="h-full bg-gradient-to-r from-wellq-green to-emerald-400 rounded-full"
@@ -330,7 +349,7 @@ export const AnalyticsView = ({
                               {pct}%
                             </span>
                           </motion.div>
-                          <span className="text-[10px] font-bold uppercase text-wellq-gray block mt-1">{m}</span>
+                          <span className="text-[10px] font-bold uppercase text-wellq-gray block mt-1">{translateTimeBucket(m, t)}</span>
                         </div>
                       ))}
                     </div>
@@ -347,6 +366,7 @@ export const AnalyticsView = ({
 
 // ─── Subcomponente Local: Analytics Metric Card (Estilo Support MetricCard) ───
 const AnalyticsMetricCard = ({ item }) => {
+  const { t } = useLanguage();
   const Icon = item.meta.icon;
   
   return (
@@ -356,7 +376,7 @@ const AnalyticsMetricCard = ({ item }) => {
           <Icon size={15} className={item.meta.text} strokeWidth={2.2} />
         </div>
         <span className="text-[10px] font-bold bg-black/5 dark:bg-white/5 text-wellq-gray px-2 py-0.5 rounded-md tracking-wider">
-          Live
+          {t('analytics.live')}
         </span>
       </div>
 

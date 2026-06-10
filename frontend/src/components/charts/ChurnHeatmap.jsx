@@ -35,6 +35,7 @@ const riskDotColors = {
 
 export const ChurnHeatmap = ({ apiRegions, onRegionClick }) => {
   const { t } = useLanguage();
+  const translateRegion = (name) => t(`financials.regions.${name}`, name);
 
   const getRiskLabel = (risk) => {
     switch (risk) {
@@ -100,7 +101,7 @@ export const ChurnHeatmap = ({ apiRegions, onRegionClick }) => {
             {/* Info de la Región */}
             <div className="flex-1 min-w-0">
               <div className="font-bold text-sm text-wellq-dark dark:text-white truncate">
-                {r.name}
+                {translateRegion(r.name)}
               </div>
               <div className="text-[11px] font-semibold text-wellq-gray mt-0.5 flex items-center gap-1.5 truncate">
                 <span>{r.clinics} {r.clinics === 1 ? t('clinics.clinic') : t('clinics.clinics')}</span>

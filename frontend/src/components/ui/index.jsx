@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, ArrowDownRight, ChevronRight } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const Sparkline = ({ data, color = '#10b981', height = 24 }) => {
   const validData = data && data.length > 0 ? data : [0, 0, 0, 0, 0];
@@ -82,22 +83,29 @@ export const HealthBadge = ({ score }) => {
 };
 
 export const StatusBadge = ({ status }) => {
+  const { tVal } = useLanguage();
+  const statusKey = String(status ?? '').toLowerCase();
   const styles = {
     Active: 'bg-wellq-green/10 text-wellq-green border-wellq-green/20',
     active: 'bg-wellq-green/10 text-wellq-green border-wellq-green/20',
+    warning: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20',
+    critical: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/20',
+    churned: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/20',
     Delinquent: 'bg-red-50 text-red-700 border-red-200',
     Onboarding: 'bg-wellq-cyan/10 text-wellq-cyan border-wellq-cyan/20',
     onboarding: 'bg-wellq-cyan/10 text-wellq-cyan border-wellq-cyan/20',
     Trial: 'bg-purple-50 text-purple-700 border-purple-200',
+    trial: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-500/20',
+    waiting: 'bg-wellq-gray/10 text-wellq-dark dark:text-white border-wellq-gray/20',
     'Esperando...': 'bg-wellq-gray/10 text-wellq-dark dark:text-white border-wellq-gray/20',
   };
   return (
     <span
       className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-        styles[status] || styles['Esperando...']
+        styles[status] || styles[statusKey] || styles['Esperando...']
       }`}
     >
-      {status}
+      {tVal(statusKey || status)}
     </span>
   );
 };

@@ -77,7 +77,7 @@ export const MRRChart = () => {
     <div className="bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-wellq-gray/30 flex items-center justify-center h-[500px]">
       <div className="flex flex-col items-center gap-3">
         <div className="w-8 h-8 border-[3px] border-wellq-cyan border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs font-bold text-wellq-gray uppercase tracking-wider">Cargando datos…</span>
+        <span className="text-xs font-bold text-wellq-gray uppercase tracking-wider">{t('common.loading')}</span>
       </div>
     </div>
   );
@@ -100,19 +100,19 @@ export const MRRChart = () => {
             <Activity size={16} className="text-wellq-cyan" />
           </div>
           <h3 className="font-bold text-wellq-dark dark:text-white text-lg tracking-tight">
-            {t('financials.mrrBreakdown') || 'MRR Breakdown Detail'}
+            {t('financials.mrrBreakdown')}
           </h3>
         </div>
         <p className="text-xs font-medium text-wellq-gray ml-11">
-          {t('financials.mrrBreakdownSub') || 'Monthly breakdown of revenue changes'}
+          {t('financials.mrrBreakdownSub')}
         </p>
 
         <div className="flex flex-wrap items-center gap-4 mt-5 ml-11">
           {[
-            { color: 'bg-amber-500',   label: t('financials.retained') || 'Retained' },
-            { color: 'bg-wellq-green', label: t('financials.newBusiness') || 'New Business' },
-            { color: 'bg-wellq-cyan',  label: t('financials.expansion') || 'Expansion' },
-            { color: 'bg-red-400',     label: t('financials.churnMrr') || 'Churn MRR' },
+            { color: 'bg-amber-500',   label: t('financials.retained') },
+            { color: 'bg-wellq-green', label: t('financials.newBusiness') },
+            { color: 'bg-wellq-cyan',  label: t('financials.expansion') },
+            { color: 'bg-red-400',     label: t('financials.churnMrr') },
           ].map(({ color, label }) => (
             <span key={label} className="flex items-center gap-1.5 text-xs font-semibold text-wellq-gray">
               <span className={`w-2.5 h-2.5 rounded-sm ${color} flex-shrink-0`} />
@@ -135,12 +135,12 @@ export const MRRChart = () => {
             >
               {/* Total MRR Card */}
               <div className="relative bg-wellq-gray/5 dark:bg-white/[0.02] rounded-xl p-5 border border-wellq-gray/10 dark:border-white/5 overflow-hidden group">
-                <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-1">Total MRR</p>
+                <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-1">{t('financials.totalMrr')}</p>
                 <p className="text-3xl font-black text-wellq-dark dark:text-white tabular-nums tracking-tight">{fmt(snap.total_mrr)}</p>
                 {prevSnap && (
                   <div className={`flex items-center gap-1 mt-2 text-xs font-bold px-2 py-1 inline-flex rounded-md ${snap.monthly_growth_percentage >= 0 ? 'bg-wellq-green/10 text-wellq-green' : 'bg-red-500/10 text-red-400'}`}>
                     {snap.monthly_growth_percentage >= 0 ? <TrendingUp size={12} strokeWidth={3} /> : <TrendingDown size={12} strokeWidth={3} />}
-                    {snap.monthly_growth_percentage >= 0 ? '+' : ''}{snap.monthly_growth_percentage?.toFixed(1)}% MoM
+                    {snap.monthly_growth_percentage >= 0 ? '+' : ''}{snap.monthly_growth_percentage?.toFixed(1)}% {t('financials.monthOverMonth')}
                   </div>
                 )}
               </div>
@@ -148,22 +148,22 @@ export const MRRChart = () => {
               {/* New Business + Expansion Card */}
               <div className="relative bg-wellq-green/5 dark:bg-wellq-green/10 rounded-xl p-5 border border-wellq-green/20 overflow-hidden group">
                 <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-wellq-green/10 to-transparent opacity-50 pointer-events-none" />
-                <p className="relative text-[10px] font-bold text-wellq-green uppercase tracking-wider mb-1">New Biz + Expansion</p>
+                <p className="relative text-[10px] font-bold text-wellq-green uppercase tracking-wider mb-1">{t('financials.newBizExpansion')}</p>
                 <p className="relative text-3xl font-black text-wellq-green tabular-nums tracking-tight">
                   +{fmt((snap.new_business ?? 0) + (snap.expansion ?? 0))}
                 </p>
                 <p className="relative text-xs font-semibold text-wellq-green/70 mt-2">
-                  {fmt(snap.new_business)} new · {fmt(snap.expansion)} exp
+                  {fmt(snap.new_business)} {t('financials.newShort')} / {fmt(snap.expansion)} {t('financials.expShort')}
                 </p>
               </div>
               
               {/* Churn Card */}
               <div className="relative bg-red-50 dark:bg-red-500/10 rounded-xl p-5 border border-red-500/20 overflow-hidden group">
                 <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-red-500/10 to-transparent opacity-50 pointer-events-none" />
-                <p className="relative text-[10px] font-bold text-red-500 uppercase tracking-wider mb-1">Churn MRR</p>
+                <p className="relative text-[10px] font-bold text-red-500 uppercase tracking-wider mb-1">{t('financials.churnMrr')}</p>
                 <p className="relative text-3xl font-black text-red-400 tabular-nums tracking-tight">-{fmt(Math.abs(snap.churn ?? 0))}</p>
                 {snap.contraction > 0 && (
-                  <p className="relative text-xs font-semibold text-red-400/70 mt-2">+{fmt(snap.contraction)} contraction</p>
+                  <p className="relative text-xs font-semibold text-red-400/70 mt-2">+{fmt(snap.contraction)} {t('financials.contraction').toLowerCase()}</p>
                 )}
               </div>
             </motion.div>
@@ -294,17 +294,17 @@ export const MRRChart = () => {
             >
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-bold text-wellq-dark dark:text-white tracking-tight">
-                  Detail — {snap.period_month} {snap.period_year}
+                  {t('financials.detail')} - {snap.period_month} {snap.period_year}
                 </h4>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {[
-                  { label: 'Total MRR',    value: fmt(snap.total_mrr),                    color: 'text-wellq-dark dark:text-white' },
-                  { label: 'Retained',     value: fmt(snap.retained ?? 0),                color: 'text-amber-500' },
-                  { label: 'New Business', value: `+${fmt(snap.new_business ?? 0)}`,      color: 'text-wellq-green' },
-                  { label: 'Expansion',    value: `+${fmt(snap.expansion ?? 0)}`,         color: 'text-wellq-cyan' },
-                  { label: 'Churn',        value: `-${fmt(Math.abs(snap.churn ?? 0))}`,   color: 'text-red-400' },
+                  { label: t('financials.totalMrr'), value: fmt(snap.total_mrr), color: 'text-wellq-dark dark:text-white' },
+                  { label: t('financials.retained'), value: fmt(snap.retained ?? 0), color: 'text-amber-500' },
+                  { label: t('financials.newBusiness'), value: `+${fmt(snap.new_business ?? 0)}`, color: 'text-wellq-green' },
+                  { label: t('financials.expansion'), value: `+${fmt(snap.expansion ?? 0)}`, color: 'text-wellq-cyan' },
+                  { label: t('financials.churn'), value: `-${fmt(Math.abs(snap.churn ?? 0))}`, color: 'text-red-400' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="text-center p-3 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/10 dark:border-white/5 shadow-sm">
                     <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-1">{label}</p>

@@ -70,7 +70,7 @@ export const SettingsView = ({
   const hasChanges = Object.keys(localSettings).length > 0;
 
   const [serverStatus, setServerStatus] = useState({
-    status: 'Checking...',
+    status: t('settings.checking'),
     version: '...',
     environment: '...',
     database: '...',
@@ -83,15 +83,15 @@ export const SettingsView = ({
         const health = await apiFetch('/health');
         const latencyMs = Math.floor(Math.random() * 20 + 5);
         setServerStatus({
-          status: health.status === 'ok' ? 'Online' : 'Degraded',
+          status: health.status === 'ok' ? t('settings.online') : t('settings.degraded'),
           version: health.version,
           environment: health.environment,
-          database: health.database === 'neon_connected' ? 'Connected' : 'Disconnected',
+          database: health.database === 'neon_connected' ? t('values.connected') : t('values.disconnected'),
           latency: `${latencyMs} ms`,
         });
       } catch {
         setServerStatus({
-          status: 'Unreachable',
+          status: t('settings.unreachable'),
           version: '?',
           environment: '?',
           database: '?',
@@ -99,7 +99,7 @@ export const SettingsView = ({
         });
       }
     })();
-  }, []);
+  }, [t]);
 
   const toggleSetting = (key) =>
     setLocalSettings((prev) => ({
@@ -260,7 +260,7 @@ export const SettingsView = ({
             </div>
             <div>
               <h3 className="font-bold text-lg text-wellq-dark dark:text-white leading-tight">{t('settings.gcpKeyTitle')}</h3>
-              <p className="text-xs text-wellq-gray dark:text-wellq-gray/80 mt-0.5">Autenticación para servicios en la nube</p>
+              <p className="text-xs text-wellq-gray dark:text-wellq-gray/80 mt-0.5">{t('settings.cloudAuth')}</p>
             </div>
           </div>
           
@@ -430,7 +430,7 @@ export const SettingsView = ({
                 <div className="flex items-center justify-between p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5">
                   <div>
                     <div className="text-sm font-bold text-wellq-dark dark:text-white">{t('settings.supportEmail')}</div>
-                    <div className="text-xs font-medium text-wellq-gray mt-0.5">Contacto técnico</div>
+                    <div className="text-xs font-medium text-wellq-gray mt-0.5">{t('settings.technicalContact')}</div>
                   </div>
                   <a 
                     href="https://mail.google.com/mail/?view=cm&fs=1&to=wellq.admin@gmail.com"
@@ -500,9 +500,9 @@ export const SettingsView = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-wellq-gray">{t('settings.status')}</span>
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                  serverStatus.status === 'Online' ? 'bg-wellq-green/10 text-wellq-green border border-wellq-green/20' : 'bg-red-50 text-red-600 border border-red-200'
+                  serverStatus.status === t('settings.online') ? 'bg-wellq-green/10 text-wellq-green border border-wellq-green/20' : 'bg-red-50 text-red-600 border border-red-200'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.status === 'Online' ? 'bg-wellq-green' : 'bg-red-500 animate-pulse'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.status === t('settings.online') ? 'bg-wellq-green' : 'bg-red-500 animate-pulse'}`} />
                   {serverStatus.status}
                 </span>
               </div>
@@ -564,7 +564,7 @@ export const SettingsView = ({
                 <div className="w-10 h-10 rounded-xl bg-wellq-cyan/10 flex items-center justify-center ring-1 ring-wellq-cyan/20">
                   <RefreshCw size={18} className="text-wellq-cyan" />
                 </div>
-                <h3 className="font-bold text-wellq-dark dark:text-white">{t('settings.syncStatus') ?? 'Sync Status'}</h3>
+                <h3 className="font-bold text-wellq-dark dark:text-white">{t('settings.syncStatus')}</h3>
               </div>
               <button
                 onClick={() => loadSync(true)}
@@ -587,11 +587,11 @@ export const SettingsView = ({
                   const meta = SYNC_STATUS_META[src.status] ?? SYNC_STATUS_META.error;
                   const SyncIcon = meta.icon;
                   const fmtSync = src.last_sync
-                    ? new Date(src.last_sync).toLocaleDateString('es-CL', {
+                    ? new Date(src.last_sync).toLocaleDateString(locale === 'es' ? 'es-CL' : 'en-US', {
                         day: '2-digit', month: 'short',
                         hour: '2-digit', minute: '2-digit',
                       })
-                    : t('settings.syncNever') ?? 'Sin datos';
+                    : t('settings.syncNever');
 
                   return (
                     <div key={src.name} className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5">
@@ -638,7 +638,7 @@ export const SettingsView = ({
             <h3 className="text-lg font-bold text-wellq-dark dark:text-white leading-tight">
               {editUser ? t('settings.editUser') : t('settings.newUser')}
             </h3>
-            <p className="text-xs font-medium text-wellq-gray mt-1">Configuración de acceso</p>
+            <p className="text-xs font-medium text-wellq-gray mt-1">{t('settings.accessConfig')}</p>
           </div>
           <button onClick={closeModal} className="p-2 bg-wellq-gray/5 hover:bg-wellq-gray/10 dark:bg-white/5 dark:hover:bg-white/10 rounded-xl transition-colors">
             <X size={18} className="text-wellq-gray" strokeWidth={2.5} />

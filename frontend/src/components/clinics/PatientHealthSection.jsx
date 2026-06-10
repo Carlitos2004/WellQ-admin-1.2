@@ -15,7 +15,7 @@ const METRICS = [
   {
     key:   'at_risk',
     icon:  AlertTriangle,
-    label: (t) => t('health.atRisk')   ?? 'En Riesgo',
+    label: (t) => t('health.atRisk'),
     color: 'text-red-500',
     bg:    'bg-red-500/5 dark:bg-red-500/10',
     border:'border-red-500/20',
@@ -24,7 +24,7 @@ const METRICS = [
   {
     key:   'declining',
     icon:  TrendingDown,
-    label: (t) => t('health.declining') ?? 'Deteriorando',
+    label: (t) => t('health.declining'),
     color: 'text-amber-500',
     bg:    'bg-amber-500/5 dark:bg-amber-500/10',
     border:'border-amber-500/20',
@@ -33,7 +33,7 @@ const METRICS = [
   {
     key:   'stable',
     icon:  Minus,
-    label: (t) => t('health.stable')   ?? 'Estable',
+    label: (t) => t('health.stable'),
     color: 'text-wellq-blue dark:text-wellq-blue',
     bg:    'bg-wellq-blue/5 dark:bg-wellq-blue/10',
     border:'border-wellq-blue/20',
@@ -42,7 +42,7 @@ const METRICS = [
   {
     key:   'improving',
     icon:  TrendingUp,
-    label: (t) => t('health.improving') ?? 'Mejorando',
+    label: (t) => t('health.improving'),
     color: 'text-wellq-green dark:text-wellq-green',
     bg:    'bg-wellq-green/5 dark:bg-wellq-green/10',
     border:'border-wellq-green/20',
@@ -52,7 +52,7 @@ const METRICS = [
 
 // ── Componente ───────────────────────────────────────────────────────────────
 export const PatientHealthSection = ({ clinicId }) => {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
@@ -69,7 +69,7 @@ export const PatientHealthSection = ({ clinicId }) => {
 
   const fmtDate = (iso) => {
     if (!iso) return null;
-    return new Date(iso).toLocaleDateString('es-CL', {
+    return new Date(iso).toLocaleDateString(locale === 'es' ? 'es-CL' : 'en-US', {
       day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     });
   };
@@ -84,11 +84,11 @@ export const PatientHealthSection = ({ clinicId }) => {
           </div>
           <div>
             <h3 className="font-bold text-wellq-dark dark:text-white text-sm tracking-tight leading-none mb-1">
-              {t('health.title') ?? 'Salud de Pacientes'}
+              {t('health.title')}
             </h3>
             {!loading && data?.recorded_at && (
               <p className="text-[10px] font-semibold text-wellq-gray uppercase tracking-wider font-mono">
-                {t('health.lastSync') ?? 'Sync'}: {fmtDate(data.recorded_at)}
+                {t('health.lastSync')}: {fmtDate(data.recorded_at)}
               </p>
             )}
           </div>
@@ -100,7 +100,7 @@ export const PatientHealthSection = ({ clinicId }) => {
               {data.total_patients ?? 0}
             </span>
             <span className="text-[10px] font-bold text-wellq-gray uppercase tracking-widest">
-              {t('health.patients') ?? 'Total'}
+              {t('health.patients')}
             </span>
           </div>
         )}

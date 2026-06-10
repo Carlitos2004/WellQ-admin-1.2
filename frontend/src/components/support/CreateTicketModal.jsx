@@ -71,14 +71,14 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
   };
 
   const handleSubmit = async () => {
-    if (!form.title.trim())       return setError('El título es obligatorio.');
-    if (!form.description.trim()) return setError('La descripción es obligatoria.');
-    if (!form.category)           return setError('Selecciona una categoría.');
-    if (!form.clinic_id)          return setError('Selecciona una clínica.');
+    if (!form.title.trim())       return setError(t('support.errors.titleRequired'));
+    if (!form.description.trim()) return setError(t('support.errors.descriptionRequired'));
+    if (!form.category)           return setError(t('support.errors.categoryRequired'));
+    if (!form.clinic_id)          return setError(t('support.errors.clinicRequired'));
 
     // validar formato de email del reportador
     if (form.reporter_email.trim() && !EMAIL_RE.test(form.reporter_email.trim())) {
-      return setError('El email del reportador no tiene formato válido (falta @ o dominio).');
+      return setError(t('support.errors.invalidEmail'));
     }
 
     setSaving(true);
@@ -95,7 +95,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
       });
       onCreated?.();
     } catch (err) {
-      setError(err.message ?? 'Error al crear el ticket');
+      setError(err.message ?? t('support.errors.createFailed'));
     } finally {
       setSaving(false);
     }
@@ -163,11 +163,11 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
             </AnimatePresence>
 
             {/* Título */}
-            <Field label="Título *">
+            <Field label={t('support.titleLabel')}>
               <input
                 value={form.title}
                 onChange={(e) => set('title', e.target.value)}
-                placeholder="Ej: No funciona el login de la app"
+                placeholder={t('support.titlePlaceholder', 'E.g.: App login is not working')}
                 disabled={saving}
                 className={inputCls}
               />
@@ -175,7 +175,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
 
             {/* Categoría + Clínica en fila */}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Categoría *">
+              <Field label={t('support.categoryLabel')}>
                 <div className="relative">
                   <select
                     value={form.category}
@@ -184,7 +184,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
                     className={`${inputCls} appearance-none pr-8`}
                   >
                     <option value="">
-                      {loadingMeta ? 'Cargando…' : ' Elegir '}
+                      {loadingMeta ? t('common.loading') : t('support.choosePlaceholder')}
                     </option>
                     {/* ── CORRECCIÓN: iterar sobre objetos, usando c.name ── */}
                     {categories.map((c) => (
@@ -196,7 +196,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
               </Field>
 
               {clinics.length > 0 && (
-                <Field label="Clínica *">
+                <Field label={t('support.clinicLabel')}>
                   <div className="relative">
                     <select
                       value={form.clinic_id}
@@ -204,7 +204,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
                       disabled={saving}
                       className={`${inputCls} appearance-none pr-8`}
                     >
-                      <option value=""> Seleccionar </option>
+                      <option value="">{t('support.selectPlaceholder')}</option>
                       {clinics.map((c) => (
                         <option key={c.clinic_id} value={c.clinic_id}>{c.name}</option>
                       ))}
@@ -216,7 +216,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
             </div>
 
             {/* Asignar a (responder) */}
-            <Field label={t('support.assignTo', 'Asignar a')}>
+            <Field label={t('support.assignTo')}>
               <div>
                 <div className="relative">
                   <select
@@ -226,16 +226,16 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
                     className={`${inputCls} appearance-none pr-8 disabled:cursor-not-allowed`}
                   >
                     {!form.category && (
-                      <option value="">— Elige una categoría primero —</option>
+                      <option value="">{t('support.selectCategoryFirst')}</option>
                     )}
 
                     {form.category && filteredResponders.length === 0 && (
-                      <option value="">Sin responders para este equipo</option>
+                      <option value="">{t('support.noRespondersTeam')}</option>
                     )}
 
                     {form.category && filteredResponders.length > 0 && (
                       <>
-                        <option value="">— Sin asignar —</option>
+                        <option value="">{t('support.unassigned')}</option>
                         {filteredResponders.map((r) => (
                           <option key={r.id} value={r.id}>{r.name}</option>
                         ))}
@@ -260,7 +260,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
                       className="flex items-center gap-1.5 text-[11px] font-medium text-wellq-cyan mt-1.5"
                     >
                       <Info size={11} strokeWidth={2.5} className="flex-shrink-0" />
-                      {t('support.assignTeamHint', 'Este ticket irá al equipo')}{' '}
+                      {t('support.assignTeamHint')}{' '}
                       <span className="font-bold">{selectedCategoryTeam}</span>
                     </motion.p>
                   )}
@@ -269,11 +269,11 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
             </Field>
 
             {/* Descripción */}
-            <Field label="Descripción *">
+            <Field label={t('support.descriptionLabel')}>
               <textarea
                 value={form.description}
                 onChange={(e) => set('description', e.target.value)}
-                placeholder="Describe el problema con el mayor detalle posible…"
+                placeholder={t('support.descriptionPlaceholder')}
                 rows={3}
                 disabled={saving}
                 className={`${inputCls} resize-none`}
@@ -282,21 +282,21 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
 
             {/* Reporter */}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Nombre del reportador">
+              <Field label={t('support.reporterNameLabel')}>
                 <input
                   value={form.reporter_name}
                   onChange={(e) => set('reporter_name', e.target.value)}
-                  placeholder="Ej: Juan Pérez"
+                  placeholder={t('support.reporterNamePlaceholder')}
                   disabled={saving}
                   className={inputCls}
                 />
               </Field>
-              <Field label="Email del reportador">
+              <Field label={t('support.reporterEmailLabel')}>
                 <input
                   type="email"
                   value={form.reporter_email}
                   onChange={(e) => set('reporter_email', e.target.value)}
-                  placeholder="juan@clinica.cl"
+                  placeholder={t('support.reporterEmailPlaceholder')}
                   disabled={saving}
                   className={inputCls}
                 />
@@ -311,7 +311,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
               disabled={saving}
               className="px-4 py-2 rounded-xl text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white border border-wellq-gray/20 dark:border-white/10 hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all disabled:opacity-40"
             >
-              Cancelar
+              {t('support.cancel')}
             </button>
             <motion.button
               whileHover={!saving ? { scale: 1.02 } : {}}
@@ -324,7 +324,7 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
                 ? <Loader2 size={14} strokeWidth={2.5} className="animate-spin" />
                 : <TicketPlus size={14} strokeWidth={2.5} />
               }
-              {saving ? 'Creando…' : 'Crear ticket'}
+              {saving ? t('support.creating') : t('support.createTicket')}
             </motion.button>
           </div>
         </div>

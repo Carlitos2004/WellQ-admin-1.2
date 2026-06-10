@@ -13,7 +13,7 @@ import { Skeleton } from '../components/ui';
 // ─── Design tokens ────────────────────────────────────────────────────────────
 export const STATUS_META = {
   Open: {
-    label:  'Open',
+    label:  'Abierto',
     icon:   AlertTriangle,
     ring:   'ring-amber-500/20 dark:ring-amber-500/10',
     border: 'border-amber-500/20 dark:border-amber-500/30',
@@ -25,7 +25,7 @@ export const STATUS_META = {
     pulse:  true,
   },
   Closed: {
-    label:  'Closed',
+    label:  'Cerrado',
     icon:   CheckCircle2,
     ring:   'ring-wellq-green/20 dark:ring-wellq-green/10',
     border: 'border-wellq-green/20 dark:border-wellq-green/30',
@@ -37,7 +37,7 @@ export const STATUS_META = {
     pulse:  false,
   },
   Sent: {
-    label:  'Sent',
+    label:  'Enviado',
     icon:   Send,
     ring:   'ring-wellq-blue/20 dark:ring-wellq-blue/10',
     border: 'border-wellq-blue/20 dark:border-wellq-blue/30',
@@ -371,7 +371,10 @@ const MetricCard = ({ label, count, total, meta, loading }) => {
 };
 
 // ─── Resolution Rate Card ─────────────────────────────────────────────────────
-const ResolutionCard = ({ rate, loading }) => (
+const ResolutionCard = ({ rate, loading }) => {
+  const { t } = useLanguage();
+
+  return (
   <div className="relative bg-gradient-to-br from-white to-wellq-gray/5 dark:from-wellq-dark dark:to-white/[0.01] rounded-2xl p-5 shadow-sm border border-wellq-gray/20 dark:border-[#1e293b] overflow-hidden group hover:shadow-md transition-all duration-300">
     <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-wellq-cyan/10 to-transparent opacity-60 pointer-events-none" />
 
@@ -380,7 +383,7 @@ const ResolutionCard = ({ rate, loading }) => (
         <Zap size={16} className="text-wellq-cyan" strokeWidth={2.2} />
       </div>
       <span className="text-[10px] font-bold bg-wellq-cyan/10 text-wellq-cyan px-2 py-0.5 rounded-md tracking-wider">
-        RATE
+        {t('support.rate')}
       </span>
     </div>
 
@@ -395,7 +398,7 @@ const ResolutionCard = ({ rate, loading }) => (
     )}
 
     <p className="relative text-[11px] font-bold uppercase tracking-[0.08em] text-wellq-gray dark:text-wellq-gray/90">
-      Resolution
+      {t('support.resolution')}
     </p>
 
     <div className="relative mt-4 h-1.5 bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
@@ -407,4 +410,5 @@ const ResolutionCard = ({ rate, loading }) => (
       />
     </div>
   </div>
-);
+  );
+};

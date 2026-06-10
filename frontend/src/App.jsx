@@ -82,10 +82,11 @@ const fmtArr = (val) => {
   return `$${val}`;
 };
 
-const fmtDate = (iso) => {
+const fmtDate = (iso, locale = 'es') => {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const dateLocale = locale === 'es' ? 'es-CL' : 'en-US';
+  return d.toLocaleDateString(dateLocale, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
 
 const CHANNEL_ICON = {
@@ -115,6 +116,7 @@ const VIEW_META = {
 
 // ── Notification Panel ───────────────────────────────────────────────────────
 const NotificationPanel = ({ onClose }) => {
+  const { t, locale } = useLanguage();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
@@ -169,8 +171,8 @@ const NotificationPanel = ({ onClose }) => {
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-gray-700">
         <div>
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Notificaciones</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Historial de mensajes enviados</p>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('notifications.title')}</h3>
+          <p className="text-xs text-slate-400 mt-0.5">{t('notifications.subtitle')}</p>
         </div>
         <button
           onClick={onClose}
@@ -184,7 +186,7 @@ const NotificationPanel = ({ onClose }) => {
         {loading && (
           <div className="flex items-center justify-center py-12 gap-2">
             <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-slate-400">Cargando…</span>
+            <span className="text-xs text-slate-400">{t('common.loading')}</span>
           </div>
         )}
 
@@ -195,7 +197,7 @@ const NotificationPanel = ({ onClose }) => {
         {!loading && !error && notifications.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
             <Bell size={28} className="text-slate-200 dark:text-gray-600" />
-            <p className="text-sm text-slate-400 dark:text-gray-500">Sin notificaciones</p>
+            <p className="text-sm text-slate-400 dark:text-gray-500">{t('notifications.empty')}</p>
           </div>
         )}
 
@@ -220,7 +222,7 @@ const NotificationPanel = ({ onClose }) => {
                     onClick={() => handleDelete(n.id)}
                     disabled={deletingId === n.id}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all flex-shrink-0"
-                    title="Eliminar"
+                    title={t('common.delete')}
                   >
                     {deletingId === n.id
                       ? <div className="w-3.5 h-3.5 border border-red-300 border-t-transparent rounded-full animate-spin" />
@@ -232,10 +234,10 @@ const NotificationPanel = ({ onClose }) => {
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className={`flex items-center gap-1 text-xs font-medium ${statusStyle.color} ${statusStyle.bg} px-1.5 py-0.5 rounded-md`}>
                     <StatusIcon size={10} />
-                    {n.status}
+                    {t(`notifications.status.${n.status}`, n.status)}
                   </span>
                   <span className="text-xs text-slate-300 dark:text-gray-600">·</span>
-                  <span className="text-xs text-slate-400 dark:text-gray-500">{fmtDate(n.createdAt)}</span>
+                  <span className="text-xs text-slate-400 dark:text-gray-500">{fmtDate(n.createdAt, locale)}</span>
                   {n.recipientClinicId && n.recipientClinicId !== 'all' && (
                     <>
                       <span className="text-xs text-slate-300 dark:text-gray-600">·</span>
@@ -252,7 +254,7 @@ const NotificationPanel = ({ onClose }) => {
       {!loading && !error && notifications.length > 0 && (
         <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-800">
           <p className="text-xs text-slate-400 dark:text-gray-500 text-center">
-            {notifications.length} notificación{notifications.length !== 1 ? 'es' : ''}
+            {t(notifications.length === 1 ? 'notifications.count' : 'notifications.countPlural', { count: notifications.length })}
           </p>
         </div>
       )}
@@ -262,6 +264,7 @@ const NotificationPanel = ({ onClose }) => {
 
 // ── ProfileDropdown ──────────────────────────────────────────────────────────
 const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, above = false, toRight = false }) => {
+  const { t } = useLanguage();
   const dropRef = useRef(null);
 
   useEffect(() => {
@@ -322,7 +325,7 @@ const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, 
         <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(100,116,139,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Settings size={14} style={{ color: '#94a3b8' }} />
         </div>
-        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>Settings</span>
+        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>{t('sidebar.settings')}</span>
       </button>
 
       {/* Theme toggle */}
@@ -338,7 +341,7 @@ const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, 
             : <Moon size={14} style={{ color: '#94a3b8' }} />}
         </div>
         <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>
-          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          {theme === 'dark' ? t('theme.lightMode') : t('theme.darkMode')}
         </span>
       </button>
 
@@ -355,7 +358,7 @@ const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, 
         <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(239,68,68,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <LogOut size={14} style={{ color: '#f87171' }} />
         </div>
-        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>Log out</span>
+        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>{t('auth.logout')}</span>
       </button>
     </div>
   );
@@ -367,7 +370,10 @@ const Sidebar = ({
   unreadAlerts, profileOpen, setProfileOpen,
   currentUser, theme, toggleTheme, handleLogout,
   tooltip, setTooltip,
-}) => (
+}) => {
+  const { t } = useLanguage();
+
+  return (
   <aside
     style={{
       width:         `${visibleW}px`,
@@ -409,14 +415,14 @@ const Sidebar = ({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <p style={{ margin: 0, fontWeight: 700, fontSize: 18, color: 'white', lineHeight: 1.2 }}>WellQ</p>
-            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Admin Console</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{t('app.adminConsole')}</p>
           </div>
         </div>
       </div>
 
       <button
         onClick={() => setOpen((o) => !o)}
-        title={open ? 'Colapsar menú' : 'Expandir menú'}
+        title={open ? t('sidebar.collapse') : t('sidebar.expand')}
         style={{
           background:     'transparent',
           border:         'none',
@@ -635,8 +641,8 @@ const Sidebar = ({
           minWidth:       0,
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>{currentUser?.full_name ?? 'Usuario'}</p>
-            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>{currentUser?.role?.replace('_', ' ') ?? 'Admin'}</p>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>{currentUser?.full_name ?? t('app.userFallback')}</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>{currentUser?.role?.replace('_', ' ') ?? t('app.adminFallback')}</p>
           </div>
           <ChevronDown
             size={16}
@@ -690,7 +696,8 @@ const Sidebar = ({
       </div>
     )}
   </aside>
-);
+  );
+};
 
 // ── Topbar Unificado ─────────────────────────────────────────────────────────
 const Topbar = ({
@@ -701,6 +708,7 @@ const Topbar = ({
 }) => {
   const showDateRange = VIEWS_WITH_DATERANGE.includes(view);
   const meta = VIEW_META[view] ?? VIEW_META.overview;
+  const subtitle = t(`viewMeta.${view}.subtitle`);
   const ViewIcon = meta.icon;
 
   const getInitials = (name) => {
@@ -724,6 +732,7 @@ const Topbar = ({
             <h1 className="text-1xl font-bold text-white whitespace-nowrap">
               {t(`sidebar.${view}`)}
             </h1>
+            <p className="text-xs text-[#94a3b8] mt-0.5">{subtitle}</p>
           </div>
         </div>
 
@@ -761,7 +770,7 @@ const Topbar = ({
           <button
             onClick={() => {
               fetchAll(dateRange);
-              toast.success('Datos actualizados');
+              toast.success(t('topbar.refreshSuccess'));
             }}
             className="p-2 hover:bg-[#1e293b] rounded-lg transition-colors topbar-btn"
             title={t('topbar.refresh')}
@@ -880,7 +889,7 @@ export default function App() {
     }
     setCurrentUser(null);
     setIsAuthenticated(false);
-    toast.success("Sesión cerrada correctamente");
+    toast.success(t('auth.logoutSuccess'));
   };
 
   const fetchAll = useCallback(async (range = dateRange) => {
@@ -974,7 +983,7 @@ export default function App() {
 
   const handleImpersonate = async (clinic, data) => {
     if (data?.success) {
-      toast.success(`✅ Sesión iniciada en ${clinic.name}`);
+      toast.success(t('auth.loginSuccess', { clinicName: clinic.name }));
     }
   };
 

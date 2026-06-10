@@ -65,6 +65,20 @@ const CATEGORY_COLORS = {
 };
 const catColors = (cat) => CATEGORY_COLORS[cat] || CATEGORY_COLORS['Support & Integrations'];
 
+const i18nKey = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const translatePlanName = (name, t) => t(`plans.planNames.${i18nKey(name)}`, name ?? '');
+const translatePlanDescription = (name, description, t) =>
+  t(`plans.planDescriptions.${i18nKey(name)}`, description ?? '');
+const translateFeatureName = (name, t) => t(`plans.featureNames.${i18nKey(name)}`, name ?? '');
+const translateFeatureUnit = (unit, t) => t(`plans.featureUnits.${String(unit ?? '').toLowerCase()}`, unit ?? '');
+
 const PLAN_TAG_COLORS = {
   purple: 'bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20',
   blue:   'bg-wellq-blue/10 text-wellq-blue border border-wellq-blue/20',
@@ -167,6 +181,7 @@ const ErrorBanner = ({ message, onRetry, errorLabel, retryLabel }) => (
 // overflow/z-index del árbol de componentes padre. Mismo patrón que
 // "Force Update Options" en AnalyticsView.
 const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
+  const { t } = useLanguage();
   const isDelete = type === 'delete';
   const activeClinics   = plan?.metrics?.activeClinics   ?? 0;
   const historicalClinics = plan?.metrics?.historicalClinics ?? 0;
@@ -243,7 +258,7 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-base font-black text-wellq-dark dark:text-white leading-tight">
-                      {isDelete ? 'Eliminar permanentemente' : 'Archivar plan'}
+                      {isDelete ? t('plans.deleteTitle') : t('plans.archivePlan')}
                     </h3>
                     <p className="text-sm font-semibold text-wellq-gray mt-0.5 truncate max-w-[260px]">
                       "{plan?.name}"
@@ -263,14 +278,14 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                         ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
                         : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
                     }`}>
-                      Impacto detectado
+                      {t('plans.impactDetected')}
                     </div>
                     <div className="px-4 py-3.5 space-y-3 bg-white dark:bg-white/[0.015]">
                       {activeClinics > 0 && (
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-2 text-sm font-semibold text-wellq-dark dark:text-white">
                             <AlertTriangle size={13} className={isDelete ? 'text-red-400' : 'text-amber-400'} />
-                            Clínicas activas en este plan
+                            {t('plans.activeClinicsInPlan')}
                           </span>
                           <span className={`text-sm font-black tabular-nums ${
                             isDelete ? 'text-red-500' : 'text-amber-500'
@@ -282,7 +297,7 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                       {arrAtRisk > 0 && (
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold text-wellq-dark dark:text-white">
-                            ARR en riesgo
+                            {t('plans.arrAtRisk')}
                           </span>
                           <span className="text-sm font-black tabular-nums text-red-500 dark:text-red-400">
                             ${arrAtRisk.toLocaleString()}
@@ -292,7 +307,7 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                       {isDelete && historicalClinics > 0 && (
                         <div className="flex items-center justify-between border-t border-wellq-gray/10 dark:border-white/5 pt-3">
                           <span className="text-sm font-semibold text-wellq-dark dark:text-white">
-                            Historial total (activas + pasadas)
+                            {t('plans.historicalTotal')}
                           </span>
                           <span className="text-sm font-black tabular-nums text-wellq-gray">
                             {historicalClinics}
@@ -307,11 +322,11 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                 <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/80 leading-relaxed">
                   {isDelete
                     ? !canHardDelete
-                      ? `Este plan tiene ${historicalClinics} asignación${historicalClinics !== 1 ? 'es' : ''} en clínicas (activas o históricas). Para preservar el audit trail financiero, no se puede eliminar. Usa "Archivar".`
-                      : 'Esta acción es irreversible. El plan y toda su configuración serán eliminados permanentemente de la base de datos.'
+                      ? t('plans.deleteBlocked', { count: historicalClinics, plural: historicalClinics !== 1 ? 'es' : '' })
+                      : t('plans.deleteConfirm')
                     : activeClinics > 0
-                      ? `Las ${activeClinics} clínicas actualmente en este plan no se verán afectadas de inmediato, pero deberán ser migradas a otro plan.`
-                      : 'El plan dejará de estar disponible para nuevas asignaciones. Las clínicas no se verán afectadas.'
+                      ? t('plans.archiveActiveClinics', { count: activeClinics })
+                      : t('plans.archiveNoClinics')
                   }
                 </p>
 
@@ -321,14 +336,14 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                     onClick={onCancel}
                     className="flex-1 px-4 py-2.5 rounded-xl border border-wellq-gray/20 dark:border-white/10 text-sm font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-colors"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
 
                   {isDelete && !canHardDelete ? (
                     // Bloqueado: hay historial → mostrar botón deshabilitado
                     <div className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-wellq-gray/40 dark:text-white/20 bg-wellq-gray/5 dark:bg-white/[0.02] cursor-not-allowed select-none border border-wellq-gray/10 dark:border-white/5">
                       <AlertTriangle size={14} />
-                      Eliminar (bloqueado)
+                      {t('plans.deleteBlockedButton')}
                     </div>
                   ) : (
                     <button
@@ -340,8 +355,8 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                       }`}
                     >
                       {isDelete
-                        ? <><Trash2 size={15} /> Eliminar plan</>
-                        : <><Archive size={15} /> Archivar plan</>
+                        ? <><Trash2 size={15} /> {t('plans.deletePlan')}</>
+                        : <><Archive size={15} /> {t('plans.archivePlan')}</>
                       }
                     </button>
                   )}
@@ -376,8 +391,8 @@ const FeatureChip = ({ feature, alreadyAdded }) => {
         <Icon size={16} className={colors.iconText} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-wellq-dark dark:text-white truncate">{feature.name}</div>
-        <div className="text-[10px] font-medium uppercase tracking-wider text-wellq-gray truncate mt-0.5">{feature.unit}</div>
+        <div className="text-sm font-bold text-wellq-dark dark:text-white truncate">{translateFeatureName(feature.name, t)}</div>
+        <div className="text-[10px] font-medium uppercase tracking-wider text-wellq-gray truncate mt-0.5">{translateFeatureUnit(feature.unit, t)}</div>
       </div>
       {alreadyAdded && <CheckCircle size={16} className="text-wellq-green shrink-0" />}
     </div>
@@ -421,7 +436,7 @@ const PlanFeatureRow = ({ feature, limit, onChangeLimit, onRemove }) => {
           onChange={(e) => onChangeLimit(Number(e.target.value))}
           className="w-24 px-3 py-1.5 text-sm border border-wellq-gray/20 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-wellq-cyan text-right font-bold bg-white dark:bg-wellq-dark dark:text-white shadow-sm"
         />
-        <span className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray whitespace-nowrap min-w-[64px]">{feature.unit}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray whitespace-nowrap min-w-[64px]">{translateFeatureUnit(feature.unit, t)}</span>
       </div>
     );
   };
@@ -432,7 +447,7 @@ const PlanFeatureRow = ({ feature, limit, onChangeLimit, onRemove }) => {
         <Icon size={18} className={colors.iconText} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-wellq-dark dark:text-white">{feature.name}</div>
+        <div className="text-sm font-bold text-wellq-dark dark:text-white">{translateFeatureName(feature.name, t)}</div>
         <div className="text-[11px] font-medium text-wellq-gray truncate mt-0.5">{feature.description}</div>
       </div>
       {renderInput()}
@@ -450,12 +465,13 @@ const PlanFeatureRow = ({ feature, limit, onChangeLimit, onRemove }) => {
 
 // ─── ArchivedPlanCard (NUEVO) ─────────────────────────────────────────────────
 const ArchivedPlanCard = ({ plan, onRestore }) => {
+  const { t, locale } = useLanguage();
   const activeClinics = plan.metrics?.activeClinics ?? 0;
   const arrAtRisk     = plan.metrics?.arrAtRisk ?? 0;
   const hasActive     = activeClinics > 0;
 
   const archivedDate = plan.archivedAt
-    ? new Date(plan.archivedAt).toLocaleDateString('es-CL', {
+    ? new Date(plan.archivedAt).toLocaleDateString(locale === 'es' ? 'es-CL' : 'en-US', {
         day: 'numeric', month: 'short', year: 'numeric',
       })
     : '—';
@@ -472,13 +488,13 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
         {/* Name + status badge */}
         <div className="flex items-start justify-between mb-3 gap-2">
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-black text-wellq-dark dark:text-white/70 truncate">{plan.name}</h3>
+            <h3 className="text-sm font-black text-wellq-dark dark:text-white/70 truncate">{translatePlanName(plan.name, t)}</h3>
             {plan.description && (
-              <p className="text-[11px] font-medium text-wellq-gray mt-0.5 line-clamp-1">{plan.description}</p>
+              <p className="text-[11px] font-medium text-wellq-gray mt-0.5 line-clamp-1">{translatePlanDescription(plan.name, plan.description, t)}</p>
             )}
           </div>
           <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-wellq-gray/10 dark:bg-white/[0.05] text-wellq-gray/60 dark:text-white/30 border border-wellq-gray/10 dark:border-white/5">
-            Archived
+            {t('plans.archived')}
           </span>
         </div>
 
@@ -491,14 +507,14 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
             <span className="text-xs font-bold text-wellq-gray">/mo</span>
           </div>
           <div className="text-right">
-            <div className="text-[9px] font-bold text-wellq-gray uppercase tracking-wider">Archived el</div>
+            <div className="text-[9px] font-bold text-wellq-gray uppercase tracking-wider">{t('plans.archivedOn')}</div>
             <div className="text-xs font-bold text-wellq-gray dark:text-white/40 mt-0.5">{archivedDate}</div>
           </div>
         </div>
 
         {/* Metrics */}
         <div className="space-y-2 flex-1 mb-4">
-          {/* Clínicas aún en este plan */}
+          {/* {t('plans.activeClinicsInPlan')} */}
           <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${
             hasActive
               ? 'bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/15'
@@ -509,7 +525,7 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
               <span className={`text-xs font-bold ${
                 hasActive ? 'text-amber-700 dark:text-amber-400' : 'text-wellq-gray'
               }`}>
-                Clínicas aún en este plan
+                {t('plans.activeClinicsInPlan')}
               </span>
             </div>
             <span className={`text-sm font-black tabular-nums ${
@@ -519,17 +535,17 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
             </span>
           </div>
 
-          {/* ARR en riesgo */}
+          {/* {t('plans.arrAtRisk')} */}
           {arrAtRisk > 0 ? (
             <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/15">
-              <span className="text-xs font-bold text-red-700 dark:text-red-400">ARR en riesgo</span>
+              <span className="text-xs font-bold text-red-700 dark:text-red-400">{t('plans.arrAtRisk')}</span>
               <span className="text-sm font-black tabular-nums text-red-600 dark:text-red-400">
                 ${arrAtRisk.toLocaleString()}
               </span>
             </div>
           ) : (
             <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5">
-              <span className="text-xs font-bold text-wellq-gray">ARR en riesgo</span>
+              <span className="text-xs font-bold text-wellq-gray">{t('plans.arrAtRisk')}</span>
               <span className="text-sm font-black tabular-nums text-wellq-gray">$0</span>
             </div>
           )}
@@ -541,7 +557,7 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.03] hover:bg-wellq-green/10 dark:hover:bg-wellq-green/10 text-wellq-gray hover:text-wellq-green dark:hover:text-wellq-green rounded-xl text-sm font-bold transition-all active:scale-[0.98] border border-wellq-gray/10 dark:border-white/5"
         >
           <RotateCcw size={14} strokeWidth={2.5} />
-          Restaurar plan
+          {t('plans.restorePlan')}
         </button>
       </div>
     </motion.div>
@@ -551,13 +567,14 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
 
 // ─── ArchivedPlansView (NUEVO) ────────────────────────────────────────────────
 const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
+  const { t } = useLanguage();
   const totalArchived     = plans.length;
   const totalActiveClinics = plans.reduce((s, p) => s + (p.metrics?.activeClinics ?? 0), 0);
   const totalArrAtRisk    = plans.reduce((s, p) => s + (p.metrics?.arrAtRisk ?? 0), 0);
 
   if (loading) return (
     <motion.div variants={tabVariants} initial="hidden" animate="enter" exit="exit">
-      <LoadingSpinner text="Cargando planes archivados…" />
+      <LoadingSpinner text={t('plans.loadingArchived')} />
     </motion.div>
   );
   if (error) return <ErrorBanner message={error} onRetry={onReload} />;
@@ -566,9 +583,9 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
     <motion.div key="archivados" variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="space-y-6">
       {/* Section header */}
       <div>
-        <h2 className="text-lg font-bold text-wellq-dark dark:text-white">Planes en desuso</h2>
+        <h2 className="text-lg font-bold text-wellq-dark dark:text-white">{t('plans.archivedPlansTitle')}</h2>
         <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/80">
-          Planes archivados — visibilidad del impacto operativo y financiero
+          {t('plans.archivedPlansSubtitle')}
         </p>
       </div>
 
@@ -576,9 +593,7 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total archivados */}
         <div className="bg-white dark:bg-wellq-dark rounded-2xl p-5 border border-wellq-gray/15 dark:border-white/[0.06]">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-2">
-            Planes archivados
-          </div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-2">{t('plans.archivedPlansKPI')}</div>
           <div className="text-3xl font-black text-wellq-dark dark:text-white tabular-nums">{totalArchived}</div>
         </div>
 
@@ -591,7 +606,7 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
           <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
             totalActiveClinics > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-wellq-gray'
           }`}>
-            Clínicas con plan obsoleto
+            {t('plans.clinicsWithObsoletePlan')}
           </div>
           <div className={`text-3xl font-black tabular-nums ${
             totalActiveClinics > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-wellq-dark dark:text-white'
@@ -600,7 +615,7 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
           </div>
         </div>
 
-        {/* ARR en riesgo */}
+        {/* {t('plans.arrAtRisk')} */}
         <div className={`rounded-2xl p-5 border transition-colors ${
           totalArrAtRisk > 0
             ? 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20'
@@ -609,7 +624,7 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
           <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
             totalArrAtRisk > 0 ? 'text-red-600 dark:text-red-400' : 'text-wellq-gray'
           }`}>
-            ARR en riesgo
+            {t('plans.arrAtRisk')}
           </div>
           <div className={`text-3xl font-black tabular-nums ${
             totalArrAtRisk > 0 ? 'text-red-600 dark:text-red-400' : 'text-wellq-dark dark:text-white'
@@ -625,8 +640,8 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
           <div className="w-16 h-16 rounded-2xl bg-wellq-gray/10 dark:bg-white/[0.04] flex items-center justify-center mb-4">
             <Archive size={26} className="text-wellq-gray/30 dark:text-white/15" />
           </div>
-          <p className="text-base font-bold text-wellq-dark dark:text-white">Sin planes archivados</p>
-          <p className="text-sm font-medium text-wellq-gray mt-1">Los planes que archives aparecerán aquí</p>
+          <p className="text-base font-bold text-wellq-dark dark:text-white">{t('plans.noArchivedPlans')}</p>
+          <p className="text-sm font-medium text-wellq-gray mt-1">{t('plans.noArchivedPlansSub')}</p>
         </div>
       ) : (
         <motion.div
@@ -762,7 +777,7 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
                     <span className="text-xs font-bold text-wellq-gray flex-1">{items.length}</span>
                     {addedCount > 0 && (
                       <span className="text-[10px] font-bold text-wellq-cyan bg-wellq-cyan/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                        {addedCount} added
+                        {addedCount} {t('plans.added')}
                       </span>
                     )}
                     <ChevronDown
@@ -946,13 +961,13 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
           return (
             <motion.div variants={itemVariants} key={plan.id} className="bg-white dark:bg-wellq-dark rounded-[24px] p-6 shadow-sm border border-wellq-gray/20 dark:border-white/10 hover:shadow-lg dark:hover:border-white/20 transition-all duration-300 flex flex-col group relative overflow-hidden">
               <div className="flex items-start justify-between mb-4 relative z-10">
-                <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${tagColor}`}>{plan.name}</span>
+                <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${tagColor}`}>{translatePlanName(plan.name, t)}</span>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray flex items-center gap-1.5 bg-wellq-gray/10 dark:bg-white/5 px-2.5 py-1 rounded-md">
                   <span className="w-1.5 h-1.5 rounded-full bg-wellq-green" /> {tVal(plan.status)}
                 </span>
               </div>
-              <h3 className="text-2xl font-black text-wellq-dark dark:text-white mb-2 tracking-tight relative z-10">{plan.name}</h3>
-              <p className="text-sm font-medium text-wellq-gray mb-5 min-h-[40px] relative z-10">{plan.description}</p>
+              <h3 className="text-2xl font-black text-wellq-dark dark:text-white mb-2 tracking-tight relative z-10">{translatePlanName(plan.name, t)}</h3>
+              <p className="text-sm font-medium text-wellq-gray mb-5 min-h-[40px] relative z-10">{translatePlanDescription(plan.name, plan.description, t)}</p>
 
               <div className="flex items-baseline gap-1 mb-6 relative z-10">
                 <span className="text-4xl font-black text-wellq-dark dark:text-white tracking-tight">${(plan.monthlyPrice || 0).toLocaleString()}</span>
@@ -975,11 +990,11 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
                     return (
                       <div key={pf.featureId} className="flex items-center justify-between text-xs font-medium">
                         <span className="text-wellq-dark dark:text-white/90 flex items-center gap-2 truncate">
-                          <CheckCircle2 size={12} className="text-wellq-cyan shrink-0" /> {f.name}
+                          <CheckCircle2 size={12} className="text-wellq-cyan shrink-0" /> {translateFeatureName(f.name, t)}
                         </span>
                         <span className="text-wellq-gray ml-2 shrink-0 font-bold">
                           {typeof pf.limit === 'number' ? pf.limit.toLocaleString() : pf.limit}
-                          {f.unitType !== 'select' && f.unitType !== 'toggle' ? ` ${f.unit}` : ''}
+                          {f.unitType !== 'select' && f.unitType !== 'toggle' ? ` ${translateFeatureUnit(f.unit, t)}` : ''}
                         </span>
                       </div>
                     );
@@ -1016,7 +1031,7 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
                 <button
                   onClick={() => onDelete(plan)}
                   className="p-2.5 bg-wellq-gray/5 hover:bg-red-500/10 text-wellq-gray hover:text-red-500 rounded-xl transition-colors dark:bg-white/[0.03] dark:hover:bg-red-500/20"
-                  title={t('plans.delete') ?? 'Delete permanently'}
+                  title={t('plans.delete')}
                 >
                   <Trash2 size={16} />
                 </button>
@@ -1116,7 +1131,7 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
                           <Icon size={18} className={colors.iconText} />
                         </div>
                         <div className="min-w-0">
-                          <div className="font-bold text-wellq-dark dark:text-white truncate">{f.name}</div>
+                      <div className="font-bold text-wellq-dark dark:text-white truncate">{translateFeatureName(f.name, t)}</div>
                           <div className="text-[11px] font-medium text-wellq-gray max-w-sm truncate mt-0.5">{f.description}</div>
                         </div>
                       </div>
@@ -1126,7 +1141,7 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
                         {translateCategory(f.category)}
                       </span>
                     </td>
-                    <td className="py-4 px-5 text-sm font-semibold text-wellq-gray">{f.unit}</td>
+                    <td className="py-4 px-5 text-sm font-semibold text-wellq-gray">{translateFeatureUnit(f.unit, t)}</td>
                     <td className="py-4 px-5">
                       <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-wellq-gray/10 text-wellq-gray dark:bg-white/5 dark:text-white/80">{f.unitType}</span>
                     </td>
@@ -1241,7 +1256,7 @@ export const PlansView = () => {
       // ── AHORA: si el backend devuelve {error:{...}}, mostramos el mensaje ─
       if (res.error) { toast.error(res.error.message); return; }
       await reloadPlans();
-      toast.success(`"${plan.name}" eliminado permanentemente`);
+      toast.success(t('plans.permanentlyDeleted').replace('{{name}}', translatePlanName(plan.name, t)));
     } catch (e) {
       if (e.status === 403) return;
       toast.error('Error al eliminar el plan');
@@ -1255,7 +1270,7 @@ export const PlansView = () => {
       if (res.error) { toast.error(res.error.message); return; }
       await reloadPlans();
       await reloadArchivedPlans();
-      toast.success(`"${plan.name}" restaurado exitosamente`);
+      toast.success(t('plans.restored').replace('{{name}}', translatePlanName(plan.name, t)));
     } catch (e) {
       if (e.status === 403) return;
       toast.error('Error al restaurar el plan');
@@ -1321,7 +1336,7 @@ export const PlansView = () => {
           { id: 'library',    label: t('plans.library'),  icon: Layers },
           { id: 'builder',    label: t('plans.builder'),  icon: Box    },
           { id: 'catalog',    label: t('plans.catalog'),  icon: Tag    },
-          { id: 'archivados', label: 'Archived',        icon: Archive },
+          { id: 'archivados', label: t('plans.archivedTab'), icon: Archive },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}

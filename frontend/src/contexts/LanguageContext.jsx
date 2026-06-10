@@ -16,14 +16,16 @@ export function LanguageProvider({ children }) {
   };
 
   const t = useCallback((key, params = {}) => {
-  const keys = key.split('.');
-  let result = translations[locale];
-  for (const k of keys) {
-    result = result?.[k];
-  }
-  if (result == null) return key;
-  return result.replace(/\{\{(\w+)\}\}/g, (_, k) => params[k] ?? `{{${k}}}`);
-}, [locale]);
+    const fallback = typeof params === 'string' ? params : key;
+    const values = typeof params === 'string' ? {} : params;
+    const keys = key.split('.');
+    let result = translations[locale];
+    for (const k of keys) {
+      result = result?.[k];
+    }
+    if (result == null) return fallback;
+    return String(result).replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? `{{${k}}}`);
+  }, [locale]);
 
   const tVal = useCallback((value) => {
     if (!value) return value;

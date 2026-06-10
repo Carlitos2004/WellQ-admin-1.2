@@ -28,13 +28,13 @@ const itemVariants = {
 const HARDCODED_CLINICS = [
   {
     id: '000',
-    name: 'Esperando base de datos',
-    tier: 'Esperando...',
-    status: 'Esperando...',
+    name: 'waitingDatabase',
+    tier: 'waiting',
+    status: 'waiting',
     patientsUsed: 0,
     patientsLimit: 0,
     healthScore: 0,
-    lastLogin: 'Esperando...',
+    lastLogin: 'waiting',
   },
 ];
 
@@ -44,26 +44,18 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [sent,    setSent]    = useState(false);
-  const [error,   setError]   = useState(null);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleSend = async () => {
     if (!subject.trim() || !message.trim()) return;
     setSending(true);
     setError(null);
     try {
-      await apiFetch('/api/notifications', {
-        method:  'POST',
-        body: JSON.stringify({
-          title:             subject,
-          message:           message,
-          channel:           'email',
-          recipientClinicId: 'all',
-        }),
-      });
+      await apiFetch('/api/notifications', { method: 'POST', body: JSON.stringify({ title: subject, message, channel: 'email', recipientClinicId: 'all' }) });
       setSent(true);
     } catch (err) {
-      if (err.status === 403) return; // Si es 403, SweetAlert se encarga, no muestra error genérico
+      if (err.status === 403) return;
       setError(t('clinics.sendError'));
     } finally {
       setSending(false);
@@ -73,104 +65,16 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
   return createPortal(
     <AnimatePresence>
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-        <motion.div
-          className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-        />
-        <motion.div
-          className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-wellq-gray/15 dark:border-white/10"
-          initial={{ opacity: 0, scale: 0.96, y: 10 }}
-          animate={{ opacity: 1, scale: 1,    y: 0  }}
-          exit={{   opacity: 0, scale: 0.96, y: 10  }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-        >
-          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-wellq-cyan/8 to-transparent pointer-events-none" />
-
+        <motion.div className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+        <motion.div className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-wellq-gray/15 dark:border-white/10" initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
           <div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center shadow-md shadow-wellq-cyan/20">
-                <Mail size={16} className="text-wellq-black" strokeWidth={2.2} />
-              </div>
-              <div>
-                <h2 className="font-bold text-wellq-dark dark:text-white text-sm leading-tight">{t('clinics.bulkEmail')}</h2>
-                <p className="text-xs font-medium text-wellq-gray mt-0.5">
-                  {t('clinics.sendingTo')} <span className="font-black text-wellq-cyan">{clinicCount}</span> {t('clinics.clinic')}{clinicCount !== 1 ? 's' : ''}
-                </p>
-              </div>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center shadow-md shadow-wellq-cyan/20"><Mail size={16} className="text-wellq-black" strokeWidth={2.2} /></div>
+              <div><h2 className="font-bold text-wellq-dark dark:text-white text-sm leading-tight">{t('clinics.bulkEmail')}</h2><p className="text-xs font-medium text-wellq-gray mt-0.5">{t('clinics.sendingTo')} <span className="font-black text-wellq-cyan">{clinicCount}</span> {t(clinicCount === 1 ? 'clinics.clinic' : 'clinics.clinics')}</p></div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-wellq-gray/8 dark:hover:bg-white/8 rounded-xl transition-colors cursor-pointer">
-              <X size={17} className="text-wellq-gray" strokeWidth={2.5} />
-            </button>
+            <button onClick={onClose} className="p-2 hover:bg-wellq-gray/8 dark:hover:bg-white/8 rounded-xl transition-colors cursor-pointer"><X size={17} className="text-wellq-gray" strokeWidth={2.5} /></button>
           </div>
-
-          {sent ? (
-            <div className="flex flex-col items-center justify-center py-14 gap-3">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="w-16 h-16 rounded-full bg-wellq-green/10 border border-wellq-green/20 flex items-center justify-center"
-              >
-                <Send size={28} className="text-wellq-green" />
-              </motion.div>
-              <p className="font-bold text-wellq-dark dark:text-white">{t('clinics.emailSent')}</p>
-              <p className="text-sm text-wellq-gray">{t('clinics.emailQueued')}</p>
-              <button
-                onClick={onClose}
-                className="mt-2 px-5 py-2 bg-wellq-gray/10 dark:bg-wellq-dark/50 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-wellq-dark/80 transition-colors cursor-pointer"
-              >
-                {t('common.close')}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-wellq-gray/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full">
-                <div>
-                  <label className="block text-xs font-semibold text-wellq-gray uppercase tracking-wider mb-1.5">{t('clinics.subject')}</label>
-                  <input
-                    type="text"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    placeholder={t('clinics.subjectPlaceholder')}
-                    className="w-full px-4 py-2.5 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white placeholder-wellq-gray/40 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-transparent transition-all dark:bg-wellq-dark/50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-wellq-gray uppercase tracking-wider mb-1.5">{t('clinics.message')}</label>
-                  <textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder={t('clinics.messagePlaceholder')}
-                    rows={5}
-                    className="w-full px-4 py-2.5 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white placeholder-wellq-gray/40 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-transparent transition-all resize-none dark:bg-wellq-dark/50"
-                  />
-                </div>
-                {error && <p className="text-xs text-red-500">{error}</p>}
-              </div>
-
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-wellq-gray/20 dark:border-wellq-gray/30 bg-wellq-gray/5 dark:bg-wellq-dark/50 shrink-0">
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 border border-wellq-gray/30 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 transition-colors cursor-pointer"
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  onClick={handleSend}
-                  disabled={sending || !subject.trim() || !message.trim()}
-                  className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20"
-                >
-                  {sending
-                    ? <><Loader2 size={15} className="animate-spin" /> {t('clinics.sending')}</>
-                    : <><Send size={15} /> {t('clinics.sendEmail')}</>
-                  }
-                </button>
-              </div>
-            </>
-          )}
+          {sent ? <div className="flex flex-col items-center justify-center py-14 gap-3"><div className="w-16 h-16 rounded-full bg-wellq-green/10 border border-wellq-green/20 flex items-center justify-center"><Send size={28} className="text-wellq-green" /></div><p className="font-bold text-wellq-dark dark:text-white">{t('clinics.emailSent')}</p><p className="text-sm text-wellq-gray">{t('clinics.emailQueued')}</p><button onClick={onClose} className="mt-2 px-5 py-2 bg-wellq-gray/10 dark:bg-wellq-dark/50 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-wellq-dark/80 transition-colors cursor-pointer">{t('common.close')}</button></div> : <><div className="flex-1 overflow-y-auto p-6 space-y-4"><div><label className="block text-xs font-semibold text-wellq-gray uppercase tracking-wider mb-1.5">{t('clinics.subject')}</label><input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={t('clinics.subjectPlaceholder')} className="w-full px-4 py-2.5 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white placeholder-wellq-gray/40 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-transparent transition-all dark:bg-wellq-dark/50" /></div><div><label className="block text-xs font-semibold text-wellq-gray uppercase tracking-wider mb-1.5">{t('clinics.message')}</label><textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t('clinics.messagePlaceholder')} rows={5} className="w-full px-4 py-2.5 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white placeholder-wellq-gray/40 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-transparent transition-all resize-none dark:bg-wellq-dark/50" /></div>{error && <p className="text-xs text-red-500">{error}</p>}</div><div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-wellq-gray/20 dark:border-wellq-gray/30 bg-wellq-gray/5 dark:bg-wellq-dark/50 shrink-0"><button onClick={onClose} className="px-4 py-2 border border-wellq-gray/30 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 transition-colors cursor-pointer">{t('common.cancel')}</button><button onClick={handleSend} disabled={sending || !subject.trim() || !message.trim()} className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20">{sending ? <><Loader2 size={15} className="animate-spin" /> {t('clinics.sending')}</> : <><Send size={15} /> {t('clinics.sendEmail')}</>}</button></div></>}
         </motion.div>
       </div>
     </AnimatePresence>,
@@ -178,457 +82,70 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
   );
 };
 
-// ─── DeleteClinicModal ────────────────────────────────────────────────────────
 const DeleteClinicModal = ({ clinic, onClose, onConfirm, deleting }) => {
+  const { t } = useLanguage();
   if (!clinic) return null;
-
   const isChurned = (clinic.status || '').toLowerCase() === 'churned';
-
   return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-        <motion.div
-          className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={!deleting ? onClose : undefined}
-        />
-        <motion.div
-          className={`relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md flex flex-col overflow-hidden border ${isChurned ? 'border-red-500/40 dark:border-red-500/40' : 'border-red-500/20 dark:border-red-500/20'}`}
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-        >
-          <div className={`absolute top-0 left-0 right-0 h-24 pointer-events-none bg-gradient-to-b ${isChurned ? 'from-red-500/20' : 'from-amber-500/10 dark:from-red-500/10'} to-transparent`} />
-
-          <div className="relative p-8 text-center space-y-4">
-            <div className={`w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto mb-4 shadow-sm ${isChurned ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30' : 'bg-amber-50 dark:bg-red-500/10 border-amber-200 dark:border-red-500/20'}`}>
-              <Trash2 size={28} className={isChurned ? "text-red-500" : "text-amber-500 dark:text-red-500"} strokeWidth={2.2} />
-            </div>
-            <h2 className="font-bold text-wellq-dark dark:text-white text-xl">
-              {isChurned ? '¿Eliminar Permanentemente?' : '¿Dar de baja Clínica?'}
-            </h2>
-            <p className="text-sm text-wellq-gray px-2 leading-relaxed">
-              {isChurned ? (
-                <>Estás a punto de borrar <strong>{clinic.name}</strong> de forma permanente. Esta acción purgará la base de datos y es absolutamente irreversible.</>
-              ) : (
-                <>Estás a punto de dar de baja a <strong>{clinic.name}</strong>. Sus accesos serán suspendidos y pasará a la pestaña de "Churned".</>
-              )}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
-            <button
-              onClick={onClose}
-              disabled={deleting}
-              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-wellq-dark dark:text-white bg-white dark:bg-white/5 border border-wellq-gray/20 dark:border-white/10 hover:bg-wellq-gray/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={deleting}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-50 shadow-sm ${isChurned ? 'bg-red-600 hover:bg-red-700 shadow-red-500/30' : 'bg-red-500 hover:bg-red-600 shadow-red-500/20'}`}
-            >
-              {deleting ? <><Loader2 size={16} className="animate-spin" /> Procesando...</> : (isChurned ? 'Purgar Datos' : 'Mover a Churned')}
-            </button>
-          </div>
-        </motion.div>
-      </div>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"><motion.div className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={!deleting ? onClose : undefined} /><motion.div className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md flex flex-col overflow-hidden border border-red-500/20" initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} transition={{ duration: 0.22, ease: 'easeOut' }}><div className="relative p-8 text-center space-y-4"><div className="w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto mb-4 shadow-sm bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20"><Trash2 size={28} className="text-red-500" strokeWidth={2.2} /></div><h2 className="font-bold text-wellq-dark dark:text-white text-xl">{isChurned ? t('clinics.delete.permanentTitle') : t('clinics.delete.churnTitle')}</h2><p className="text-sm text-wellq-gray px-2 leading-relaxed">{isChurned ? <>{t('clinics.delete.permanentMessageStart')}<strong>{clinic.name}</strong>{t('clinics.delete.permanentMessageEnd')}</> : <>{t('clinics.delete.churnMessageStart')}<strong>{clinic.name}</strong>{t('clinics.delete.churnMessageEnd')}</>}</p></div><div className="flex items-center gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]"><button onClick={onClose} disabled={deleting} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-wellq-dark dark:text-white bg-white dark:bg-white/5 border border-wellq-gray/20 dark:border-white/10 hover:bg-wellq-gray/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50">{t('common.cancel')}</button><button onClick={onConfirm} disabled={deleting} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-50 shadow-sm bg-red-500 hover:bg-red-600 shadow-red-500/20">{deleting ? <><Loader2 size={16} className="animate-spin" /> {t('common.processing')}</> : (isChurned ? t('clinics.delete.purgeData') : t('clinics.delete.moveToChurned'))}</button></div></motion.div></div>
     </AnimatePresence>,
     document.body
   );
 };
 
-// ─── CreateClinicModal ────────────────────────────────────────────────────────
 const CreateClinicModal = ({ onClose, onSuccess }) => {
-  const [step,     setStep]     = useState(0);
+  const { t } = useLanguage();
+  const [step, setStep] = useState(0);
   const [creating, setCreating] = useState(false);
-  const [created,  setCreated]  = useState(false);
-  const [error,    setError]    = useState(null);
-
-  const [form, setForm] = useState({
-    name:           '',
-    tier:           'smb',
-    patients_limit: '500',
-    mrr:            '0',
-    location:       '',
-    contact_name:   '',
-    contact_email:  '',
-    contact_phone:  '',
-    company_name:   '',
-    tax_id:         '',
-    billing_email:  '',
-    address:        '',
-    internal_notes: '',
-  });
-
+  const [created, setCreated] = useState(false);
+  const [error, setError] = useState(null);
+  const [form, setForm] = useState({ name: '', tier: 'smb', patients_limit: '500', mrr: '0', location: '', contact_name: '', contact_email: '', contact_phone: '', company_name: '', tax_id: '', billing_email: '', address: '', internal_notes: '' });
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-
-  const handleStrictNumberKeyDown = (e) => {
-    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    if (!/^[0-9]$/.test(e.key)) e.preventDefault();
-  };
-
-  const handleFloatKeyDown = (e) => {
-    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    if (!/^[0-9.]$/.test(e.key)) e.preventDefault();
-  };
-
-  const handleRutKeyDown = (e) => {
-    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    if (!/^[0-9kK-]$/.test(e.key)) e.preventDefault();
-  };
-
-  const handlePhoneKeyDown = (e) => {
-    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) return;
-    if (!/^[0-9 +]$/.test(e.key)) e.preventDefault();
-  };
-
-  const handleCreate = async () => {
-    if (!form.name.trim()) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await apiFetch('/api/clinics', {
-        method:  'POST',
-        body: JSON.stringify({
-          name:           form.name.trim(),
-          tier:           form.tier,
-          status:         'active',
-          patients_limit: parseInt(form.patients_limit) || 500,
-          mrr:            parseFloat(form.mrr) || 0,
-          location:       form.location       || null,
-          contact_name:   form.contact_name   || null,
-          contact_email:  form.contact_email  || null,
-          contact_phone:  form.contact_phone  || null,
-          company_name:   form.company_name   || null,
-          tax_id:         form.tax_id         || null,
-          billing_email:  form.billing_email  || null,
-          address:        form.address        || null,
-          internal_notes: form.internal_notes || null,
-        }),
-      });
-      setCreated(true);
-      onSuccess?.();
-    } catch (err) {
-      if (err.status === 403) return;
-      setError('Error al crear la clínica. Verifica los datos e intenta de nuevo.');
-    } finally {
-      setCreating(false);
-    }
-  };
-
+  const handleCreate = async () => { if (!form.name.trim()) return; setCreating(true); setError(null); try { await apiFetch('/api/clinics', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), tier: form.tier, status: 'active', patients_limit: parseInt(form.patients_limit) || 500, mrr: parseFloat(form.mrr) || 0, location: form.location || null, contact_name: form.contact_name || null, contact_email: form.contact_email || null, contact_phone: form.contact_phone || null, company_name: form.company_name || null, tax_id: form.tax_id || null, billing_email: form.billing_email || null, address: form.address || null, internal_notes: form.internal_notes || null }) }); setCreated(true); onSuccess?.(); } catch (err) { if (err.status === 403) return; setError(t('clinics.create.error')); } finally { setCreating(false); } };
   const inputCls = "w-full px-4 py-2.5 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white placeholder-wellq-gray/40 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-transparent transition-all dark:bg-wellq-dark/50";
   const labelCls = "block text-xs font-semibold text-wellq-gray uppercase tracking-wider mb-1.5";
-
+  const steps = [t('clinics.create.steps.basic'), t('clinics.create.steps.contact'), t('clinics.create.steps.billing')];
   return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-        <motion.div
-          className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-        />
-        <motion.div
-          className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-wellq-gray/15 dark:border-white/10"
-          initial={{ opacity: 0, scale: 0.96, y: 10 }}
-          animate={{ opacity: 1, scale: 1,    y: 0  }}
-          exit={{   opacity: 0, scale: 0.96, y: 10  }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-        >
-          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-wellq-cyan/10 to-transparent pointer-events-none" />
-
-          <div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center shadow-md shadow-wellq-cyan/20">
-                <Plus size={16} className="text-wellq-black" strokeWidth={2.5} />
-              </div>
-              <div>
-                <h2 className="font-bold text-wellq-dark dark:text-white text-sm leading-tight">Nueva Clínica</h2>
-                <p className="text-xs font-medium text-wellq-gray mt-0.5">Registra una nueva clínica en WellQ</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="p-2 hover:bg-wellq-gray/8 dark:hover:bg-white/8 rounded-xl transition-colors cursor-pointer">
-              <X size={17} className="text-wellq-gray" strokeWidth={2.5} />
-            </button>
-          </div>
-
-          {created ? (
-            <div className="flex flex-col items-center justify-center py-14 gap-3 flex-1 overflow-y-auto">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="w-16 h-16 rounded-full bg-wellq-green/10 border border-wellq-green/20 flex items-center justify-center"
-              >
-                <Building2 size={28} className="text-wellq-green" />
-              </motion.div>
-              <p className="font-bold text-wellq-dark dark:text-white">¡Clínica creada!</p>
-              <p className="text-sm text-wellq-gray text-center px-8">
-                <span className="font-semibold text-wellq-dark dark:text-white">{form.name}</span> ha sido registrada y está activa.
-              </p>
-              <button
-                onClick={onClose}
-                className="mt-2 px-5 py-2 bg-wellq-gray/10 dark:bg-wellq-dark/50 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-wellq-dark/80 transition-colors cursor-pointer"
-              >
-                Cerrar
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex gap-2 px-6 pt-5 pb-1 shrink-0">
-                {['Básico', 'Contacto', 'Billing'].map((s, i) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStep(i)}
-                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                      i === step
-                        ? 'bg-wellq-cyan text-wellq-black'
-                        : 'bg-wellq-gray/8 dark:bg-white/5 text-wellq-gray hover:bg-wellq-cyan/15 hover:text-wellq-cyan'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-wellq-gray/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full">
-                {step === 0 && (
-                  <div className="p-6 space-y-4">
-                    <div>
-                      <label className={labelCls}>
-                        Nombre de la Clínica <span className="text-red-400 normal-case">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={form.name}
-                        onChange={(e) => update('name', e.target.value)}
-                        placeholder="Ej: Clínica San Rafael"
-                        className={inputCls}
-                        autoFocus
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Plan</label>
-                      <select
-                        value={form.tier}
-                        onChange={(e) => update('tier', e.target.value)}
-                        className={inputCls}
-                      >
-                        <option value="trial">Trial</option>
-                        <option value="smb">SMB</option>
-                        <option value="enterprise">Enterprise</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={labelCls}>Límite Pacientes</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={form.patients_limit}
-                          onKeyDown={handleStrictNumberKeyDown}
-                          onChange={(e) => update('patients_limit', e.target.value.replace(/^0+(?=\d)/, ''))}
-                          className={inputCls}
-                        />
-                      </div>
-                      <div>
-                        <label className={labelCls}>MRR (USD)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={form.mrr}
-                          onKeyDown={handleFloatKeyDown}
-                          onChange={(e) => update('mrr', e.target.value.replace(/^0+(?=\d)/, ''))}
-                          className={inputCls}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Ubicación</label>
-                      <input
-                        type="text"
-                        value={form.location}
-                        onChange={(e) => update('location', e.target.value)}
-                        placeholder="Ej: Santiago, Chile"
-                        className={inputCls}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {step === 1 && (
-                  <div className="p-6 space-y-4">
-                    <div>
-                      <label className={labelCls}>Nombre de Contacto</label>
-                      <input
-                        type="text"
-                        value={form.contact_name}
-                        onChange={(e) => update('contact_name', e.target.value)}
-                        placeholder="Ej: Ana Martínez"
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Email de Contacto</label>
-                      <input
-                        type="email"
-                        value={form.contact_email}
-                        onChange={(e) => update('contact_email', e.target.value)}
-                        placeholder="admin@clinica.com"
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Teléfono</label>
-                      <input
-                        type="tel"
-                        value={form.contact_phone}
-                        onKeyDown={handlePhoneKeyDown}
-                        onChange={(e) => update('contact_phone', e.target.value)}
-                        placeholder="+56 9 XXXX XXXX"
-                        className={inputCls}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {step === 2 && (
-                  <div className="p-6 space-y-4">
-                    <div>
-                      <label className={labelCls}>Razón Social</label>
-                      <input
-                        type="text"
-                        value={form.company_name}
-                        onChange={(e) => update('company_name', e.target.value)}
-                        placeholder="Ej: Clínica San Rafael SpA"
-                        className={inputCls}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={labelCls}>RUT / Tax ID</label>
-                        <input
-                          type="text"
-                          value={form.tax_id}
-                          onKeyDown={handleRutKeyDown}
-                          onChange={(e) => update('tax_id', e.target.value)}
-                          placeholder="76.XXX.XXX-K"
-                          className={inputCls}
-                        />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Email Facturación</label>
-                        <input
-                          type="email"
-                          value={form.billing_email}
-                          onChange={(e) => update('billing_email', e.target.value)}
-                          placeholder="facturas@clinica.com"
-                          className={inputCls}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Dirección</label>
-                      <input
-                        type="text"
-                        value={form.address}
-                        onChange={(e) => update('address', e.target.value)}
-                        placeholder="Av. Principal 123, Ciudad"
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Notas Internas</label>
-                      <textarea
-                        value={form.internal_notes}
-                        onChange={(e) => update('internal_notes', e.target.value)}
-                        placeholder="Notas privadas del equipo WellQ..."
-                        rows={3}
-                        className={`${inputCls} resize-none`}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {error && (
-                  <p className="text-xs text-red-500 px-6 pb-4">{error}</p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0">
-                <button
-                  onClick={step > 0 ? () => setStep((s) => s - 1) : onClose}
-                  className="px-4 py-2 border border-wellq-gray/30 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 transition-colors cursor-pointer"
-                >
-                  {step > 0 ? '← Anterior' : 'Cancelar'}
-                </button>
-
-                {step < 2 ? (
-                  <button
-                    onClick={() => setStep((s) => s + 1)}
-                    disabled={step === 0 && !form.name.trim()}
-                    className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20"
-                  >
-                    Siguiente →
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleCreate}
-                    disabled={creating || !form.name.trim()}
-                    className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20"
-                  >
-                    {creating
-                      ? <><Loader2 size={15} className="animate-spin" /> Creando...</>
-                      : <><Building2 size={15} /> Crear Clínica</>
-                    }
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </motion.div>
-      </div>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"><motion.div className="absolute inset-0 bg-[#06090E]/80 backdrop-blur-xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} /><motion.div className="relative z-10 bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-wellq-gray/15 dark:border-white/10" initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }} transition={{ duration: 0.22, ease: 'easeOut' }}><div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-gradient-to-br from-wellq-cyan to-wellq-blue flex items-center justify-center shadow-md shadow-wellq-cyan/20"><Plus size={16} className="text-wellq-black" strokeWidth={2.5} /></div><div><h2 className="font-bold text-wellq-dark dark:text-white text-sm leading-tight">{t('clinics.create.title')}</h2><p className="text-xs font-medium text-wellq-gray mt-0.5">{t('clinics.create.subtitle')}</p></div></div><button onClick={onClose} className="p-2 hover:bg-wellq-gray/8 dark:hover:bg-white/8 rounded-xl transition-colors cursor-pointer"><X size={17} className="text-wellq-gray" strokeWidth={2.5} /></button></div>{created ? <div className="flex flex-col items-center justify-center py-14 gap-3 flex-1 overflow-y-auto"><div className="w-16 h-16 rounded-full bg-wellq-green/10 border border-wellq-green/20 flex items-center justify-center"><Building2 size={28} className="text-wellq-green" /></div><p className="font-bold text-wellq-dark dark:text-white">{t('clinics.create.successTitle')}</p><p className="text-sm text-wellq-gray text-center px-8"><span className="font-semibold text-wellq-dark dark:text-white">{form.name}</span>{t('clinics.create.successMessage')}</p><button onClick={onClose} className="mt-2 px-5 py-2 bg-wellq-gray/10 dark:bg-wellq-dark/50 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-wellq-dark/80 transition-colors cursor-pointer">{t('common.close')}</button></div> : <><div className="flex gap-2 px-6 pt-5 pb-1 shrink-0">{steps.map((stepLabel, i) => <button key={stepLabel} type="button" onClick={() => setStep(i)} className={i === step ? 'flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer bg-wellq-cyan text-wellq-black' : 'flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer bg-wellq-gray/8 dark:bg-white/5 text-wellq-gray hover:bg-wellq-cyan/15 hover:text-wellq-cyan'}>{stepLabel}</button>)}</div><div className="flex-1 overflow-y-auto p-6 space-y-4">{step === 0 && <><div><label className={labelCls}>{t('clinics.create.labels.clinicName')} <span className="text-red-400 normal-case">*</span></label><input value={form.name} onChange={(e) => update('name', e.target.value)} placeholder={t('clinics.create.placeholders.clinicName')} className={inputCls} autoFocus /></div><div><label className={labelCls}>{t('clinics.create.labels.plan')}</label><select value={form.tier} onChange={(e) => update('tier', e.target.value)} className={inputCls}><option value="trial">{t('clinics.tiers.trial')}</option><option value="smb">{t('clinics.tiers.smb')}</option><option value="enterprise">{t('clinics.tiers.enterprise')}</option></select></div><div className="grid grid-cols-2 gap-3"><div><label className={labelCls}>{t('clinics.create.labels.patientsLimit')}</label><input type="number" min="0" value={form.patients_limit} onChange={(e) => update('patients_limit', e.target.value)} className={inputCls} /></div><div><label className={labelCls}>{t('clinics.create.labels.mrr')}</label><input type="number" min="0" step="0.01" value={form.mrr} onChange={(e) => update('mrr', e.target.value)} className={inputCls} /></div></div><div><label className={labelCls}>{t('clinics.create.labels.location')}</label><input value={form.location} onChange={(e) => update('location', e.target.value)} placeholder={t('clinics.create.placeholders.location')} className={inputCls} /></div></>}{step === 1 && <><div><label className={labelCls}>{t('clinics.create.labels.contactName')}</label><input value={form.contact_name} onChange={(e) => update('contact_name', e.target.value)} placeholder={t('clinics.create.placeholders.contactName')} className={inputCls} /></div><div><label className={labelCls}>{t('clinics.create.labels.contactEmail')}</label><input type="email" value={form.contact_email} onChange={(e) => update('contact_email', e.target.value)} placeholder={t('clinics.create.placeholders.contactEmail')} className={inputCls} /></div><div><label className={labelCls}>{t('clinics.create.labels.phone')}</label><input value={form.contact_phone} onChange={(e) => update('contact_phone', e.target.value)} placeholder={t('clinics.create.placeholders.phone')} className={inputCls} /></div></>}{step === 2 && <><div><label className={labelCls}>{t('clinics.create.labels.companyName')}</label><input value={form.company_name} onChange={(e) => update('company_name', e.target.value)} placeholder={t('clinics.create.placeholders.companyName')} className={inputCls} /></div><div className="grid grid-cols-2 gap-3"><div><label className={labelCls}>{t('clinics.create.labels.taxId')}</label><input value={form.tax_id} onChange={(e) => update('tax_id', e.target.value)} placeholder={t('clinics.create.placeholders.taxId')} className={inputCls} /></div><div><label className={labelCls}>{t('clinics.create.labels.billingEmail')}</label><input type="email" value={form.billing_email} onChange={(e) => update('billing_email', e.target.value)} placeholder={t('clinics.create.placeholders.billingEmail')} className={inputCls} /></div></div><div><label className={labelCls}>{t('clinics.create.labels.address')}</label><input value={form.address} onChange={(e) => update('address', e.target.value)} placeholder={t('clinics.create.placeholders.address')} className={inputCls} /></div><div><label className={labelCls}>{t('clinics.create.labels.internalNotes')}</label><textarea value={form.internal_notes} onChange={(e) => update('internal_notes', e.target.value)} placeholder={t('clinics.create.placeholders.internalNotes')} rows={3} className={inputCls + ' resize-none'} /></div></>}{error && <p className="text-xs text-red-500">{error}</p>}</div><div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] shrink-0"><button onClick={step > 0 ? () => setStep((s) => s - 1) : onClose} className="px-4 py-2 border border-wellq-gray/30 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 transition-colors cursor-pointer">{step > 0 ? '<- ' + t('common.previous') : t('common.cancel')}</button>{step < 2 ? <button onClick={() => setStep((s) => s + 1)} disabled={step === 0 && !form.name.trim()} className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20">{t('common.next')} -&gt;</button> : <button onClick={handleCreate} disabled={creating || !form.name.trim()} className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20">{creating ? <><Loader2 size={15} className="animate-spin" /> {t('clinics.create.creating')}</> : <><Building2 size={15} /> {t('clinics.create.submitButton')}</>}</button>}</div></>}</motion.div></div>
     </AnimatePresence>,
     document.body
   );
 };
 
 // ─── KPI Summary Cards ────────────────────────────────────────────────────────
-const KpiCard = ({ icon: Icon, label, value, colorClass, bgClass, borderClass, ringClass, barGradient, glowClass, pct }) => (
-  <div className={`relative rounded-2xl border ${borderClass} bg-white dark:bg-wellq-dark p-5 overflow-hidden group transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5`}>
-    <div className={`absolute top-0 left-0 right-0 h-20 bg-gradient-to-b ${glowClass ?? 'from-transparent'} to-transparent opacity-60 pointer-events-none`} />
-    <div className="relative flex items-start justify-between mb-4">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${bgClass} ring-1 ${ringClass} shadow-sm transition-transform duration-200 group-hover:scale-105`}>
-        <Icon size={17} className={colorClass} strokeWidth={2.2} />
-      </div>
-      <span className="text-[10px] font-bold bg-black/5 dark:bg-white/5 text-wellq-gray px-2.5 py-1 rounded-lg tracking-wider uppercase">Live</span>
-    </div>
-    <div className="relative">
-      <p className="text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-3xl font-black ${colorClass} leading-none tabular-nums tracking-tight`}>{value}</p>
-    </div>
-    <div className="mt-4 h-1 bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
-      <motion.div
-        className={`h-full bg-gradient-to-r ${barGradient} rounded-full`}
-        initial={{ width: 0 }}
-        animate={{ width: `${pct}%` }}
-        transition={{ duration: 0.8, ease: 'easeOut', delay: 0.15 }}
-      />
-    </div>
-  </div>
-);
-
-// ─── ClinicsView Principal ────────────────────────────────────────────────────
-export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefreshClinics }) => {
+const KpiCard = ({ icon: Icon, label, value, colorClass, bgClass, borderClass, ringClass, barGradient, glowClass, pct }) => {
   const { t } = useLanguage();
+
+  return (
+    <div className={`relative rounded-2xl border ${borderClass} bg-white dark:bg-wellq-dark p-5 overflow-hidden group transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5`}>
+      <div className={`absolute top-0 left-0 right-0 h-20 bg-gradient-to-b ${glowClass ?? 'from-transparent'} to-transparent opacity-60 pointer-events-none`} />
+      <div className="relative flex items-start justify-between mb-4">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${bgClass} ring-1 ${ringClass} shadow-sm transition-transform duration-200 group-hover:scale-105`}>
+          <Icon size={17} className={colorClass} strokeWidth={2.2} />
+        </div>
+        <span className="text-[10px] font-bold bg-black/5 dark:bg-white/5 text-wellq-gray px-2.5 py-1 rounded-lg tracking-wider uppercase">{t('clinics.live')}</span>
+      </div>
+      <div className="relative">
+        <p className="text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1">{label}</p>
+        <p className={`text-3xl font-black ${colorClass} leading-none tabular-nums tracking-tight`}>{value}</p>
+      </div>
+      <div className="mt-4 h-1 bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
+        <motion.div
+          className={`h-full bg-gradient-to-r ${barGradient} rounded-full`}
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.min(100, Math.max(0, pct ?? 100))}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </div>
+    </div>
+  );
+};
+
+export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefreshClinics }) => {
+  const { t, tVal, locale } = useLanguage();
+  const dateLocale = locale === 'es' ? 'es-CL' : 'en-US';
 
   const [filter,         setFilter]         = useState('all');
   const [filterOpen,     setFilterOpen]     = useState(false);
@@ -936,7 +453,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
 
       const summaryData = [
         { type: 'header',    metrica: '◆  RESUMEN DE EXPORTACIÓN',  accent: C.cyan  },
-        { type: 'data',      metrica: 'Fecha de Exportación',        valor: new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' }) },
+        { type: 'data',      metrica: 'Fecha de Exportación',        valor: new Date().toLocaleString(dateLocale, { dateStyle: 'long', timeStyle: 'short' }) },
         { type: 'data',      metrica: 'Filtro Tab Activo',           valor: filter === 'all' ? 'Todas' : filter === 'active' ? 'Activas' : filter === 'at_risk' ? 'En Riesgo' : 'Churned' },
         { type: 'data',      metrica: 'Filtro Tier',                 valor: filterTier   || 'Sin filtro' },
         { type: 'data',      metrica: 'Filtro Estado',               valor: filterStatus || 'Sin filtro' },
@@ -948,7 +465,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         { type: 'dataRed',   metrica: 'Clínicas Churned',            valor: churnedClinicsExp            },
         { type: 'spacer' },
         { type: 'header',    metrica: '◆  MÉTRICAS DE USO',          accent: C.cyan  },
-        { type: 'dataCyan',  metrica: 'Total Pacientes Activos',     valor: totalPatientsExp.toLocaleString('es-CL') },
+        { type: 'dataCyan',  metrica: 'Total Pacientes Activos',     valor: totalPatientsExp.toLocaleString(dateLocale) },
         { type: 'dataCyan',  metrica: 'Health Score Promedio',       valor: avgHealthExp > 0 ? `${avgHealthExp}%` : '—' },
       ];
 
@@ -1100,7 +617,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               {exportState === 'loading'
                 ? <><Loader2 size={14} className="animate-spin" /> {t('clinics.export')}</>
                 : exportState === 'error'
-                ? <><X size={14} /> Export fallido</>
+                ? <><X size={14} /> {t('clinics.exportFailed')}</>
                 : <><Download size={14} strokeWidth={2.2} /> {t('clinics.export')}</>
               }
             </button>
@@ -1133,16 +650,16 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                     className="absolute right-0 top-full mt-2 z-50 w-64 bg-white dark:bg-wellq-dark rounded-2xl shadow-2xl border border-wellq-gray/15 dark:border-wellq-gray/20 p-4 space-y-4"
                   >
                     <div>
-                      <label className="block text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1.5">Tier</label>
+                      <label className="block text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1.5">{t('clinics.filterLabels.tier')}</label>
                       <select
                         value={filterTier}
                         onChange={(e) => setFilterTier(e.target.value)}
                         className="w-full px-3 py-2 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white dark:bg-wellq-dark/80 focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
                       >
                         <option value="">Todos</option>
-                        <option value="trial">Trial</option>
-                        <option value="smb">SMB</option>
-                        <option value="enterprise">Enterprise</option>
+                        <option value="trial">{t('clinics.tiers.trial')}</option>
+                        <option value="smb">{t('clinics.tiers.smb')}</option>
+                        <option value="enterprise">{t('clinics.tiers.enterprise')}</option>
                       </select>
                     </div>
                     <div>
@@ -1153,10 +670,10 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                         className="w-full px-3 py-2 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white dark:bg-wellq-dark/80 focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
                       >
                         <option value="">Todos</option>
-                        <option value="active">Active</option>
-                        <option value="warning">Warning</option>
-                        <option value="critical">Critical</option>
-                        <option value="churned">Churned</option>
+                        <option value="active">{tVal('active')}</option>
+                        <option value="warning">{tVal('warning')}</option>
+                        <option value="critical">{tVal('critical')}</option>
+                        <option value="churned">{tVal('churned')}</option>
                       </select>
                     </div>
                     <div className="flex justify-between pt-1">
@@ -1189,7 +706,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               onClick={() => setCreateOpen(true)}
               className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
             >
-              <Plus size={14} strokeWidth={2.5} /> Crear Clínica
+              <Plus size={14} strokeWidth={2.5} /> {t('clinics.createClinic')}
             </button>
           </div>
         </div>
@@ -1243,7 +760,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
 
           <div className="flex items-center justify-between px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
             <span className="text-xs font-semibold text-wellq-gray">
-              Mostrando <span className="font-bold text-wellq-dark dark:text-white">{filtered.length > 0 ? '1' : '0'}–{filtered.length}</span> de {filtered.length} clínicas
+              {t('clinics.pagination.showing')}<span className="font-bold text-wellq-dark dark:text-white">{filtered.length > 0 ? '1' : '0'}-{filtered.length}</span> {t('clinics.of')} {filtered.length} {t('clinics.pagination.clinicsPlural')}
             </span>
             <div className="flex items-center gap-1.5">
               <button className="p-1.5 border border-wellq-gray/20 dark:border-wellq-gray/20 rounded-lg text-sm font-medium text-wellq-gray hover:bg-white dark:hover:bg-white/5 transition-colors disabled:opacity-40 cursor-not-allowed" disabled>

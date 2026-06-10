@@ -44,6 +44,9 @@ const CATEGORY_META = {
   Request: { icon: MessageSquare, chip: 'border-wellq-gray/20 bg-wellq-gray/5 text-wellq-gray dark:border-white/10 dark:bg-white/5 dark:text-wellq-gray/80' },
 };
 
+const categoryLabel = (category, t) => t(`support.categoryLabels.${category}`, category ?? '');
+const statusLabel = (status, t) => t(`support.statusLabels.${status}`, status ?? '');
+
 const AVATAR_PALETTE = [
   { bg: 'bg-wellq-cyan/10 dark:bg-wellq-cyan/10',    text: 'text-wellq-cyan dark:text-wellq-cyan' },
   { bg: 'bg-wellq-blue/10 dark:bg-wellq-blue/10',    text: 'text-wellq-blue dark:text-wellq-blue' },
@@ -54,7 +57,7 @@ const AVATAR_PALETTE = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtDate = (iso) => {
+const fmtDate = (iso, t, locale = 'es') => {
   if (!iso) return '—';
   const d    = new Date(iso);
   const now  = new Date();
@@ -62,11 +65,11 @@ const fmtDate = (iso) => {
   const mins  = Math.floor(diff / 60_000);
   const hours = Math.floor(diff / 3_600_000);
   const days  = Math.floor(diff / 86_400_000);
-  if (mins  < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days  === 1) return 'Yesterday';
-  if (days  <  7)  return `${days}d ago`;
-  return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+  if (mins  < 60) return t('common.timeAgo.minutes', { count: mins });
+  if (hours < 24) return t('common.timeAgo.hours', { count: hours });
+  if (days  === 1) return t('common.timeAgo.yesterday');
+  if (days  <  7)  return t('common.timeAgo.days', { count: days });
+  return d.toLocaleDateString(locale === 'es' ? 'es-CL' : 'en-US', { day: '2-digit', month: 'short' });
 };
 
 const getInitials = (name) => {
@@ -211,15 +214,15 @@ const FilterBar = ({
   const CATEGORY_OPTIONS = categories.length > 0
     ? categories.map((cat) => ({
         value: cat.name,
-        label: cat.name,
+        label: categoryLabel(cat.name, t),
         icon:  CATEGORY_META[cat.name]?.icon ?? MessageSquare,
         on:    CATEGORY_META[cat.name]?.chip ?? DEFAULT_CAT_ON,
       }))
     : [
-        { value: 'Bug',     label: 'Bug',     icon: Bug,           on: CATEGORY_META.Bug.chip },
-        { value: 'Billing', label: 'Billing', icon: CreditCard,    on: CATEGORY_META.Billing.chip },
-        { value: 'Feature', label: 'Feature', icon: Sparkles,      on: CATEGORY_META.Feature.chip },
-        { value: 'Request', label: 'Request', icon: MessageSquare, on: CATEGORY_META.Request.chip },
+        { value: 'Bug',     label: t('support.categoryLabels.Bug'),     icon: Bug,           on: CATEGORY_META.Bug.chip },
+        { value: 'Billing', label: t('support.categoryLabels.Billing'), icon: CreditCard,    on: CATEGORY_META.Billing.chip },
+        { value: 'Feature', label: t('support.categoryLabels.Feature'), icon: Sparkles,      on: CATEGORY_META.Feature.chip },
+        { value: 'Request', label: t('support.categoryLabels.Request'), icon: MessageSquare, on: CATEGORY_META.Request.chip },
       ];
 
   const toggle = (key, val) =>
@@ -412,7 +415,7 @@ const FilterBar = ({
         </>
       )}
 
-      {/* Clear */}
+      {/* {t('common.clear')} */}
       <AnimatePresence>
         {hasActive && (
           <motion.button
@@ -428,7 +431,7 @@ const FilterBar = ({
             className="inline-flex items-center gap-1.5 text-[11px] font-bold text-wellq-gray hover:text-red-500 dark:hover:text-red-400 transition-colors ml-1 uppercase tracking-wider"
           >
             <X size={12} strokeWidth={2.5} />
-            Clear
+            {t('common.clear')}
           </motion.button>
         )}
       </AnimatePresence>
@@ -438,6 +441,7 @@ const FilterBar = ({
 
 // ─── Ticket Row ───────────────────────────────────────────────────────────────
 const TicketRow = ({ ticket, index, onSelect }) => {
+  const { t, locale } = useLanguage();
   const status  = STATUS_STYLE[ticket.status]    ?? STATUS_STYLE.Open;
   const cat     = CATEGORY_META[ticket.category] ?? CATEGORY_META.Request;
   const CatIcon = cat.icon ?? MessageSquare;
@@ -494,16 +498,16 @@ const TicketRow = ({ ticket, index, onSelect }) => {
 
       <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 shadow-sm ${cat.chip}`}>
         <CatIcon size={12} strokeWidth={2.2} />
-        {ticket.category}
+        {categoryLabel(ticket.category, t)}
       </div>
 
       <div className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 shadow-sm ${status.badge}`}>
         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
-        {ticket.status}
+        {statusLabel(ticket.status, t)}
       </div>
 
       <span className="hidden md:block text-xs font-bold text-wellq-gray w-20 text-right flex-shrink-0 tabular-nums tracking-tight">
-        {fmtDate(ticket.reported_at)}
+        {fmtDate(ticket.reported_at, t, locale)}
       </span>
 
       <ChevronRight
@@ -552,7 +556,7 @@ const Pagination = ({ page, totalPages, total, pageSize, onPageChange, t }) => {
   return (
     <div className="flex items-center justify-between px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
       <p className="text-xs font-semibold text-wellq-gray uppercase tracking-wider">
-        {start}–{end} <span className="lowercase font-medium opacity-70">de</span> {total.toLocaleString()} {t('support.tickets')}
+        {start}–{end} <span className="lowercase font-medium opacity-70">{t('support.of')}</span> {total.toLocaleString()} {t('support.tickets')}
       </p>
 
       <div className="flex items-center gap-1.5">
@@ -560,7 +564,7 @@ const Pagination = ({ page, totalPages, total, pageSize, onPageChange, t }) => {
           onClick={() => onPageChange?.(page - 1)}
           disabled={page <= 1}
           className={btnNav}
-          aria-label="Previous page"
+          aria-label={t('common.previous')}
         >
           <ChevronLeft size={16} strokeWidth={2.5} />
         </button>
@@ -583,7 +587,7 @@ const Pagination = ({ page, totalPages, total, pageSize, onPageChange, t }) => {
           onClick={() => onPageChange?.(page + 1)}
           disabled={page >= totalPages}
           className={btnNav}
-          aria-label="Next page"
+          aria-label={t('common.next')}
         >
           <ChevronRight size={16} strokeWidth={2.5} />
         </button>

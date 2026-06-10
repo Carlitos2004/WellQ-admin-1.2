@@ -10,6 +10,7 @@ import {
 import { UtilizationBar } from '../ui';
 import { apiFetch, API_BASE } from '../../api/client';
 import { PatientHealthSection } from './PatientHealthSection';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 // ─── Animaciones Coreografiadas (Estilo Analytics) ───────────────────────────
 const itemVariants = {
@@ -150,7 +151,7 @@ const ContactClinicModal = ({ clinic, contact, onClose }) => {
             >
               <Send size={28} className="text-wellq-green" />
             </motion.div>
-            <p className="font-bold text-wellq-dark dark:text-white">¡Email enviado!</p>
+            <p className="font-bold text-wellq-dark dark:text-white">¡Correo enviado!</p>
             <p className="text-sm text-wellq-gray">Mensaje en cola de envío.</p>
             <button
               onClick={onClose}
@@ -161,7 +162,7 @@ const ContactClinicModal = ({ clinic, contact, onClose }) => {
           </div>
         ) : (
           <>
-            {/* Email destinatario visible */}
+            {/* Correo destinatario visible */}
             {contact?.contact_info?.primary_email && (
               <div className="px-6 pt-4">
                 <div className="flex items-center gap-2 px-3 py-2 bg-wellq-cyan/5 border border-wellq-cyan/20 rounded-xl">
@@ -206,7 +207,7 @@ const ContactClinicModal = ({ clinic, contact, onClose }) => {
               >
                 {sending
                   ? <><Loader2 size={15} className="animate-spin" /> Enviando...</>
-                  : <><Send size={15} /> Enviar Email</>
+                  : <><Send size={15} /> Enviar correo</>
                 }
               </button>
             </div>
@@ -226,6 +227,12 @@ const FALLBACK_INVOICES = [
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
+  const { t, tVal, locale } = useLanguage();
+  const translateTier = (tier) => {
+    const key = String(tier ?? '').toLowerCase();
+    return t(`clinics.tiers.${key}`, tier ?? '-');
+  };
+  const dateLocale = locale === 'es' ? 'es-CL' : 'en-US';
   const [activeTab,     setActiveTab]    = useState(mode);
   const [subscription, setSubscription] = useState(null);
   const [license,      setLicense]      = useState(null);
@@ -313,12 +320,12 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       const statusColor = statusRaw === 'paid' ? '#10b981' : statusRaw === 'pending' ? '#f59e0b' : '#ef4444';
       const statusBg    = statusRaw === 'paid' ? '#ecfdf5' : statusRaw === 'pending' ? '#fffbeb' : '#fef2f2';
       const amountFmt   = typeof inv.amount === 'number'
-        ? `$${inv.amount.toLocaleString('es-CL', { minimumFractionDigits: 2 })} USD`
+        ? `$${inv.amount.toLocaleString(dateLocale, { minimumFractionDigits: 2 })} USD`
         : String(inv.amount ?? '—');
       const dateFmt     = inv.date ?? inv.issued_at
-        ? new Date(inv.date ?? inv.issued_at).toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })
+        ? new Date(inv.date ?? inv.issued_at).toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' })
         : '—';
-      const generatedAt = new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' });
+      const generatedAt = new Date().toLocaleString(dateLocale, { dateStyle: 'long', timeStyle: 'short' });
 
       const html = `<!DOCTYPE html>
 <html lang="es">
@@ -524,18 +531,18 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
     const fmtDate = (val) => {
       if (!val) return '—';
       const d = new Date(val);
-      return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
+      return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' });
     };
     const fmtMonth = (val) => {
       if (!val) return '—';
       const d = new Date(val);
       if (isNaN(d.getTime())) return '—';
-      const str = d.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+      const str = d.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' });
       return str.charAt(0).toUpperCase() + str.slice(1);
     };
     const toNum = (val) =>
       typeof val === 'number' ? val : parseFloat(String(val ?? '0').replace(/[^0-9.]/g, '')) || 0;
-    const fmt$ = (n) => `$${n.toLocaleString('es-CL', { minimumFractionDigits: 2 })} USD`;
+    const fmt$ = (n) => `$${n.toLocaleString(dateLocale, { minimumFractionDigits: 2 })} USD`;
     const fmtStatus = (s) => {
       const m = { paid: 'Pagada', pending: 'Pendiente', overdue: 'Vencida' };
       return m[(s ?? '').toLowerCase()] ?? s ?? '—';
@@ -771,7 +778,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       { type: 'data',    metrica: 'Nombre de Clínica',              valor: clinic.name ?? '—'         },
       { type: 'data',    metrica: 'ID de Sistema',                  valor: clinicId                   },
       { type: 'data',    metrica: 'Plan Contratado',                valor: clinic.tier?.toUpperCase() ?? '—' },
-      { type: 'data',    metrica: 'Fecha de Exportación',           valor: new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' }) },
+      { type: 'data',    metrica: 'Fecha de Exportación',           valor: new Date().toLocaleString(dateLocale, { dateStyle: 'long', timeStyle: 'short' }) },
       { type: 'spacer'                                                                                                                                },
       { type: 'header',  metrica: '◆  ESTADÍSTICAS DE FACTURAS',   valor: '',         accent: C.cyan  },
       { type: 'data',    metrica: 'Total Facturas Registradas',     valor: invoices.length             },
@@ -909,9 +916,9 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
 
           {/* Tabs de Navegación */}
           <div className="flex items-center gap-7">
-            <TabBtn active={activeTab === 'overview'}  onClick={() => setActiveTab('overview')}  label="Overview" />
-            <TabBtn active={activeTab === 'settings'}  onClick={() => setActiveTab('settings')}  icon={SettingsIcon} label="Settings" />
-            <TabBtn active={activeTab === 'invoices'}  onClick={() => setActiveTab('invoices')}  icon={Receipt}      label="Invoices" />
+            <TabBtn active={activeTab === 'overview'}  onClick={() => setActiveTab('overview')}  label={t('clinicDrawer.tabs.overview')} />
+            <TabBtn active={activeTab === 'settings'}  onClick={() => setActiveTab('settings')}  icon={SettingsIcon} label={t('clinicDrawer.tabs.settings')} />
+            <TabBtn active={activeTab === 'invoices'}  onClick={() => setActiveTab('invoices')}  icon={Receipt}      label={t('clinicDrawer.tabs.invoices')} />
           </div>
         </div>
 
@@ -934,12 +941,12 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                 <motion.section variants={itemVariants}>
                   <div className="flex items-center gap-2 mb-3 px-1">
                     <User size={14} className="text-wellq-cyan" />
-                    <h3 className="text-xs font-bold text-wellq-dark dark:text-white uppercase tracking-wider">Contact Info</h3>
+                    <h3 className="text-xs font-bold text-wellq-dark dark:text-white uppercase tracking-wider">{t('clinicDrawer.contactInfo')}</h3>
                   </div>
                   <div className="bg-white dark:bg-wellq-dark border border-wellq-gray/15 dark:border-white/5 rounded-2xl px-5 py-2 shadow-sm">
-                    <InfoRow icon={User}  label="Decision Maker" value={contact?.contact_info?.primary_name  ?? '—'} />
-                    <InfoRow icon={Mail}  label="Email"          value={contact?.contact_info?.primary_email ?? '—'} accent />
-                    <InfoRow icon={Phone} label="Phone"          value={contact?.contact_info?.primary_phone ?? '—'} />
+                    <InfoRow icon={User}  label={t('clinicDrawer.decisionMaker')} value={contact?.contact_info?.primary_name  ?? '—'} />
+                    <InfoRow icon={Mail}  label={t('clinicDrawer.email')}          value={contact?.contact_info?.primary_email ?? '—'} accent />
+                    <InfoRow icon={Phone} label={t('clinicDrawer.phone')}          value={contact?.contact_info?.primary_phone ?? '—'} />
                   </div>
                 </motion.section>
 
@@ -947,11 +954,11 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                 <motion.section variants={itemVariants}>
                   <div className="flex items-center gap-2 mb-3 px-1">
                     <CreditCard size={14} className="text-wellq-green" />
-                    <h3 className="text-xs font-bold text-wellq-dark dark:text-white uppercase tracking-wider">Subscription</h3>
+                    <h3 className="text-xs font-bold text-wellq-dark dark:text-white uppercase tracking-wider">{t('clinicDrawer.subscription')}</h3>
                   </div>
                   <div className="bg-white dark:bg-wellq-dark border border-wellq-gray/15 dark:border-white/5 rounded-2xl px-5 py-2 shadow-sm">
-                    <InfoRow icon={CreditCard} label="Current Plan"   value={subscription?.plan_name ?? clinic.tier ?? '—'} />
-                    <InfoRow icon={TrendingUp} label="Contract Value" value={subscription ? `$${(subscription.mrr_value * 12).toLocaleString()}/yr` : '$0/yr'} accent />
+                    <InfoRow icon={CreditCard} label={t('clinicDrawer.currentPlan')}   value={translateTier(subscription?.plan_name ?? clinic.tier)} />
+                    <InfoRow icon={TrendingUp} label={t('clinicDrawer.contractValue')} value={subscription ? `$${(subscription.mrr_value * 12).toLocaleString()}${t('clinicDrawer.yearlySuffix')}` : `$0${t('clinicDrawer.yearlySuffix')}`} accent />
                   </div>
                 </motion.section>
 
@@ -959,19 +966,19 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                 <motion.section variants={itemVariants}>
                   <div className="flex items-center gap-2 mb-3 px-1">
                     <Activity size={14} className="text-wellq-cyan" />
-                    <h3 className="text-xs font-bold text-wellq-dark dark:text-white uppercase tracking-wider">Usage Stats</h3>
+                    <h3 className="text-xs font-bold text-wellq-dark dark:text-white uppercase tracking-wider">{t('clinicDrawer.usageStats')}</h3>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <StatCard
                       value={usage?.patient_sessions_completed?.toLocaleString() ?? '0'}
-                      label="Patient Sessions"
+                      label={t('clinicDrawer.patientSessions')}
                       colorClass="text-wellq-cyan"
                       borderClass="border-wellq-cyan/20 dark:border-wellq-cyan/20"
                       bgClass="bg-wellq-cyan/5 dark:bg-wellq-cyan/10"
                     />
                     <StatCard
                       value={usage?.active_clinicians?.toLocaleString() ?? '0'}
-                      label="Active Clinicians"
+                      label={t('clinicDrawer.activeClinicians')}
                       colorClass="text-wellq-green"
                       borderClass="border-wellq-green/20 dark:border-wellq-green/20"
                       bgClass="bg-wellq-green/5 dark:bg-wellq-green/10"
@@ -1002,15 +1009,15 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                       <SettingsIcon size={20} className="text-wellq-dark dark:text-white" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-base text-wellq-dark dark:text-white">Clinic Configuration</h3>
-                      <p className="text-xs font-medium text-wellq-gray">Manage core details and status for this tenant.</p>
+                      <h3 className="font-bold text-base text-wellq-dark dark:text-white">{t('clinicDrawer.clinicConfiguration')}</h3>
+                      <p className="text-xs font-medium text-wellq-gray">{t('clinicDrawer.clinicConfigurationSubtitle')}</p>
                     </div>
                   </div>
                 </motion.div>
 
                 <motion.div variants={itemVariants} className="space-y-5 bg-white dark:bg-wellq-dark p-6 rounded-2xl border border-wellq-gray/15 dark:border-white/5 shadow-sm">
                   <div>
-                    <label className="block text-[11px] font-bold text-wellq-gray uppercase tracking-wider mb-2">Clinic Name</label>
+                    <label className="block text-[11px] font-bold text-wellq-gray uppercase tracking-wider mb-2">{t('clinicDrawer.clinicName')}</label>
                     <input
                       type="text"
                       value={clinicName}
@@ -1020,28 +1027,28 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-wellq-gray uppercase tracking-wider mb-2">Assigned Plan</label>
+                    <label className="block text-[11px] font-bold text-wellq-gray uppercase tracking-wider mb-2">{t('clinicDrawer.assignedPlan')}</label>
                     <select
                       value={clinicPlan}
                       onChange={(e) => setClinicPlan(e.target.value)}
                       className="w-full px-4 py-3 border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white dark:bg-white/[0.02] bg-wellq-gray/5 focus:outline-none focus:ring-2 focus:ring-wellq-cyan/50 focus:border-wellq-cyan transition-all cursor-pointer"
                     >
-                      <option value="Enterprise">Enterprise</option>
-                      <option value="Pro">Pro / SMB</option>
-                      <option value="Trial">Trial</option>
+                      <option value="Enterprise">{t('clinics.tiers.enterprise')}</option>
+                      <option value="Pro">{t('clinics.tiers.pro')} / {t('clinics.tiers.smb')}</option>
+                      <option value="Trial">{t('clinics.tiers.trial')}</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-wellq-gray uppercase tracking-wider mb-2">Account Status</label>
+                    <label className="block text-[11px] font-bold text-wellq-gray uppercase tracking-wider mb-2">{t('clinicDrawer.accountStatus')}</label>
                     <select
                       value={clinicStatus}
                       onChange={(e) => setClinicStatus(e.target.value)}
                       className="w-full px-4 py-3 border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white dark:bg-white/[0.02] bg-wellq-gray/5 focus:outline-none focus:ring-2 focus:ring-wellq-cyan/50 focus:border-wellq-cyan transition-all cursor-pointer"
                     >
-                      <option value="Active">Active</option>
-                      <option value="Suspended">Suspended</option>
-                      <option value="Churned">Churned</option>
+                      <option value="Active">{tVal('active')}</option>
+                      <option value="Suspended">{tVal('suspended')}</option>
+                      <option value="Churned">{tVal('churned')}</option>
                     </select>
                   </div>
 
@@ -1057,10 +1064,10 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                     className="w-full mt-4 px-4 py-3.5 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-dark rounded-xl font-black text-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md shadow-wellq-cyan/20"
                   >
                     {saving
-                      ? <><Loader2 size={16} className="animate-spin" /> Guardando...</>
+                      ? <><Loader2 size={16} className="animate-spin" /> {t('clinicDrawer.saving')}</>
                       : saveOk
-                      ? <><CheckCircle size={16} /> ¡Actualizado!</>
-                      : 'Save Changes'
+                      ? <><CheckCircle size={16} /> {t('clinicDrawer.updated')}</>
+                      : t('clinicDrawer.saveChanges')
                     }
                   </button>
                 </motion.div>
@@ -1083,8 +1090,8 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                       <Receipt size={20} className="text-wellq-green" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-base text-wellq-dark dark:text-white">Billing History</h3>
-                      <p className="text-xs font-medium text-wellq-gray">Recent invoices and payment status.</p>
+                      <h3 className="font-bold text-base text-wellq-dark dark:text-white">{t('clinicDrawer.billingHistory')}</h3>
+                      <p className="text-xs font-medium text-wellq-gray">{t('clinicDrawer.billingHistorySubtitle')}</p>
                     </div>
                   </div>
 
@@ -1092,11 +1099,11 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                   {!invoicesLoading && invoices.length > 0 && (
                     <button
                       onClick={handleExportExcel}
-                      title="Exportar facturas como Excel con pestañas"
+                      title={t('clinicDrawer.exportInvoicesTitle')}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-wellq-green/30 bg-wellq-green/5 hover:bg-wellq-green/10 text-wellq-green text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex-shrink-0"
                     >
                       <FileDown size={14} strokeWidth={2.5} />
-                      Export Excel
+                      {t('clinicDrawer.exportExcel')}
                     </button>
                   )}
                 </motion.div>
@@ -1121,11 +1128,11 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                       </div>
                       <div>
                         <p className="text-sm font-black text-wellq-dark dark:text-white tracking-tight">
-                          {typeof inv.amount === 'number' ? `$${inv.amount.toLocaleString('es-CL')} USD` : inv.amount ?? '—'}
+                          {typeof inv.amount === 'number' ? `$${inv.amount.toLocaleString(dateLocale)} USD` : inv.amount ?? '—'}
                         </p>
                         <p className="text-[11px] font-bold text-wellq-gray font-mono tracking-wider capitalize">
                           {inv.id ?? inv.invoice_id ?? 'SIN-ID'}
-                          {(inv.date || inv.issued_at) ? ` · ${new Date(inv.date ?? inv.issued_at).toLocaleDateString('es-CL', { month: 'short', year: 'numeric' })}` : ''}
+                          {(inv.date || inv.issued_at) ? ` · ${new Date(inv.date ?? inv.issued_at).toLocaleDateString(dateLocale, { month: 'short', year: 'numeric' })}` : ''}
                         </p>
                       </div>
                     </div>
@@ -1137,7 +1144,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                           : 'bg-red-500/10 text-red-400 border-red-500/20'
                       }`}>
-                        {inv.status}
+                        {tVal((inv.status ?? '').toLowerCase())}
                       </span>
                       {/* Botón descarga */}
                       <button
@@ -1146,7 +1153,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                             ? 'text-red-400 bg-red-500/10'
                             : 'text-wellq-gray hover:text-wellq-cyan hover:bg-wellq-cyan/10'
                         }`}
-                        title={downloadError === inv.id ? 'Error al descargar' : 'Descargar factura'}
+                        title={downloadError === inv.id ? t('clinicDrawer.downloadError') : t('clinicDrawer.downloadInvoice')}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDownloadInvoice(inv.id);
@@ -1194,8 +1201,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                 onClick={() => setContactModalOpen(true)}
                 className="w-full px-4 py-3.5 border-2 border-wellq-cyan/30 hover:border-wellq-cyan bg-wellq-cyan/5 hover:bg-wellq-cyan/10 text-wellq-cyan dark:text-wellq-cyan rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
               >
-                <Mail size={16} strokeWidth={2.5} /> Contactar Clínica
-              </button>
+                <Mail size={16} strokeWidth={2.5} /> {t('clinicDrawer.contactClinic')}</button>
             </motion.div>
           )}
         </AnimatePresence>

@@ -142,6 +142,9 @@ export const SERVER_STATUS_META = {
 // ─── App Usage Breakdown ──────────────────────────────────────────────────────
 const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : (n ?? 0).toLocaleString();
 
+const getServerDisplayName = (name, t) => t(`overview.serverNames.${name}`, name);
+const getProcessDisplayName = (name, t) => t(`overview.processNames.${name}`, name);
+
 const AppUsageBreakdown = ({ appStats }) => {
   const { t } = useLanguage();
 
@@ -318,7 +321,7 @@ const BusinessHealthTab = ({
         <motion.div variants={itemVariants} className="h-full">
           <KPICard
             title={t('overview.arr')} value={fmtArr(kpiArr?.current_arr)} trend="up" trendValue="+0%"
-            sparkData={arrSpark} subtitle={kpiArr ? `MRR: ${fmtArr(kpiArr.current_arr / 12)}` : t('overview.waitingConnection')} loading={loading}
+            sparkData={arrSpark} subtitle={kpiArr ? `${t('server.mrrPrefix')}${fmtArr(kpiArr.current_arr / 12)}` : t('overview.waitingConnection')} loading={loading}
           />
         </motion.div>
         <motion.div variants={itemVariants} className="h-full">
@@ -337,8 +340,8 @@ const BusinessHealthTab = ({
         </motion.div>
         <motion.div variants={itemVariants} className="h-full">
           <KPICard
-            title={t('overview.nrr')} value={kpiNrr ? `${kpiNrr.nrr_percentage}%` : '0%'} trend={kpiNrr?.nrr_percentage >= 100 ? 'up' : 'down'} trendValue={kpiNrr ? `Exp: $${kpiNrr.expansion_mrr?.toLocaleString()}` : '+0%'}
-            sparkData={[0, 0, 0, 0, 0, kpiNrr?.nrr_percentage ?? 0]} subtitle={kpiNrr ? `Churn MRR: $${kpiNrr.churn_mrr?.toLocaleString()}` : t('overview.waitingDatabase')} loading={loading}
+            title={t('overview.nrr')} value={kpiNrr ? `${kpiNrr.nrr_percentage}%` : '0%'} trend={kpiNrr?.nrr_percentage >= 100 ? 'up' : 'down'} trendValue={kpiNrr ? `${t('server.expansionPrefix')}${kpiNrr.expansion_mrr?.toLocaleString()}` : '+0%'}
+            sparkData={[0, 0, 0, 0, 0, kpiNrr?.nrr_percentage ?? 0]} subtitle={kpiNrr ? `${t('server.churnMrrPrefix')}${kpiNrr.churn_mrr?.toLocaleString()}` : t('overview.waitingDatabase')} loading={loading}
           />
         </motion.div>
       </div>
@@ -384,7 +387,7 @@ const BusinessHealthTab = ({
                 return (
                   <span key={sev} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${s.badge}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? 'animate-pulse' : ''}`} />
-                    {count} {sev}
+                    {count} {tVal(sev)}
                   </span>
                 );
               })}
@@ -466,9 +469,10 @@ const BusinessHealthTab = ({
 
 // ─── Server Detail Drawer (Mejorado con createPortal para abarcar Sidebar) ───
 const ServerDetailPanel = ({ server, onClose }) => {
-  const { t } = useLanguage(); 
+  const { t, tVal, locale } = useLanguage(); 
 
   if (!server) return null;
+  const dateLocale = locale === 'es' ? 'es-CL' : 'en-US';
 
   const meta = SERVER_STATUS_META[server.status] ?? SERVER_STATUS_META.idle;
   
@@ -485,18 +489,18 @@ const ServerDetailPanel = ({ server, onClose }) => {
   const isDown    = server.status === 'down' || server.status === 'error';
 
   const metrics = [
-    { label: 'CPU Usage',    value: server.cpu,    unit: '%', warn: 70, crit: 85 },
-    { label: 'Memory (RAM)', value: server.memory, unit: '%', warn: 75, crit: 90 },
+    { label: t('server.cpuUsage'),    value: server.cpu,    unit: '%', warn: 70, crit: 85 },
+    { label: t('server.memoryRam'), value: server.memory, unit: '%', warn: 75, crit: 90 },
   ];
 
   const details = [
-    { label: 'Region',       value: server.region     ?? 'N/A' },
-    { label: 'Uptime',       value: server.uptime     ?? '—'   },
-    { label: 'Server ID',    value: server.server_id  ?? server.name ?? '—' },
-    { label: 'Type',         value: server.type       ?? 'Server' },
-    { label: 'Last Updated', value: server.updated_at
-        ? new Date(server.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : 'Just now' },
+    { label: t('server.region'),       value: server.region     ?? t('server.na') },
+    { label: t('server.uptimeLabel'), value: server.uptime ?? '—' },
+    { label: t('server.serverId'), value: server.server_id ?? getServerDisplayName(server.name, t) ?? '—' },
+    { label: t('server.type'),         value: server.type       ?? t('server.serverDefaultType') },
+    { label: t('server.lastUpdated'), value: server.updated_at
+        ? new Date(server.updated_at).toLocaleString(dateLocale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : t('server.justNow') },
   ];
 
   return (
@@ -529,8 +533,8 @@ const ServerDetailPanel = ({ server, onClose }) => {
               <Server size={20} className={meta.text} strokeWidth={2.2} />
             </div>
             <div>
-              <h2 className="font-bold text-lg text-wellq-dark dark:text-white leading-tight tracking-tight">{server.name}</h2>
-              <p className="text-xs font-medium text-wellq-gray mt-1">{server.region} · {server.server_id ?? ''}</p>
+              <h2 className="font-bold text-lg text-wellq-dark dark:text-white leading-tight tracking-tight">{getServerDisplayName(server.name, t)}</h2>
+              <p className="text-xs font-medium text-wellq-gray mt-1">{server.region} / {server.server_id ?? ''}</p>
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -539,14 +543,14 @@ const ServerDetailPanel = ({ server, onClose }) => {
             </button>
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${meta.badge}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} ${meta.pulse ? 'animate-pulse' : ''}`} />
-              {meta.label}
+              {tVal(server.status)}
             </span>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide p-6 space-y-8 bg-white dark:bg-wellq-dark">
           <div>
-            <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-3">Live Metrics</p>
+            <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-3">{t('server.liveMetrics')}</p>
             <div className="space-y-4">
               {metrics.map(({ label, value, unit, warn, crit }) => {
                 const pct = Math.min(value, 100);
@@ -587,17 +591,17 @@ const ServerDetailPanel = ({ server, onClose }) => {
               <AlertTriangle size={18} className={`mt-0.5 flex-shrink-0 ${isDown ? 'text-red-500' : 'text-amber-500'}`} strokeWidth={2.2} />
               <div>
                 <p className={`text-sm font-bold tracking-tight ${isDown ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {isDown ? 'Server Unavailable' : 'Performance Degraded'}
+                  {isDown ? t('server.serverUnavailable') : t('server.performanceDegraded')}
                 </p>
                 <p className="text-xs font-medium text-wellq-gray mt-1">
-                  {isDown ? 'This server is currently down. Check logs and escalate if needed.' : 'This server is showing elevated resource usage. Monitor closely.'}
+                  {isDown ? t('server.serverDownMessage') : t('server.performanceDegradedMessage')}
                 </p>
               </div>
             </div>
           )}
 
           <div>
-            <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-3">Details</p>
+            <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-3">{t('server.details')}</p>
             <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 overflow-hidden divide-y divide-wellq-gray/10 dark:divide-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
               {details.map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between px-4 py-3.5 hover:bg-wellq-gray/5 dark:hover:bg-white/[0.04] transition-colors">
@@ -610,16 +614,16 @@ const ServerDetailPanel = ({ server, onClose }) => {
           
           {/* Resource summary cards */}
           <div>
-            <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-3">Resource Summary</p>
+            <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-3">{t('server.resourceSummary')}</p>
             <div className="grid grid-cols-2 gap-3">
               {metrics.map(({ label, value, warn, crit }) => {
                 const short = label.split(' ')[0];
                 const cardMeta =
                   value >= crit
-                    ? { border: 'border-red-200/70 dark:border-red-700/30',     bg: 'bg-red-50/80 dark:bg-red-900/10',     text: 'text-red-500 dark:text-red-400',     bar: 'from-red-400 to-rose-400',       label: 'Critical' }
+                    ? { border: 'border-red-200/70 dark:border-red-700/30',     bg: 'bg-red-50/80 dark:bg-red-900/10',     text: 'text-red-500 dark:text-red-400',     bar: 'from-red-400 to-rose-400',       label: t('values.critical') }
                     : value >= warn
-                    ? { border: 'border-amber-200/70 dark:border-amber-700/30', bg: 'bg-amber-50/80 dark:bg-amber-900/10', text: 'text-amber-500 dark:text-amber-400', bar: 'from-amber-400 to-orange-400',   label: 'Elevated' }
-                    : { border: 'border-wellq-gray/20 dark:border-white/5', bg: 'bg-wellq-gray/5 dark:bg-white/[0.03]', text: 'text-wellq-dark dark:text-white', bar: 'from-emerald-400 to-teal-400', label: 'Normal' };
+                    ? { border: 'border-amber-200/70 dark:border-amber-700/30', bg: 'bg-amber-50/80 dark:bg-amber-900/10', text: 'text-amber-500 dark:text-amber-400', bar: 'from-amber-400 to-orange-400',   label: t('server.elevated') }
+                    : { border: 'border-wellq-gray/20 dark:border-white/5', bg: 'bg-wellq-gray/5 dark:bg-white/[0.03]', text: 'text-wellq-dark dark:text-white', bar: 'from-emerald-400 to-teal-400', label: t('server.normal') };
                 return (
                   <div key={label} className={`relative rounded-xl border ${cardMeta.border} ${cardMeta.bg} p-4 overflow-hidden`}>
                     <p className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider mb-1">{short}</p>
@@ -649,10 +653,10 @@ const ServerDetailPanel = ({ server, onClose }) => {
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isHealthy ? 'bg-emerald-500' : isDown ? 'bg-red-500' : 'bg-amber-500'}`}></span>
               <span className={`relative inline-flex rounded-full h-2 w-2 ${isHealthy ? 'bg-emerald-500' : isDown ? 'bg-red-500' : 'bg-amber-500'}`}></span>
             </span>
-            <span className="text-[11px] font-bold text-wellq-gray uppercase tracking-wider">Live data from database</span>
+            <span className="text-[11px] font-bold text-wellq-gray uppercase tracking-wider">{t('server.liveDataFromDatabase')}</span>
           </div>
           <span className="text-xs font-bold text-wellq-gray tabular-nums">
-            {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            {new Date().toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
       </motion.div>
@@ -671,7 +675,7 @@ const OperationalStatusTab = ({
   const [selectedServer, setSelectedServer] = useState(null);
 
   const servers = apiServers ?? [
-    { name: t('overview.waitingConnection'), status: 'idle', uptime: '0%', cpu: 0, memory: 0, region: 'N/A' },
+    { name: t('overview.waitingConnection'), status: 'idle', uptime: '0%', cpu: 0, memory: 0, region: t('server.na') },
   ];
   const processes = apiProcesses ?? [
     { name: t('overview.waitingConnection'), status: 'idle', queued_items: 0 },
@@ -702,7 +706,7 @@ const OperationalStatusTab = ({
       value: kpiActiveNow != null ? String(kpiActiveNow.active_now) : '—', 
       icon: Users,
       metaColor: 'cyan',
-      sub: kpiActiveNow ? `Web: ${kpiActiveNow.platform_distribution.web_admin} · Mobile: ${kpiActiveNow.platform_distribution.mobile_clinician + kpiActiveNow.platform_distribution.mobile_patient}` : t('overview.waitingConnection') 
+      sub: kpiActiveNow ? `${t('overview.webUsers')}: ${kpiActiveNow.platform_distribution.web_admin} / ${t('overview.mobileUsers')}: ${kpiActiveNow.platform_distribution.mobile_clinician + kpiActiveNow.platform_distribution.mobile_patient}` : t('overview.waitingConnection') 
     },
     { 
       label: t('overview.totalDownloads'), 
@@ -788,14 +792,14 @@ const OperationalStatusTab = ({
                       <Server size={16} className="text-wellq-dark dark:text-white" strokeWidth={2.2} />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-bold text-wellq-dark dark:text-white text-sm truncate tracking-tight">{server.name}</p>
-                      <p className="text-[10px] font-semibold text-wellq-gray mt-0.5 uppercase tracking-wider truncate">{server.region} · {server.uptime} {t('overview.uptime')}</p>
+                      <p className="font-bold text-wellq-dark dark:text-white text-sm truncate tracking-tight">{getServerDisplayName(server.name, t)}</p>
+                      <p className="text-[10px] font-semibold text-wellq-gray mt-0.5 uppercase tracking-wider truncate">{server.region} / {server.uptime} {t('overview.uptime')}</p>
                     </div>
                   </div>
 
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 ml-2 ${meta.badge}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} ${meta.pulse ? 'animate-pulse' : ''}`} />
-                    {meta.label}
+                    {tVal(server.status)}
                   </span>
                 </div>
 
@@ -839,7 +843,7 @@ const OperationalStatusTab = ({
             </div>
             <div>
               <h3 className="font-bold text-wellq-dark dark:text-white text-base tracking-tight">{t('overview.backgroundProcesses')}</h3>
-              <p className="text-xs font-medium text-wellq-gray mt-1">Queue & Jobs Status</p>
+              <p className="text-xs font-medium text-wellq-gray mt-1">{t('server.queueJobsStatus')}</p>
             </div>
           </div>
           <div className="flex-1 space-y-2.5">
@@ -850,13 +854,13 @@ const OperationalStatusTab = ({
               >
                 <div className={`w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-wellq-dark shadow-sm ${getStatusDot(proc.status)}`} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-wellq-dark dark:text-white truncate tracking-tight">{proc.name}</div>
+                  <div className="text-sm font-bold text-wellq-dark dark:text-white truncate tracking-tight">{getProcessDisplayName(proc.name, t)}</div>
                 </div>
                 <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${getStatusColor(proc.status)}`}>
                   {tVal(proc.status)}
                 </span>
                 <div className="text-right text-xs font-black text-wellq-dark dark:text-white w-24 tabular-nums bg-white dark:bg-wellq-dark/50 py-1 px-2 rounded-lg border border-wellq-gray/10 dark:border-white/5">
-                  {(proc.queued_items ?? proc.queuedItems ?? 0).toLocaleString()} <span className="text-[10px] font-semibold text-wellq-gray">jobs</span>
+                  {(proc.queued_items ?? proc.queuedItems ?? 0).toLocaleString()} <span className="text-[10px] font-semibold text-wellq-gray">{t('server.jobs')}</span>
                 </div>
               </div>
             ))}

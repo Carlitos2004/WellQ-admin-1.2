@@ -46,35 +46,38 @@ const CATEGORY_META = {
 
 // Fallback hardcodeado — se usa sólo si no se reciben categorías dinámicas desde la API
 const CATEGORY_TO_GROUP_FALLBACK = {
-  Billing: 'Financiero',
-  Bug:     'Técnico',
-  Feature: 'Técnico',
-  Request: 'General',
+  Billing: 'financial',
+  Bug:     'technical',
+  Feature: 'technical',
+  Request: 'general',
 };
 
-// ─── Formatters ────────────────────────────────────────────────────────────────
-const fmtLong  = (iso) => iso
-  ? new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-  : '—';
+const categoryLabel = (category, t) => t(`support.categoryLabels.${category}`, category ?? '');
+const statusLabel = (status, t) => t(`support.statusLabels.${status}`, status ?? '');
 
-const fmtShort = (iso) => iso
-  ? new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })
+// ─── Formatters ────────────────────────────────────────────────────────────────
+const fmtLong = (iso, locale = 'es') => iso
+  ? new Date(iso).toLocaleDateString(locale === 'es' ? 'es-CL' : 'en-US', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  : '?';
+
+const fmtShort = (iso, locale = 'es') => iso
+  ? new Date(iso).toLocaleDateString(locale === 'es' ? 'es-CL' : 'en-US', { day: '2-digit', month: 'short', year: 'numeric' })
   : null;
 
-const fmtRelative = (iso) => {
+const fmtRelative = (iso, t) => {
   if (!iso) return null;
   const diff  = Date.now() - new Date(iso).getTime();
   const days  = Math.floor(diff / 86_400_000);
   const hours = Math.floor(diff / 3_600_000);
-  if (hours < 24) return `${hours}h ago`;
-  if (days === 1) return '1 day ago';
-  if (days <  30) return `${days} days ago`;
+  if (hours < 24) return t('common.timeAgo.hours', { count: hours });
+  if (days === 1) return t('common.timeAgo.oneDay');
+  if (days < 30) return t('common.timeAgo.days', { count: days });
   return null;
 };
 
 // ─── Drawer component ─────────────────────────────────────────────────────────
 export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories = [] }) => {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
 
   const [ticket,      setTicket]     = useState(null);
   const [loading,     setLoading]    = useState(true);
@@ -87,7 +90,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
   const [saving,       setSaving]       = useState(false);
   const [actionError,  setActionError]  = useState(null);
 
-  // Eliminar ticket
+  // {t('support.deleteTicket')}
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting,      setDeleting]      = useState(false);
 
@@ -176,7 +179,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
       toast.success(successMsg);
       onUpdated?.();
     } catch (err) {
-      const msg = err.message ?? 'Error al actualizar el ticket';
+      const msg = err.message ?? t('support.errors.updateTicket');
       setActionError(msg);
       toast.error(msg);
     } finally {
@@ -186,31 +189,31 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
 
   const handleTakeTicket = () => {
     if (!selectedResp && responders.length > 0) {
-      setActionError('Selecciona un responder antes de tomar el ticket.');
+      setActionError(t('support.errors.selectResponderTake'));
       return;
     }
     const resp = responders.find((r) => r.id === selectedResp);
     handleAction(
       { status: 'Open', responder_id: selectedResp || undefined, responder_name: resp?.name },
-      'Ticket tomado — ahora está Open',
+      t('support.success.ticketTaken'),
     );
   };
 
   const handleReassign = () => {
     if (!selectedResp) {
-      setActionError('Selecciona un responder para reasignar.');
+      setActionError(t('support.errors.selectResponderReassign'));
       return;
     }
     const resp = responders.find((r) => r.id === selectedResp);
     handleAction(
       { responder_id: selectedResp, responder_name: resp?.name },
-      'Ticket reasignado correctamente',
+      t('support.success.ticketReassigned'),
     );
   };
 
   const handleCloseTicket = () => {
     if (!solution.trim()) {
-      setActionError('Escribe una solución antes de cerrar el ticket.');
+      setActionError(t('support.errors.writeSolution'));
       return;
     }
     const resp = responders.find((r) => r.id === selectedResp);
@@ -221,7 +224,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
         responder_id:   selectedResp || undefined,
         responder_name: resp?.name,
       },
-      'Ticket cerrado correctamente',
+      t('support.success.ticketClosed'),
     );
   };
 
@@ -229,11 +232,11 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
     setDeleting(true);
     try {
       await deleteSupportTicket(ticketId);
-      toast.success('Ticket eliminado correctamente');
+      toast.success(t('support.success.ticketDeleted'));
       onUpdated?.();
       onClose(true);
     } catch (err) {
-      toast.error(err.message ?? 'Error al eliminar el ticket');
+      toast.error(err.message ?? t('support.errors.deleteTicket'));
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
@@ -267,7 +270,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
         exit={{   x: '100%',  opacity: 0 }}
         transition={{ type: 'spring', stiffness: 340, damping: 34, mass: 0.9 }}
         className="fixed right-0 top-0 h-full w-full max-w-[460px] z-[110] flex flex-col bg-white dark:bg-wellq-dark shadow-2xl border-l border-wellq-gray/20 dark:border-white/10 font-sans"
-        aria-label="Ticket details"
+        aria-label={t('support.ticketDetails', 'Detalle del ticket')}
         role="dialog"
       >
         {/* Color banner */}
@@ -294,7 +297,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border shadow-sm ${status.badge}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
                     <StatusIcon size={10} strokeWidth={2.5} />
-                    {ticket.status}
+                    {statusLabel(ticket.status, t)}
                   </span>
                 </div>
                 <h2 className="text-lg font-black text-wellq-dark dark:text-white leading-tight tracking-tight">
@@ -307,7 +310,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
           <button
             onClick={() => onClose(false)}
             className="p-2 rounded-xl text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/10 dark:hover:bg-white/10 transition-colors flex-shrink-0 mt-1 cursor-pointer"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X size={18} strokeWidth={2.5} />
           </button>
@@ -317,9 +320,9 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
         {!loading && ticket && (
           <div className="flex-shrink-0 flex items-end gap-0 px-6 border-b border-wellq-gray/10 dark:border-white/5 bg-white dark:bg-wellq-dark">
             {[
-              { id: 'info',      label: 'Info',      Icon: Info },
-              ...(!isClosed ? [{ id: 'gestionar', label: 'Gestionar', Icon: Settings }] : []),
-              { id: 'avanzado',  label: 'Avanzado',  Icon: AlertCircle }
+              { id: 'info',      label: t('support.tabs.info'),      Icon: Info },
+              ...(!isClosed ? [{ id: 'gestionar', label: t('support.tabs.manage'), Icon: Settings }] : []),
+              { id: 'avanzado',  label: t('support.tabs.advanced'),  Icon: AlertCircle }
             ].map(({ id, label, Icon: TabIcon }) => (
               <button
                 key={id}
@@ -391,7 +394,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                   {/* Category pill */}
                   <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border shadow-sm ${catMeta.cls}`}>
                     <CatIcon size={12} strokeWidth={2.5} />
-                    {ticket.category}
+                    {categoryLabel(ticket.category, t)}
                   </div>
 
                   {/* Description */}
@@ -449,9 +452,9 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                       <TimelineItem
                         Icon={StatusIcon}
                         label={t('support.reportedAt')}
-                        dateShort={fmtShort(ticket.reported_at)}
-                        dateLong={fmtLong(ticket.reported_at)}
-                        relative={fmtRelative(ticket.reported_at)}
+                        dateShort={fmtShort(ticket.reported_at, locale)}
+                        dateLong={fmtLong(ticket.reported_at, locale)}
+                        relative={fmtRelative(ticket.reported_at, t)}
                         dotColor={status.dot}
                         active
                       />
@@ -459,9 +462,9 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                         <TimelineItem
                           Icon={CheckCircle2}
                           label={t('support.closedAt')}
-                          dateShort={fmtShort(ticket.closed_at)}
-                          dateLong={fmtLong(ticket.closed_at)}
-                          relative={fmtRelative(ticket.closed_at)}
+                          dateShort={fmtShort(ticket.closed_at, locale)}
+                          dateLong={fmtLong(ticket.closed_at, locale)}
+                          relative={fmtRelative(ticket.closed_at, t)}
                           dotColor="bg-emerald-500"
                           active
                         />
@@ -516,11 +519,11 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                         <div className="flex items-center justify-between gap-2">
                           <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
                             <UserCog size={11} strokeWidth={2.5} />
-                            {isSent ? 'Asignar a' : 'Reasignar a'}
+                            {isSent ? t('support.assignTo') : t('support.reassignTo')}
                           </label>
                           {ticket.category && (
                             <span className="text-[9px] font-bold text-wellq-gray/50 tracking-normal bg-wellq-gray/10 dark:bg-white/5 px-2 py-0.5 rounded-md">
-                              Equipo sugerido: {categoryToGroup[ticket.category] ?? 'General'}
+                              {t('support.teamHint', { team: t(`support.fallbackGroups.${categoryToGroup[ticket.category] ?? 'general'}`) })}
                             </span>
                           )}
                         </div>
@@ -531,7 +534,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                             disabled={saving}
                             className="w-full appearance-none pl-4 pr-9 py-2.5 text-sm font-bold rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50 dark:[color-scheme:dark]"
                           >
-                            <option value="">— Seleccionar responder —</option>
+                            <option value="">{t('support.selectResponder')}</option>
                             {filteredResponders().map((r) => (
                               <option key={r.id} value={r.id}>
                                 {r.name}{r.group ? ` (${r.group})` : ''}
@@ -548,13 +551,13 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                       <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] p-5 space-y-3">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
                           <CheckCircle2 size={11} strokeWidth={2.5} />
-                          Solución
+                          {t('support.solution')}
                         </label>
                         <textarea
                           value={solution}
                           onChange={(e) => { setSolution(e.target.value); setActionError(null); }}
                           disabled={saving}
-                          placeholder="Describe cómo se resolvió el problema…"
+                          placeholder={t('support.solutionPlaceholder')}
                           rows={5}
                           className="w-full resize-none px-4 py-3 text-sm font-medium rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white placeholder:text-wellq-gray/50 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50"
                         />
@@ -570,7 +573,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                           onClick={handleTakeTicket}
                           loading={saving}
                           icon={UserCheck}
-                          label="Tomar ticket"
+                          label={t('support.takeTicket')}
                           variant="primary"
                         />
                       )}
@@ -580,7 +583,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                             onClick={handleReassign}
                             loading={saving}
                             icon={UserCog}
-                            label="Reasignar"
+                            label={t('support.reassign')}
                             variant="secondary"
                             disabled={!selectedResp}
                           />
@@ -588,7 +591,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                             onClick={handleCloseTicket}
                             loading={saving}
                             icon={CheckCircle2}
-                            label="Cerrar ticket"
+                            label={t('support.closeTicket')}
                             variant="success"
                             disabled={!solution.trim()}
                           />
@@ -613,14 +616,15 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                 >
                   <div className="space-y-2">
                     <h3 className="text-sm font-bold text-wellq-dark dark:text-white tracking-tight">
-                      Opciones Avanzadas
+                      {t('support.advancedOptions')}
                     </h3>
                     <p className="text-xs font-medium text-wellq-gray leading-relaxed">
-                      Acciones críticas y configuraciones adicionales del ticket.
+                      {t('support.advancedDesc')}
                     </p>
                   </div>
 
                   <DangerZone
+                    t={t}
                     confirmDelete={confirmDelete}
                     setConfirmDelete={setConfirmDelete}
                     deleting={deleting}
@@ -717,15 +721,15 @@ const TimelineItem = ({ Icon, label, dateShort, dateLong, relative, dotColor, ac
 );
 
 // ─── Danger Zone ──────────────────────────────────────────────────────────────
-const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => {
+const DangerZone = ({ t, confirmDelete, setConfirmDelete, deleting, onDelete }) => {
   return (
     <div className="rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50/50 dark:bg-red-500/5 p-5 space-y-3">
       <div className="flex items-center gap-2">
         <Trash2 size={16} className="text-red-500" strokeWidth={2.5} />
-        <h3 className="text-sm font-bold text-red-600 dark:text-red-400">Zona de Peligro</h3>
+        <h3 className="text-sm font-bold text-red-600 dark:text-red-400">{t('support.dangerZone')}</h3>
       </div>
       <p className="text-xs font-medium text-red-600/80 dark:text-red-400/80 leading-relaxed">
-        Eliminar un ticket es una acción irreversible. Todos los datos asociados se perderán permanentemente.
+        {t('support.dangerDesc')}
       </p>
       <AnimatePresence mode="wait">
         {!confirmDelete ? (
@@ -740,7 +744,7 @@ const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => 
               onClick={() => setConfirmDelete(true)}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-white dark:bg-wellq-dark border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
             >
-              Eliminar ticket
+              {t('support.deleteTicket')}
             </button>
           </motion.div>
         ) : (
@@ -756,7 +760,7 @@ const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => 
               disabled={deleting}
               className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-wellq-gray/10 dark:bg-white/10 text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               onClick={onDelete}
@@ -764,7 +768,7 @@ const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => 
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-sm shadow-red-500/20 disabled:opacity-50"
             >
               {deleting ? <Loader2 size={14} strokeWidth={2.5} className="animate-spin" /> : <Trash2 size={14} strokeWidth={2.5} />}
-              Sí, eliminar
+              {t('support.confirmDelete')}
             </button>
           </motion.div>
         )}

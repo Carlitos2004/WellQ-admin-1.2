@@ -7,13 +7,16 @@
     "platform": "Operaciones",
     "analytics": "Analíticas de Producto",
     "settings": "Configuración",
-    "support": "Soporte"
+    "support": "Soporte",
+    "collapse": "Colapsar menú",
+    "expand": "Expandir menú"
   },
   "topbar": {
     "searchPlaceholder": "Buscar clínicas, facturas...",
     "refresh": "Actualizar datos",
     "notifications": "Notificaciones",
-    "profile": "Perfil"
+    "profile": "Perfil",
+    "refreshSuccess": "Datos actualizados"
   },
   "overview": {
     "businessHealth": "Salud del Negocio",
@@ -54,7 +57,24 @@
     "openTickets": "Tickets abiertos",
     "total": "total",
     "noOpenTickets": "Sin tickets abiertos",
-    "viewAllTickets": "Ver todos los tickets"
+    "viewAllTickets": "Ver todos los tickets",
+    "webUsers": "Web",
+    "mobileUsers": "Móvil",
+    "serverNames": {
+      "AI Processing Node 1": "Nodo de procesamiento IA 1",
+      "Database Primary": "Base de datos primaria",
+      "Web App Server": "Servidor web de la app",
+      "Cache Redis": "Cache Redis",
+      "Queue Worker 1": "Trabajador de cola 1",
+      "Bull Queue Worker": "Trabajador de cola Bull"
+    },
+    "processNames": {
+      "Daily Invoice Generation": "Generación diaria de facturas",
+      "Video Pose Estimation Queue": "Cola de estimación de postura en video",
+      "Email Scheduler": "Programador de correos",
+      "Health Score Calculator": "Calculador de salud del cliente",
+      "Churn Prediction Job": "Tarea de predicción de churn"
+    }
   },
   "clinics": {
     "title": "Gestión de Clínicas",
@@ -97,6 +117,87 @@
       "health": "Salud",
       "lastLogin": "Último Acceso",
       "actions": "Acciones"
+    },
+    "placeholder": {
+      "waiting": "Esperando...",
+      "waitingDatabase": "Esperando base de datos"
+    },
+    "delete": {
+      "permanentTitle": "¿Eliminar Permanentemente?",
+      "churnTitle": "¿Dar de baja Clínica?",
+      "permanentMessageStart": "Estás a punto de borrar ",
+      "permanentMessageEnd": " de forma permanente. Esta acción purgará la base de datos y es absolutamente irreversible.",
+      "churnMessageStart": "Estás a punto de dar de baja a ",
+      "churnMessageEnd": ". Sus accesos serán suspendidos y pasará a la pestaña de \"Churned\".",
+      "purgeData": "Purgar Datos",
+      "moveToChurned": "Mover a Churned"
+    },
+    "create": {
+      "error": "Error al crear la clínica. Verifica los datos e intenta de nuevo.",
+      "title": "Nueva Clínica",
+      "subtitle": "Registra una nueva clínica en WellQ",
+      "successTitle": "¡Clínica creada!",
+      "successMessage": " ha sido registrada y está activa.",
+      "steps": {
+        "basic": "Básico",
+        "contact": "Contacto",
+        "billing": "Billing"
+      },
+      "labels": {
+        "clinicName": "Nombre de la Clínica",
+        "plan": "Plan",
+        "patientsLimit": "Límite Pacientes",
+        "mrr": "MRR (USD)",
+        "location": "Ubicación",
+        "contactName": "Nombre de Contacto",
+        "contactEmail": "Email de Contacto",
+        "phone": "Teléfono",
+        "companyName": "Razón Social",
+        "taxId": "RUT / Tax ID",
+        "billingEmail": "Email Facturación",
+        "address": "Dirección",
+        "internalNotes": "Notas Internas"
+      },
+      "placeholders": {
+        "clinicName": "Ej: Clínica San Rafael",
+        "location": "Ej: Santiago, Chile",
+        "contactName": "Ej: Ana Martínez",
+        "contactEmail": "admin@clinica.com",
+        "phone": "+56 9 XXXX XXXX",
+        "companyName": "Ej: Clínica San Rafael SpA",
+        "taxId": "76.XXX.XXX-K",
+        "billingEmail": "facturas@clinica.com",
+        "address": "Av. Principal 123, Ciudad",
+        "internalNotes": "Notas privadas del equipo WellQ..."
+      },
+      "creating": "Creando...",
+      "submitButton": "Crear Clínica",
+      "mainButton": "Crear Clínica"
+    },
+    "exportFailed": "Exportación fallida",
+    "filterLabels": {
+      "tier": "Tier",
+      "status": "Estado"
+    },
+    "clearFilters": "Limpiar filtros",
+    "pagination": {
+      "showing": "Mostrando ",
+      "clinicsPlural": " clínicas"
+    },
+    "live": "En vivo",
+    "createClinic": "Crear clínica",
+    "tiers": {
+      "trial": "Prueba",
+      "smb": "SMB",
+      "pro": "Pro",
+      "enterprise": "Empresarial",
+      "waiting": "Esperando"
+    },
+    "actions": {
+      "settings": "Configuración",
+      "billing": "Facturación",
+      "supportAccess": "Acceso de soporte",
+      "deleteClinic": "Eliminar clínica"
     }
   },
   "common": {
@@ -108,7 +209,19 @@
     "send": "Enviar",
     "delete": "Eliminar",
     "confirm": "Confirmar",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "clear": "Limpiar",
+    "processing": "Procesando...",
+    "timeAgo": {
+      "minutes": "hace {{count}}m",
+      "hours": "hace {{count}}h",
+      "yesterday": "Ayer",
+      "oneDay": "hace 1 día",
+      "days": "hace {{count}} días"
+    },
+    "all": "Todos"
   },
   "settings": {
     "general": "Configuración General",
@@ -160,7 +273,15 @@
     "userDeleted": "Usuario eliminado correctamente",
     "errorDeleteUser": "Error al eliminar el usuario",
     "deleteUserTitle": "Eliminar usuario",
-    "deleteUserMessage": "¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer."
+    "deleteUserMessage": "¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.",
+    "checking": "Checking...",
+    "online": "Online",
+    "degraded": "Degraded",
+    "unreachable": "Unreachable",
+    "cloudAuth": "Autenticación para servicios en la nube",
+    "teamManagement": "Gestión de usuarios y accesos",
+    "technicalContact": "Contacto técnico",
+    "accessConfig": "Configuración de acceso"
   },
   "support": {
     "title": "Tickets de soporte",
@@ -209,7 +330,122 @@
     "tabResponders": "Equipo de Resolutores",
     "errorLoadConfig": "Error al cargar la configuración",
     "newTicketDesc": "Completa los campos para crear el ticket",
-    "assignTeamHint": "Este ticket irá al equipo"
+    "assignTeamHint": "Este ticket irá al equipo",
+    "ticketCreated": "Ticket creado correctamente",
+    "titleLabel": "Título *",
+    "categoryLabel": "Categoría *",
+    "clinicLabel": "Clínica *",
+    "choosePlaceholder": " Elegir ",
+    "selectPlaceholder": " Seleccionar ",
+    "selectCategoryFirst": "— Elige una categoría primero —",
+    "noRespondersTeam": "Sin responders para este equipo",
+    "unassigned": "— Sin asignar —",
+    "descriptionLabel": "Descripción *",
+    "descriptionPlaceholder": "Describe el problema con el mayor detalle posible...",
+    "reporterNameLabel": "Nombre del reportador",
+    "reporterEmailLabel": "Email del reportador",
+    "reporterNamePlaceholder": "Ej: Juan Pérez",
+    "reporterEmailPlaceholder": "juan@clinica.cl",
+    "cancel": "Cancelar",
+    "creating": "Creando...",
+    "ticketStatus": {
+      "open": "Abierto",
+      "closed": "Cerrado",
+      "sent": "Enviado"
+    },
+    "tabs": {
+      "info": "Info",
+      "manage": "Gestionar",
+      "advanced": "Avanzado"
+    },
+    "closedBanner": "Ticket cerrado — no requiere acciones adicionales",
+    "reassignTo": "Reasignar a",
+    "teamHint": "Equipo sugerido: {{team}}",
+    "selectResponder": "— Seleccionar responder —",
+    "noResponders": "Sin responders para este equipo",
+    "solutionPlaceholder": "Describe cómo se resolvió el problema...",
+    "closeTicket": "Cerrar ticket",
+    "advancedOptions": "Opciones Avanzadas",
+    "advancedDesc": "Acciones críticas y configuraciones adicionales del ticket.",
+    "dangerZone": "Zona de Peligro",
+    "dangerDesc": "Eliminar un ticket es una acción irreversible. Todos los datos asociados se perderán permanentemente.",
+    "deleteTicket": "Eliminar ticket",
+    "confirmDelete": "Sí, eliminar",
+    "activeCategories": "Categorías Activas",
+    "newCategory": "Nueva Categoría",
+    "categoryDeactivated": "Categoría desactivada",
+    "categoryReactivated": "Categoría reactivada",
+    "statusChangeError": "Error al cambiar el estado",
+    "supportAgents": "Agentes de Soporte",
+    "newResponder": "Nuevo Resolutor",
+    "deleteResponderConfirm": "¿Seguro que deseas eliminar a {{name}}?",
+    "responderDeleted": "Resolutor eliminado",
+    "responderHasTickets": "No se puede eliminar: Tiene tickets activos asignados. Reasígnalos primero.",
+    "deleteResponderError": "Error al eliminar el resolutor",
+    "inactive": "Inactiva",
+    "teamLabel": "Equipo: {{team}}",
+    "noNotificationEmails": "Sin correos de notificación",
+    "newCategoryModal": "Nueva Categoría",
+    "editCategoryModal": "Editar Categoría",
+    "categoryNameLabel": "Nombre de la Categoría *",
+    "teamOptionalLabel": "Equipo Encargado (Opcional)",
+    "notificationEmailsLabel": "Correos de Notificación",
+    "emailPlaceholder": "Escribe el correo y presiona Enter...",
+    "emailHint": "Presiona Enter o Espacio para agregar múltiples correos.",
+    "nameRequired": "El nombre es obligatorio",
+    "teamRequired": "El equipo es obligatorio",
+    "categorySaved": "Categoría guardada",
+    "saveError": "Error al guardar",
+    "newResponderModal": "Nuevo Resolutor",
+    "editResponderModal": "Editar Resolutor",
+    "fullNameLabel": "Nombre Completo *",
+    "usernameLabel": "Username (Login) *",
+    "teamLabelRequired": "Equipo *",
+    "emailNotificationsLabel": "Correo Electrónico (Notificaciones)",
+    "tempPasswordLabel": "Contraseña Temporal *",
+    "nameUsernameRequired": "Nombre y Username son obligatorios",
+    "responderSaved": "Resolutor guardado",
+    "invalidEmailOrDuplicate": "Formato de correo inválido o duplicado",
+    "invalidEmail": "Formato de correo inválido",
+    "passwordRequiredNew": "La contraseña es obligatoria para nuevos usuarios",
+    "fallbackGroups": {
+      "financial": "Financiero",
+      "technical": "Técnico",
+      "general": "General"
+    },
+    "errors": {
+      "titleRequired": "El título es obligatorio.",
+      "descriptionRequired": "La descripción es obligatoria.",
+      "categoryRequired": "Selecciona una categoría.",
+      "clinicRequired": "Selecciona una clínica.",
+      "invalidEmail": "El email del reportador no tiene formato válido (falta @ o dominio).",
+      "createFailed": "Error al crear el ticket",
+      "selectResponderTake": "Selecciona un responder antes de tomar el ticket.",
+      "selectResponderReassign": "Selecciona un responder para reasignar.",
+      "writeSolution": "Escribe una solución antes de cerrar el ticket.",
+      "updateTicket": "Error al actualizar el ticket",
+      "deleteTicket": "Error al eliminar el ticket"
+    },
+    "success": {
+      "ticketTaken": "Ticket tomado — ahora está Abierto",
+      "ticketReassigned": "Ticket reasignado correctamente",
+      "ticketClosed": "Ticket cerrado correctamente",
+      "ticketDeleted": "Ticket eliminado correctamente"
+    },
+    "categoryLabels": {
+      "Bug": "Error",
+      "Billing": "Facturación",
+      "Feature": "Funcionalidad",
+      "Request": "Solicitud"
+    },
+    "rate": "Tasa",
+    "resolution": "Resolución",
+    "statusLabels": {
+      "Open": "Abierto",
+      "Closed": "Cerrado",
+      "Sent": "Enviado"
+    },
+    "ticketDetails": "Detalle del ticket"
   },
   "health": {
     "title": "Salud de pacientes",
@@ -232,7 +468,19 @@
     "vsLastMonth": "vs mes anterior",
     "churnRiskSub": "Evaluación de riesgo por región",
     "mrrBreakdownSub": "Desglose mensual de cambios en ingresos",
-    "mrrAtRisk": "MRR en riesgo"
+    "mrrAtRisk": "MRR en riesgo",
+    "newBizExpansion": "Nuevo negocio + expansión",
+    "newShort": "nuevo",
+    "expShort": "exp",
+    "monthOverMonth": "mes a mes",
+    "regions": {
+      "North America": "Norteamérica",
+      "LATAM": "LATAM",
+      "Europe": "Europa",
+      "Asia Pacific": "Asia Pacífico"
+    },
+    "detail": "Detalle",
+    "churn": "Pérdida"
   },
   "platform": {
     "costPerSession": "Costo por Sesión",
@@ -251,11 +499,32 @@
     "activeVersions": "Versiones activas",
     "minVersion": "Versión mínima",
     "noForce": "Sin forzar",
-    "loadingVersions": "Cargando versiones…",
+    "loadingVersions": "Cargando versiones...",
     "errorVersions": "Error al cargar versiones",
     "noVersionsYet": "Sin datos de versiones aún.",
     "users": "usuarios",
-    "waitingDatabase": "Esperando base de datos"
+    "waitingDatabase": "Esperando base de datos",
+    "liveAvg": "Promedio en vivo",
+    "serviceNames": {
+      "soap_generation": "Generación SOAP",
+      "pose_estimation_request": "Estimación de postura",
+      "pose_estimation_queue": "Cola de estimación de postura"
+    },
+    "serverNames": {
+      "ai_processing_node_1": "Nodo de procesamiento IA 1",
+      "database_primary": "Base de datos primaria",
+      "web_app_server": "Servidor web de la app",
+      "cache_redis": "Caché Redis",
+      "queue_worker_1": "Trabajador de cola 1"
+    },
+    "appTypes": {
+      "patient": "Paciente",
+      "patients": "Pacientes",
+      "clinician": "Clínico",
+      "tablet": "Tablet",
+      "web": "Web",
+      "unknown": "Desconocido"
+    }
   },
   "analytics": {
     "appUsage": "Uso de App por Plataforma",
@@ -274,7 +543,15 @@
     "avgSessionTablet": "Sesión promedio (tablet)",
     "crashFreePatient": "Sin fallos (paciente)",
     "crashFreeTablet": "Sin fallos (tablet)",
-    "topDropOff": "Mayor abandono"
+    "topDropOff": "Mayor abandono",
+    "live": "En vivo",
+    "featureNames": {
+      "soap_note_generation": "Generación de notas SOAP",
+      "pose_analysis": "Análisis de postura"
+    },
+    "weekPrefix": "Semana",
+    "monthPrefix": "Mes",
+    "dayPrefix": "Día"
   },
   "plans": {
     "library": "Biblioteca de Planes",
@@ -293,6 +570,7 @@
     "noFeaturesMatch": "No hay funcionalidades que coincidan con los filtros",
     "loadingPlans": "Cargando planes...",
     "loadingFeatures": "Cargando funcionalidades...",
+    "loadingArchived": "Cargando planes archivados...",
     "remove": "Eliminar",
     "planNamePlaceholder": "Nombre del plan",
     "planDescPlaceholder": "Descripción breve",
@@ -337,7 +615,65 @@
     "archiveTitle": "Archivar plan",
     "archiveMessage": "¿Estás seguro de que quieres archivar el plan \"{{name}}\"? Los clientes existentes no se verán afectados.",
     "deleteFeatureTitle": "Eliminar funcionalidad",
-    "deleteFeatureMessage": "¿Estás seguro de que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer."
+    "deleteFeatureMessage": "¿Estás seguro de que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+    "deleteTitle": "Eliminar permanentemente",
+    "impactDetected": "Impacto detectado",
+    "activeClinicsInPlan": "Clínicas activas en este plan",
+    "arrAtRisk": "ARR en riesgo",
+    "historicalTotal": "Historial total (activas + pasadas)",
+    "deleteBlocked": "Este plan tiene {{count}} asignación{{plural}} en clínicas (activas o históricas). Para preservar el historial financiero, no se puede eliminar. Usa \"Archivar\".",
+    "deleteConfirm": "Esta acción es irreversible. El plan y toda su configuración serán eliminados permanentemente de la base de datos.",
+    "archiveActiveClinics": "Las {{count}} clínicas actualmente en este plan no se verán afectadas de inmediato, pero deberán ser migradas a otro plan.",
+    "archiveNoClinics": "El plan dejará de estar disponible para nuevas asignaciones. Las clínicas no se verán afectadas.",
+    "deleteBlockedButton": "Eliminar (bloqueado)",
+    "deletePlan": "Eliminar plan",
+    "archivePlan": "Archivar plan",
+    "archived": "Archivado",
+    "archivedOn": "Archivado el",
+    "archivedPlansTitle": "Planes en desuso",
+    "archivedPlansSubtitle": "Planes archivados: visibilidad del impacto operativo y financiero",
+    "archivedPlansKPI": "Planes archivados",
+    "clinicsWithObsoletePlan": "Clínicas con plan obsoleto",
+    "noArchivedPlans": "Sin planes archivados",
+    "noArchivedPlansSub": "Los planes que archives aparecerán aquí",
+    "added": "agregado",
+    "restorePlan": "Restaurar plan",
+    "deletedSuccess": "\"{{name}}\" eliminado permanentemente",
+    "deleteError": "Error al eliminar el plan",
+    "restoreSuccess": "\"{{name}}\" restaurado exitosamente",
+    "restoreError": "Error al restaurar el plan",
+    "archivedTab": "Archivados",
+    "planNames": {
+      "enterprise": "Empresarial",
+      "smb": "SMB",
+      "trial": "Prueba"
+    },
+    "planDescriptions": {
+      "enterprise": "Redes hospitalarias y varias sedes",
+      "smb": "Clínicas pequeñas y medianas",
+      "trial": "Evaluación gratuita de 14 días"
+    },
+    "featureNames": {
+      "active_patients": "Pacientes activos",
+      "clinician_seats": "Licencias clínicas",
+      "tablet_devices": "Tablets",
+      "clinic_locations": "Sedes clínicas",
+      "pose_analysis": "Análisis de postura",
+      "soap_note_generation": "Generación de notas SOAP",
+      "cloud_storage": "Almacenamiento en la nube",
+      "support_tier": "Nivel de soporte"
+    },
+    "featureUnits": {
+      "patients": "pacientes",
+      "seats": "licencias",
+      "devices": "dispositivos",
+      "locations": "sedes",
+      "sessions/mo": "sesiones/mes",
+      "notes/mo": "notas/mes",
+      "email": "Correo"
+    },
+    "permanentlyDeleted": "\"{{name}}\" eliminado permanentemente",
+    "restored": "\"{{name}}\" restaurado correctamente"
   },
   "values": {
     "support_integrations": "Soporte e Integraciones",
@@ -373,7 +709,22 @@
     "medium": "Medio",
     "high": "Alto",
     "critical": "Crítico",
-    "low": "Bajo"
+    "low": "Bajo",
+    "trial": "Prueba",
+    "churned": "Perdida",
+    "waiting": "Esperando",
+    "onboarding": "En incorporación",
+    "delinquent": "Morosa",
+    "enterprise": "Empresarial",
+    "smb": "SMB",
+    "pro": "Pro",
+    "suspended": "Suspendida",
+    "paid": "Pagada",
+    "pending": "Pendiente",
+    "overdue": "Vencida",
+    "unknown": "Desconocido",
+    "draft": "Borrador",
+    "archived": "Archivado"
   },
   "churn": {
     "riskLow": "Riesgo bajo",
@@ -398,5 +749,300 @@
       "title": "Prueba por terminar",
       "message": "{{clinic}} finaliza su prueba en {{days}} días. Sin plan activo asignado."
     }
+  },
+  "viewMeta": {
+    "overview": {
+      "subtitle": "Resumen general y estado"
+    },
+    "clinics": {
+      "subtitle": "Gestión de clínicas activas"
+    },
+    "plans": {
+      "subtitle": "Planes y suscripciones"
+    },
+    "financials": {
+      "subtitle": "MRR, churn y finanzas"
+    },
+    "platform": {
+      "subtitle": "Infraestructura y costos AI"
+    },
+    "analytics": {
+      "subtitle": "Adopción y calidad del sistema"
+    },
+    "support": {
+      "subtitle": "Gestión de tickets"
+    },
+    "settings": {
+      "subtitle": "Configuración global"
+    }
+  },
+  "notifications": {
+    "title": "Notificaciones",
+    "subtitle": "Historial de mensajes enviados",
+    "empty": "Sin notificaciones",
+    "count": "{{count}} notificación",
+    "countPlural": "{{count}} notificaciones",
+    "status": {
+      "sent": "Enviado",
+      "pending": "Pendiente",
+      "failed": "Fallido"
+    }
+  },
+  "theme": {
+    "lightMode": "Modo claro",
+    "darkMode": "Modo oscuro"
+  },
+  "auth": {
+    "logout": "Cerrar sesión",
+    "logoutSuccess": "Sesión cerrada correctamente",
+    "loginSuccess": "✅ Sesión iniciada en {{clinicName}}"
+  },
+  "app": {
+    "adminConsole": "Consola Admin",
+    "userFallback": "Usuario",
+    "adminFallback": "Admin"
+  },
+  "login": {
+    "form": {
+      "loginTitle": "Login",
+      "loginSubtitle": "Inicia sesión para continuar",
+      "registerTitle": "Sign Up",
+      "registerSubtitle": "Crear nueva cuenta",
+      "forgotTitle": "Recuperar acceso",
+      "forgotSubtitle": "Te enviaremos un código de recuperación.",
+      "resetTitle": "Nuevo acceso",
+      "resetSubtitle": "Código enviado a {{email}}",
+      "emailLabel": "Correo electrónico",
+      "emailPlaceholder": "Correo electrónico",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Contraseña",
+      "fullNameLabel": "Nombre completo",
+      "fullNamePlaceholder": "Nombre completo",
+      "roleLabel": "Rol",
+      "confirmPasswordLabel": "Confirmar contraseña",
+      "confirmPasswordPlaceholder": "Confirmar contraseña",
+      "codeLabel": "Código",
+      "codePlaceholder": "Código de 6 dígitos",
+      "newPasswordLabel": "Nueva contraseña",
+      "newPasswordPlaceholder": "Nueva contraseña",
+      "loginLoading": "Iniciando...",
+      "loginSubmit": "Iniciar sesión",
+      "registerLoading": "Creando...",
+      "registerSubmit": "Crear cuenta",
+      "sendLoading": "Enviando...",
+      "sendCodeSubmit": "Enviar código",
+      "updateLoading": "Actualizando...",
+      "updatePasswordSubmit": "Actualizar contraseña",
+      "noAccountText": "¿No tienes cuenta? ",
+      "registerLink": "Regístrate",
+      "hasAccountText": "¿Ya tienes cuenta? ",
+      "loginLink": "Inicia sesión",
+      "forgotPasswordLink": "¿Olvidaste tu contraseña?",
+      "backToLogin": "Volver al login",
+      "resendCode": "Reenviar código",
+      "back": "Volver"
+    },
+    "movingPanel": {
+      "recoverAccessTitle": "Recuperar \n acceso",
+      "welcomeBackTitle": "Bienvenido \n de vuelta",
+      "welcomeTitle": "Bienvenido",
+      "recoverDesc": "Solicita un código seguro y define una nueva contraseña para tu cuenta.",
+      "loginDesc": "Accede nuevamente a WellQ Admin con una experiencia moderna, elegante y rápida.",
+      "registerDesc": "Crea una cuenta y administra todo desde un solo lugar.",
+      "loginButton": "Iniciar sesión",
+      "registerButton": "Crear cuenta"
+    },
+    "mobilePanel": {
+      "recoverAccessTitle": "Recuperar acceso",
+      "welcomeBackTitle": "Bienvenido de vuelta",
+      "welcomeTitle": "Bienvenido",
+      "loginButton": "Iniciar sesión",
+      "registerButton": "Crear cuenta"
+    },
+    "validation": {
+      "emailRequired": "Ingresa tu correo.",
+      "emailInvalid": "Ingresa un correo válido.",
+      "nameRequired": "Ingresa tu nombre.",
+      "nameMinLength": "Mínimo 3 caracteres.",
+      "passwordRequired": "Ingresa una contraseña.",
+      "passwordMinLength": "Mínimo 8 caracteres.",
+      "codeRequired": "Ingresa el código.",
+      "codeFormat": "Debe tener 6 dígitos.",
+      "passwordsMismatch": "Las contraseñas no coinciden."
+    },
+    "errors": {
+      "fixFields": "Revisa los campos antes de iniciar sesión.",
+      "fixFieldsRegister": "Revisa los campos antes de crear la cuenta.",
+      "fixResetFields": "Revisa el código y la nueva contraseña.",
+      "invalidCredentials": "Credenciales incorrectas. Verifica tu email y contraseña.",
+      "registerFailed": "No se pudo crear la cuenta.",
+      "connectionError": "Error de conexión. Verifica el servidor.",
+      "validEmailRequired": "Ingresa un correo válido para recuperar tu acceso.",
+      "codeSendFailed": "No se pudo enviar el código.",
+      "passwordUpdateFailed": "No se pudo actualizar la contraseña."
+    },
+    "success": {
+      "accountCreated": "Cuenta creada correctamente.",
+      "codeSentIfExists": "Si el correo existe, enviaremos un código.",
+      "passwordUpdated": "Contraseña actualizada. Ya puedes iniciar sesión."
+    },
+    "passwordStrength": {
+      "prefix": "Fortaleza: ",
+      "low": "baja",
+      "medium": "media",
+      "high": "alta"
+    },
+    "a11y": {
+      "hidePassword": "Ocultar contraseña",
+      "showPassword": "Mostrar contraseña"
+    },
+    "roles": {
+      "viewerReadOnly": "Viewer solo lectura"
+    }
+  },
+  "clinicPortal": {
+    "error": {
+      "missingParams": "Faltan parámetros en la URL. Se esperaba token y clinic_id.",
+      "invalidSession": "Sesión inválida o expirada.",
+      "loadFailed": "No se pudo cargar el portal de la clínica.",
+      "title": "No se pudo abrir el portal"
+    },
+    "banner": {
+      "supportAccess": "Acceso de soporte"
+    },
+    "header": {
+      "readOnly": "Portal read-only",
+      "titleFallback": "Portal de clínica",
+      "expiresAt": " - expira {{date}}"
+    },
+    "stats": {
+      "patients": "Pacientes",
+      "usagePercent": "% de uso",
+      "activeClinicians": "Clínicos activos",
+      "healthScore": "Health score",
+      "operationalStatus": "Estado operacional",
+      "aiActivity": "Actividad IA",
+      "minutesProcessed": "minutos procesados"
+    },
+    "sections": {
+      "clinicData": "Datos de la clínica",
+      "contact": "Contacto",
+      "monthlyUsage": "Uso del mes"
+    },
+    "fields": {
+      "companyName": "Razón social",
+      "taxId": "RUT / Tax ID",
+      "address": "Dirección",
+      "mrr": "MRR",
+      "lastLogin": "Último login",
+      "createdAt": "Creada",
+      "phone": "Teléfono",
+      "name": "Nombre",
+      "email": "Email"
+    },
+    "health": {
+      "stablePlural": "Estables",
+      "declining": "Declinando"
+    },
+    "usage": {
+      "appointments": "Citas",
+      "soapNotes": "Notas SOAP",
+      "exercises": "Ejercicios",
+      "apiCalls": "API calls"
+    },
+    "footer": {
+      "readOnlySession": "Sesión solo lectura iniciada por {{admin}}."
+    }
+  },
+  "server": {
+    "cpuUsage": "Uso de CPU",
+    "memoryRam": "Memoria (RAM)",
+    "region": "Región",
+    "uptimeLabel": "Disponibilidad",
+    "serverId": "ID del servidor",
+    "type": "Tipo",
+    "lastUpdated": "Última actualización",
+    "na": "N/A",
+    "serverDefaultType": "Servidor",
+    "justNow": "Ahora mismo",
+    "liveMetrics": "Métricas en vivo",
+    "serverUnavailable": "Servidor no disponible",
+    "performanceDegraded": "Rendimiento degradado",
+    "serverDownMessage": "Este servidor está caído. Revisa logs y escala si es necesario.",
+    "performanceDegradedMessage": "Este servidor muestra uso elevado de recursos. Monitorea de cerca.",
+    "details": "Detalles",
+    "resourceSummary": "Resumen de recursos",
+    "elevated": "Elevado",
+    "normal": "Normal",
+    "liveDataFromDatabase": "Datos en vivo desde la base de datos",
+    "cpu": "CPU",
+    "ram": "RAM",
+    "queueJobsStatus": "Estado de colas y tareas",
+    "jobs": "tareas",
+    "mrrPrefix": "MRR: ",
+    "expansionPrefix": "Expansión: ",
+    "churnMrrPrefix": "MRR perdido: "
+  },
+  "clinicDrawer": {
+    "tabs": {
+      "overview": "Resumen",
+      "settings": "Configuración",
+      "invoices": "Facturas"
+    },
+    "contactInfo": "Información de contacto",
+    "decisionMaker": "Responsable principal",
+    "email": "Correo electrónico",
+    "phone": "Teléfono",
+    "subscription": "Suscripción",
+    "currentPlan": "Plan actual",
+    "contractValue": "Valor del contrato",
+    "usageStats": "Estadísticas de uso",
+    "patientSessions": "Sesiones de pacientes",
+    "activeClinicians": "Clínicos activos",
+    "waitingDb": "Esperando DB...",
+    "contactClinicTitle": "Contactar Clínica",
+    "emailSent": "¡Email enviado!",
+    "emailQueued": "Mensaje en cola de envío.",
+    "subjectLabel": "Asunto",
+    "messageLabel": "Mensaje",
+    "messagePlaceholder": "Escribe tu mensaje aquí...",
+    "sending": "Enviando...",
+    "sendEmail": "Enviar Email",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "invoiceStatus": {
+      "paid": "Pagada",
+      "pending": "Pendiente",
+      "overdue": "Vencida"
+    },
+    "saveError": "Error al guardar. Intenta de nuevo.",
+    "settingsTitle": "Configuración de clínica",
+    "invoicesTitle": "Facturación",
+    "overviewTitle": "Resumen de clínica",
+    "downloadInvoice": "Descargar factura",
+    "downloadError": "Error al descargar",
+    "saving": "Guardando...",
+    "updated": "¡Actualizado!",
+    "clinicConfiguration": "Configuración de clínica",
+    "clinicConfigurationSubtitle": "Gestiona los datos principales y el estado de esta cuenta.",
+    "clinicName": "Nombre de la clínica",
+    "assignedPlan": "Plan asignado",
+    "accountStatus": "Estado de la cuenta",
+    "saveChanges": "Guardar cambios",
+    "billingHistory": "Historial de facturación",
+    "billingHistorySubtitle": "Facturas recientes y estado de pago.",
+    "exportExcel": "Exportar Excel",
+    "exportInvoicesTitle": "Exportar facturas como Excel con pestañas",
+    "contactClinic": "Contactar clínica",
+    "yearlySuffix": "/año"
+  },
+  "impersonate": {
+    "title": "Acceso de Soporte",
+    "subtitle": "Abre un portal read-only de la clínica para soporte.",
+    "warning": "Este acceso es auditado y solo lectura.",
+    "expires": "Expira en 30 minutos",
+    "confirmAccess": "Confirmar Acceso",
+    "confirming": "Abriendo...",
+    "cancel": "Cancelar"
   }
 }

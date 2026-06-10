@@ -1,0 +1,15 @@
+{
+  "name": "wellq-admin",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c cyan,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && .venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --port 8000",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "setup": "npm run setup:frontend && npm run setup:backend",
+    "setup:frontend": "npm --prefix frontend install",
+    "setup:backend": "py -3.12 -m venv backend\\.venv && backend\\.venv\\Scripts\\python.exe -m pip install --upgrade pip && backend\\.venv\\Scripts\\python.exe -m pip install -r backend\\requirements.txt"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
