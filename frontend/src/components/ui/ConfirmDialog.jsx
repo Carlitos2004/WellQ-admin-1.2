@@ -1,11 +1,15 @@
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function ConfirmDialog({ open, title, message, onConfirm, onCancel }) {
+  const { t } = useLanguage();
+
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} />
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-white dark:bg-wellq-dark rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 border border-wellq-gray/20 dark:border-wellq-gray/30">
         <button
           onClick={onCancel}
@@ -20,16 +24,17 @@ export default function ConfirmDialog({ open, title, message, onConfirm, onCance
             onClick={onCancel}
             className="px-4 py-2 text-sm font-medium text-wellq-gray dark:text-wellq-gray/80 hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 rounded-lg"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
             className="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600"
           >
-            Confirmar
+            {t('common.confirm')}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LifeBuoy, RefreshCw, AlertTriangle, CheckCircle2, Send, Zap, Plus, Settings } from 'lucide-react'; // ← +Settings [plan: SupportView cambio #1]
+import { LifeBuoy, AlertTriangle, CheckCircle2, Send, Zap, Plus, Settings } from 'lucide-react'; // ← +Settings [plan: SupportView cambio #1]
 import { toast } from 'sonner';
-import { fetchSupportTickets, createSupportTicket, fetchTicketCategories } from '../api/client'; // ← +fetchTicketCategories [plan: SupportView cambio #2]
+import { fetchSupportTickets, fetchTicketCategories } from '../api/client'; // ← +fetchTicketCategories [plan: SupportView cambio #2]
 import { SupportTicketTable } from '../components/support/SupportTicketTable';
 import { SupportTicketDrawer } from '../components/support/SupportTicketDrawer';
 import { CreateTicketModal } from '../components/support/CreateTicketModal';
 import { SupportConfigPanel } from '../components/support/SupportConfigPanel'; // ← NUEVO componente [plan: SupportView cambio #1]
 import { useLanguage } from '../contexts/LanguageContext';
 import { Skeleton } from '../components/ui';
+import useHasPermission from '../hooks/useHasPermission';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 export const STATUS_META = {
@@ -60,6 +61,7 @@ export const CATEGORY_META = {
 // ─── Main view ────────────────────────────────────────────────────────────────
 export const SupportView = ({ apiClinics = [] }) => {
   const { t } = useLanguage();
+  const canManageTickets = useHasPermission('tickets.manage');
 
   // ── Estado existente ──────────────────────────────────────────────────────
   const [tickets,    setTickets]    = useState([]);
@@ -68,7 +70,6 @@ export const SupportView = ({ apiClinics = [] }) => {
   const [loading,    setLoading]    = useState(true);
   const [filters,    setFilters]    = useState({ page: 1, page_size: 20 });
   const [selected,   setSelected]   = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false); // ← modal de nuevo ticket
 
   // ── NUEVO: categorías dinámicas + panel de configuración ──────────────────
@@ -94,7 +95,6 @@ export const SupportView = ({ apiClinics = [] }) => {
       toast.error(err.message ?? t('support.errorLoading'));
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,13 +116,6 @@ export const SupportView = ({ apiClinics = [] }) => {
       .then((res) => setCategories(res?.details ?? [])) // ← CORRECCIÓN AQUÍ
       .catch(() => {});
   }, []);
-
-  // ── Handlers existentes ───────────────────────────────────────────────────
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await load(filters);
-    toast.success(t('support.refreshed'));
-  };
 
   const handleFilterChange = (newFilters) => setFilters((prev) => ({ ...prev, ...newFilters }));
   const handlePageChange   = (newPage)    => setFilters((prev) => ({ ...prev, page: newPage }));
@@ -196,46 +189,35 @@ export const SupportView = ({ apiClinics = [] }) => {
 
           {/* ── NUEVO: Configurar — abre SupportConfigPanel ────────────────── */}
           {/* [plan de acción — SupportView cambio #1] */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setShowConfig(true)}
-            className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-[#1e293b] text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all shadow-sm"
-          >
-            <Settings
-              size={13}
-              strokeWidth={2.5}
-              className="transition-transform group-hover:rotate-45 duration-300"
-            />
-            {t('support.configure', 'Configurar')}
-          </motion.button>
+          {canManageTickets && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setShowConfig(true)}
+              className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-[#1e293b] text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all shadow-sm"
+            >
+              <Settings
+                size={13}
+                strokeWidth={2.5}
+                className="transition-transform group-hover:rotate-45 duration-300"
+              />
+              {t('support.configure')}
+            </motion.button>
+          )}
 
           {/* Nuevo ticket (existente) */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-wellq-blue to-wellq-cyan text-wellq-dark text-[13px] font-bold shadow-sm shadow-wellq-cyan/20 ring-1 ring-white/10 transition-all hover:shadow-md hover:shadow-wellq-cyan/30"
-          >
-            <Plus size={14} strokeWidth={2.5} />
-            {t('support.newTicket', 'Nuevo ticket')}
-          </motion.button>
+          {canManageTickets && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-wellq-blue to-wellq-cyan text-wellq-dark text-[13px] font-bold shadow-sm shadow-wellq-cyan/20 ring-1 ring-white/10 transition-all hover:shadow-md hover:shadow-wellq-cyan/30"
+            >
+              <Plus size={14} strokeWidth={2.5} />
+              {t('support.newTicket')}
+            </motion.button>
+          )}
 
-          {/* Refresh (existente) */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-[#1e293b] text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all disabled:opacity-40 shadow-sm"
-          >
-            <RefreshCw
-              size={13}
-              strokeWidth={2.5}
-              className={`transition-transform ${refreshing ? 'animate-spin' : 'group-hover:rotate-180 duration-500'}`}
-            />
-            {t('topbar.refresh')}
-          </motion.button>
         </div>
       </motion.div>
 
@@ -295,6 +277,7 @@ export const SupportView = ({ apiClinics = [] }) => {
             ticketId={selected}
             onClose={handleDrawerClose}
             onUpdated={() => load(filters)}
+            canManageTickets={canManageTickets}
             categories={categories} // ← NUEVO [plan: Drawer cambio #1 — CATEGORY_TO_GROUP dinámico]
           />
         )}
@@ -302,7 +285,7 @@ export const SupportView = ({ apiClinics = [] }) => {
 
       {/* ── Modal: Nuevo ticket ─────────────────────────────────────────────── */}
       <AnimatePresence>
-        {showCreate && (
+        {canManageTickets && showCreate && (
           <CreateTicketModal
             clinics={apiClinics}
             categories={categories} // ← NUEVO [plan: CreateTicketModal — categorías dinámicas]
@@ -310,7 +293,7 @@ export const SupportView = ({ apiClinics = [] }) => {
             onCreated={() => {
               setShowCreate(false);
               load(filters);
-              toast.success(t('support.ticketCreated', 'Ticket creado correctamente'));
+              toast.success(t('support.ticketCreated'));
             }}
           />
         )}
@@ -319,7 +302,7 @@ export const SupportView = ({ apiClinics = [] }) => {
       {/* ── NUEVO: Panel de configuración (categorías + resolutores) ────────── */}
       {/* [plan de acción — SupportView cambio #1 + SupportConfigPanel nuevo] */}
       <AnimatePresence>
-        {showConfig && (
+        {canManageTickets && showConfig && (
           <SupportConfigPanel
             onClose={() => setShowConfig(false)}
             onCategoriesChanged={reloadCategories}

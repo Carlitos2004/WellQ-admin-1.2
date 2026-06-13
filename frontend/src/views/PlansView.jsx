@@ -14,6 +14,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { toast } from 'sonner';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { apiFetch } from '../api/client';
+import useHasPermission from '../hooks/useHasPermission';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -917,7 +918,7 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
 
 
 // ─── PlansLibrary ─────────────────────────────────────────────────────────────
-const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelete, onNew, loading, error, onReload }) => {
+const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelete, onNew, loading, error, onReload, canManagePlans }) => {
   const { t, tVal } = useLanguage();
   const featuresById = Object.fromEntries(features.map((f) => [f.id, f]));
 
@@ -931,9 +932,11 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
           <h2 className="text-lg font-bold text-wellq-dark dark:text-white">{t('plans.library')}</h2>
           <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/80">{t('plans.librarySub')}</p>
         </div>
-        <button onClick={onNew} className="flex items-center gap-2 px-5 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 transition-all shadow-sm active:scale-95">
-          <Plus size={16} strokeWidth={2.5} /> {t('plans.newPlan')}
-        </button>
+        {canManagePlans && (
+          <button onClick={onNew} className="flex items-center gap-2 px-5 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 transition-all shadow-sm active:scale-95">
+            <Plus size={16} strokeWidth={2.5} /> {t('plans.newPlan')}
+          </button>
+        )}
       </div>
 
       {plans.length === 0 && (
@@ -992,49 +995,53 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-4 border-t border-wellq-gray/10 dark:border-white/5 relative z-10">
-                <button
-                  onClick={() => onEdit(plan)}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-wellq-gray/5 hover:bg-wellq-cyan/10 text-wellq-dark hover:text-wellq-cyan rounded-xl text-xs font-bold transition-colors dark:bg-white/[0.03] dark:text-white dark:hover:text-wellq-cyan dark:hover:bg-wellq-cyan/10"
-                >
-                  <Edit3 size={14} /> {t('plans.edit')}
-                </button>
-                <button
-                  onClick={() => onDuplicate(plan)}
-                  className="p-2.5 bg-wellq-gray/5 hover:bg-wellq-gray/10 text-wellq-gray rounded-xl transition-colors dark:bg-white/[0.03] dark:hover:bg-white/10"
-                  title={t('plans.duplicate')}
-                >
-                  <Copy size={16} />
-                </button>
-                <button
-                  onClick={() => onArchive(plan)}
-                  className="p-2.5 bg-wellq-gray/5 hover:bg-amber-500/10 text-wellq-gray hover:text-amber-500 rounded-xl transition-colors dark:bg-white/[0.03] dark:hover:bg-amber-500/20"
-                  title={t('plans.archive')}
-                >
-                  <Archive size={16} />
-                </button>
-                <button
-                  onClick={() => onDelete(plan)}
-                  className="p-2.5 bg-wellq-gray/5 hover:bg-red-500/10 text-wellq-gray hover:text-red-500 rounded-xl transition-colors dark:bg-white/[0.03] dark:hover:bg-red-500/20"
-                  title={t('plans.delete') ?? 'Delete permanently'}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+              {canManagePlans && (
+                <div className="flex items-center gap-2 pt-4 border-t border-wellq-gray/10 dark:border-white/5 relative z-10">
+                  <button
+                    onClick={() => onEdit(plan)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-wellq-gray/5 hover:bg-wellq-cyan/10 text-wellq-dark hover:text-wellq-cyan rounded-xl text-xs font-bold transition-colors dark:bg-white/[0.03] dark:text-white dark:hover:text-wellq-cyan dark:hover:bg-wellq-cyan/10"
+                  >
+                    <Edit3 size={14} /> {t('plans.edit')}
+                  </button>
+                  <button
+                    onClick={() => onDuplicate(plan)}
+                    className="p-2.5 bg-wellq-gray/5 hover:bg-wellq-gray/10 text-wellq-gray rounded-xl transition-colors dark:bg-white/[0.03] dark:hover:bg-white/10"
+                    title={t('plans.duplicate')}
+                  >
+                    <Copy size={16} />
+                  </button>
+                  <button
+                    onClick={() => onArchive(plan)}
+                    className="p-2.5 bg-wellq-gray/5 hover:bg-amber-500/10 text-wellq-gray hover:text-amber-500 rounded-xl transition-colors dark:bg-white/[0.03] dark:hover:bg-amber-500/20"
+                    title={t('plans.archive')}
+                  >
+                    <Archive size={16} />
+                  </button>
+                  <button
+                    onClick={() => onDelete(plan)}
+                    className="p-2.5 bg-wellq-gray/5 hover:bg-red-500/10 text-wellq-gray hover:text-red-500 rounded-xl transition-colors dark:bg-white/[0.03] dark:hover:bg-red-500/20"
+                    title={t('plans.delete') ?? 'Delete permanently'}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )}
             </motion.div>
           );
         })}
-        <motion.button
-          variants={itemVariants}
-          onClick={onNew}
-          className="bg-wellq-gray/3 dark:bg-white/[0.01] rounded-[24px] border-2 border-dashed border-wellq-gray/20 dark:border-white/10 hover:border-wellq-cyan hover:bg-wellq-cyan/5 transition-all p-6 flex flex-col items-center justify-center min-h-[400px] group active:scale-[0.98]"
-        >
-          <div className="w-16 h-16 rounded-[20px] bg-white dark:bg-wellq-dark border border-wellq-gray/10 dark:border-white/5 shadow-sm group-hover:bg-wellq-cyan/10 group-hover:border-wellq-cyan/20 flex items-center justify-center mb-4 transition-colors">
-            <Plus size={28} className="text-wellq-gray group-hover:text-wellq-cyan transition-colors" />
-          </div>
-          <span className="text-base font-bold text-wellq-dark dark:text-white">{t('plans.createNewPlan')}</span>
-          <span className="text-xs font-medium text-wellq-gray mt-1">{t('plans.startBlankCanvas')}</span>
-        </motion.button>
+        {canManagePlans && (
+          <motion.button
+            variants={itemVariants}
+            onClick={onNew}
+            className="bg-wellq-gray/3 dark:bg-white/[0.01] rounded-[24px] border-2 border-dashed border-wellq-gray/20 dark:border-white/10 hover:border-wellq-cyan hover:bg-wellq-cyan/5 transition-all p-6 flex flex-col items-center justify-center min-h-[400px] group active:scale-[0.98]"
+          >
+            <div className="w-16 h-16 rounded-[20px] bg-white dark:bg-wellq-dark border border-wellq-gray/10 dark:border-white/5 shadow-sm group-hover:bg-wellq-cyan/10 group-hover:border-wellq-cyan/20 flex items-center justify-center mb-4 transition-colors">
+              <Plus size={28} className="text-wellq-gray group-hover:text-wellq-cyan transition-colors" />
+            </div>
+            <span className="text-base font-bold text-wellq-dark dark:text-white">{t('plans.createNewPlan')}</span>
+            <span className="text-xs font-medium text-wellq-gray mt-1">{t('plans.startBlankCanvas')}</span>
+          </motion.button>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -1162,6 +1169,7 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
 // ─── PlansView ─────────────────────────────────────────────────────────────────
 export const PlansView = () => {
   const { t } = useLanguage();
+  const canManagePlans = useHasPermission('plans.manage');
   const [tab, setTab] = useState('library');
   const [editingPlan, setEditingPlan] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -1183,6 +1191,13 @@ export const PlansView = () => {
     reload:  reloadArchivedPlans,
   } = useArchivedPlans();
 
+  useEffect(() => {
+    if (!canManagePlans && tab !== 'library') {
+      setTab('library');
+      setEditingPlan(null);
+    }
+  }, [canManagePlans, tab]);
+
   const newBlank = () => ({
     id: null,
     name: '',
@@ -1195,10 +1210,19 @@ export const PlansView = () => {
     features: [],
   });
 
-  const startNew  = () => { setEditingPlan(newBlank()); setTab('builder'); };
-  const startEdit = (plan) => { setEditingPlan({ ...plan, features: [...plan.features] }); setTab('builder'); };
+  const startNew  = () => {
+    if (!canManagePlans) return;
+    setEditingPlan(newBlank());
+    setTab('builder');
+  };
+  const startEdit = (plan) => {
+    if (!canManagePlans) return;
+    setEditingPlan({ ...plan, features: [...plan.features] });
+    setTab('builder');
+  };
 
   const startDuplicate = async (plan) => {
+    if (!canManagePlans) return;
     try {
       const res = await apiFetch(`/api/plans/${plan.id}/duplicate`, { method: 'POST', body: '{}' });
       if (res.error) { toast.error(res.error.message); return; }
@@ -1212,9 +1236,13 @@ export const PlansView = () => {
   };
 
   // ── Archive ──────────────────────────────────────────────────────────────
-  const archivePlan   = (plan) => setConfirmArchive({ open: true, plan });
+  const archivePlan   = (plan) => {
+    if (!canManagePlans) return;
+    setConfirmArchive({ open: true, plan });
+  };
 
   const doArchivePlan = async () => {
+    if (!canManagePlans) return;
     const plan = confirmArchive.plan;
     setConfirmArchive({ open: false, plan: null });
     try {
@@ -1230,9 +1258,13 @@ export const PlansView = () => {
   };
 
   // ── Delete ───────────────────────────────────────────────────────────────
-  const deletePlan   = (plan) => setConfirmDeletePlan({ open: true, plan });
+  const deletePlan   = (plan) => {
+    if (!canManagePlans) return;
+    setConfirmDeletePlan({ open: true, plan });
+  };
 
   const doDeletePlan = async () => {
+    if (!canManagePlans) return;
     const plan = confirmDeletePlan.plan;
     setConfirmDeletePlan({ open: false, plan: null });
     try {
@@ -1250,6 +1282,7 @@ export const PlansView = () => {
 
   // ── Restore (no necesita confirmación — acción no destructiva) ────────────
   const doRestorePlan = async (plan) => {
+    if (!canManagePlans) return;
     try {
       const res = await apiFetch(`/api/plans/${plan.id}/restore`, { method: 'POST', body: '{}' });
       if (res.error) { toast.error(res.error.message); return; }
@@ -1264,6 +1297,7 @@ export const PlansView = () => {
 
   // ── Save plan ────────────────────────────────────────────────────────────
   const savePlan = async (draft) => {
+    if (!canManagePlans) return;
     setSaving(true);
     try {
       const payload = {
@@ -1297,9 +1331,13 @@ export const PlansView = () => {
   };
 
   // ── Delete feature ───────────────────────────────────────────────────────
-  const deleteFeature   = (feature) => setConfirmDeleteFeat({ open: true, feature });
+  const deleteFeature   = (feature) => {
+    if (!canManagePlans) return;
+    setConfirmDeleteFeat({ open: true, feature });
+  };
 
   const doDeleteFeature = async () => {
+    if (!canManagePlans) return;
     const feature = confirmDeleteFeat.feature;
     setConfirmDeleteFeat({ open: false, feature: null });
     try {
@@ -1322,7 +1360,7 @@ export const PlansView = () => {
           { id: 'builder',    label: t('plans.builder'),  icon: Box    },
           { id: 'catalog',    label: t('plans.catalog'),  icon: Tag    },
           { id: 'archivados', label: 'Archived',        icon: Archive },
-        ].map(({ id, label, icon: Icon }) => (
+        ].filter(({ id }) => canManagePlans || id === 'library').map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => {
@@ -1362,9 +1400,10 @@ export const PlansView = () => {
             loading={plansLoading || featLoading}
             error={plansError || featError}
             onReload={() => { reloadPlans(); reloadFeatures(); }}
+            canManagePlans={canManagePlans}
           />
         )}
-        {tab === 'builder' && editingPlan && (
+        {canManagePlans && tab === 'builder' && editingPlan && (
           <PlanBuilder
             plan={editingPlan}
             features={features}
@@ -1373,7 +1412,7 @@ export const PlansView = () => {
             saving={saving}
           />
         )}
-        {tab === 'catalog' && (
+        {canManagePlans && tab === 'catalog' && (
           <FeatureCatalog
             features={features}
             loading={featLoading}
@@ -1382,7 +1421,7 @@ export const PlansView = () => {
             onDeleteFeature={deleteFeature}
           />
         )}
-        {tab === 'archivados' && (
+        {canManagePlans && tab === 'archivados' && (
           <ArchivedPlansView
             plans={archivedPlans}
             loading={archivedLoading}
@@ -1395,7 +1434,7 @@ export const PlansView = () => {
 
       {/* ── PlanActionOverlay — archive (portal a document.body, blur total) ── */}
       <PlanActionOverlay
-        open={confirmArchive.open}
+        open={canManagePlans && confirmArchive.open}
         type="archive"
         plan={confirmArchive.plan}
         onConfirm={doArchivePlan}
@@ -1404,7 +1443,7 @@ export const PlansView = () => {
 
       {/* ── PlanActionOverlay — delete permanente (portal a document.body) ─── */}
       <PlanActionOverlay
-        open={confirmDeletePlan.open}
+        open={canManagePlans && confirmDeletePlan.open}
         type="delete"
         plan={confirmDeletePlan.plan}
         onConfirm={doDeletePlan}
@@ -1413,7 +1452,7 @@ export const PlansView = () => {
 
       {/* ── ConfirmDialog — eliminar feature (menos crítico, ok con dialog) ── */}
       <ConfirmDialog
-        open={confirmDeleteFeat.open}
+        open={canManagePlans && confirmDeleteFeat.open}
         title={t('plans.deleteFeatureTitle')}
         message={t('plans.deleteFeatureMessage').replace('{{name}}', confirmDeleteFeat.feature?.name ?? '')}
         onConfirm={doDeleteFeature}

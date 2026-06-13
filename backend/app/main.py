@@ -38,6 +38,7 @@ from app.routers import (
     support,
     clinic_health,
     sync,
+    roles,                # RBAC: Roles, Permisos y asignación
     # kpis eliminado: sus endpoints fueron fusionados en dashboard.py
 )
 
@@ -134,6 +135,7 @@ app.include_router(clinic_plans.router)
 app.include_router(support.router)
 app.include_router(clinic_health.router)
 app.include_router(sync.router)
+app.include_router(roles.router)       # RBAC: GET|POST /api/roles, GET /api/permissions
 
 
 @app.get("/health", tags=["Sistema"])

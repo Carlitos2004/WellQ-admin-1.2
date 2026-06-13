@@ -73,7 +73,7 @@ const fmtRelative = (iso) => {
 };
 
 // ─── Drawer component ─────────────────────────────────────────────────────────
-export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories = [] }) => {
+export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories = [], canManageTickets = false }) => {
   const { t } = useLanguage();
 
   const [ticket,      setTicket]     = useState(null);
@@ -100,10 +100,13 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
 
   // Evitar quedar en una pestaña inexistente al cerrar el ticket
   useEffect(() => {
-    if (isClosed && activeTab === 'gestionar') {
+    if ((!canManageTickets || isClosed) && activeTab === 'gestionar') {
       setActiveTab('info');
     }
-  }, [isClosed, activeTab]);
+    if (!canManageTickets && activeTab === 'avanzado') {
+      setActiveTab('info');
+    }
+  }, [activeTab, canManageTickets, isClosed]);
 
   // Lock body scroll
   useEffect(() => {
@@ -120,7 +123,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
 
   // Fetch ticket y responders en paralelo
   useEffect(() => {
-    setActiveTab('info'); // reset tab on each ticket load
+    setActiveTab('info');
     if (!ticketId) return;
     setLoading(true);
     setError(null);
@@ -142,7 +145,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
   const categoryToGroup = useMemo(() => {
     if (!categories || categories.length === 0) return CATEGORY_TO_GROUP_FALLBACK;
     const dynamic = categories.reduce((acc, cat) => {
-      if (cat.name && cat.team) acc[cat.name] = cat.team; 
+      if (cat.name && cat.team) acc[cat.name] = cat.team;
       return acc;
     }, {});
     return Object.keys(dynamic).length > 0 ? dynamic : CATEGORY_TO_GROUP_FALLBACK;
@@ -160,11 +163,12 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
     const targetGroup = categoryToGroup[ticket.category];
     if (!targetGroup) return responders;
     const filtered = responders.filter((r) => r.group === targetGroup);
-    return filtered.length > 0 ? filtered : responders; 
+    return filtered.length > 0 ? filtered : responders;
   }, [ticket, responders, categoryToGroup]);
 
   // ── Acción central
   const handleAction = async (body, successMsg) => {
+    if (!canManageTickets) return;
     setSaving(true);
     setActionError(null);
     try {
@@ -176,7 +180,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
       toast.success(successMsg);
       onUpdated?.();
     } catch (err) {
-      const msg = err.message ?? 'Error al actualizar el ticket';
+      const msg = err.message ?? t('support.errorUpdateTicket');
       setActionError(msg);
       toast.error(msg);
     } finally {
@@ -186,31 +190,31 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
 
   const handleTakeTicket = () => {
     if (!selectedResp && responders.length > 0) {
-      setActionError('Selecciona un responder antes de tomar el ticket.');
+      setActionError(t('support.selectResponderBeforeTaking'));
       return;
     }
     const resp = responders.find((r) => r.id === selectedResp);
     handleAction(
       { status: 'Open', responder_id: selectedResp || undefined, responder_name: resp?.name },
-      'Ticket tomado — ahora está Open',
+      t('support.ticketTaken'),
     );
   };
 
   const handleReassign = () => {
     if (!selectedResp) {
-      setActionError('Selecciona un responder para reasignar.');
+      setActionError(t('support.selectResponderBeforeReassigning'));
       return;
     }
     const resp = responders.find((r) => r.id === selectedResp);
     handleAction(
       { responder_id: selectedResp, responder_name: resp?.name },
-      'Ticket reasignado correctamente',
+      t('support.ticketReassigned'),
     );
   };
 
   const handleCloseTicket = () => {
     if (!solution.trim()) {
-      setActionError('Escribe una solución antes de cerrar el ticket.');
+      setActionError(t('support.solutionRequired'));
       return;
     }
     const resp = responders.find((r) => r.id === selectedResp);
@@ -221,19 +225,20 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
         responder_id:   selectedResp || undefined,
         responder_name: resp?.name,
       },
-      'Ticket cerrado correctamente',
+      t('support.ticketClosed'),
     );
   };
 
   const handleDelete = async () => {
+    if (!canManageTickets) return;
     setDeleting(true);
     try {
       await deleteSupportTicket(ticketId);
-      toast.success('Ticket eliminado correctamente');
+      toast.success(t('support.ticketDeleted'));
       onUpdated?.();
       onClose(true);
     } catch (err) {
-      toast.error(err.message ?? 'Error al eliminar el ticket');
+      toast.error(err.message ?? t('support.errorDeleteTicket'));
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
@@ -317,16 +322,16 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
         {!loading && ticket && (
           <div className="flex-shrink-0 flex items-end gap-0 px-6 border-b border-wellq-gray/10 dark:border-white/5 bg-white dark:bg-wellq-dark">
             {[
-              { id: 'info',      label: 'Info',      Icon: Info },
-              ...(!isClosed ? [{ id: 'gestionar', label: 'Gestionar', Icon: Settings }] : []),
-              { id: 'avanzado',  label: 'Avanzado',  Icon: AlertCircle }
+              { id: 'info',      label: t('support.tabInfo'),      Icon: Info },
+              ...(canManageTickets && !isClosed ? [{ id: 'gestionar', label: t('support.tabManage'), Icon: Settings }] : []),
+              ...(canManageTickets ? [{ id: 'avanzado', label: t('support.tabAdvanced'), Icon: AlertCircle }] : []),
             ].map(({ id, label, Icon: TabIcon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
                 className={`relative flex items-center gap-1.5 py-3.5 px-1 mr-7 text-[11px] font-bold uppercase tracking-widest transition-colors cursor-pointer ${
                   activeTab === id
-                    ? id === 'avanzado' 
+                    ? id === 'avanzado'
                         ? 'text-red-500 dark:text-red-400'
                         : 'text-wellq-dark dark:text-white'
                     : 'text-wellq-gray/50 hover:text-wellq-gray dark:hover:text-white/60'
@@ -342,8 +347,8 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                   <motion.div
                     layoutId="tab-indicator"
                     className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full ${
-                      id === 'avanzado' 
-                        ? 'bg-red-500 dark:bg-red-400' 
+                      id === 'avanzado'
+                        ? 'bg-red-500 dark:bg-red-400'
                         : 'bg-wellq-dark dark:bg-white' // ACÁ ESTÁ EL CAMBIO: Color minimalista en lugar del degradado celeste
                     }`}
                     transition={{ type: 'spring', stiffness: 500, damping: 35 }}
@@ -360,7 +365,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
           {loading && (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
               <div className="w-8 h-8 border-2 border-wellq-cyan/30 border-t-wellq-cyan rounded-full animate-spin" />
-              <p className="text-xs font-bold text-wellq-gray uppercase tracking-widest">{t('common.loading', 'Loading...')}</p>
+              <p className="text-xs font-bold text-wellq-gray uppercase tracking-widest">{t('common.loading')}</p>
             </div>
           )}
 
@@ -431,7 +436,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                       {assignedResponder?.email && (
                         <DetailRow
                           icon={Mail}
-                          label={t('support.responderEmail', 'Email responder')}
+                          label={t('support.responderEmail')}
                           value={assignedResponder.email}
                           isEmail
                           accent
@@ -474,7 +479,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                     <div className="flex items-center gap-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-500/5 border border-emerald-200/70 dark:border-emerald-500/20 px-5 py-4">
                       <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" strokeWidth={2.5} />
                       <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                        Ticket cerrado — no requiere acciones adicionales
+                        {t('support.ticketClosedReadOnly')}
                       </p>
                     </div>
                   )}
@@ -484,7 +489,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
               {/* ══════════════════════════════════════════════════════════════
                   GESTIONAR TAB — only when ticket is open/sent
                 ══════════════════════════════════════════════════════════════ */}
-              {activeTab === 'gestionar' && !isClosed && (
+              {canManageTickets && activeTab === 'gestionar' && !isClosed && (
                 <motion.div
                   key="tab-gestionar"
                   initial={{ opacity: 0, y: 8 }}
@@ -516,11 +521,11 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                         <div className="flex items-center justify-between gap-2">
                           <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
                             <UserCog size={11} strokeWidth={2.5} />
-                            {isSent ? 'Asignar a' : 'Reasignar a'}
+                            {isSent ? t('support.assignTo') : t('support.reassignTo')}
                           </label>
                           {ticket.category && (
                             <span className="text-[9px] font-bold text-wellq-gray/50 tracking-normal bg-wellq-gray/10 dark:bg-white/5 px-2 py-0.5 rounded-md">
-                              Equipo sugerido: {categoryToGroup[ticket.category] ?? 'General'}
+                              {t('support.suggestedTeam')}: {categoryToGroup[ticket.category] ?? t('common.general')}
                             </span>
                           )}
                         </div>
@@ -531,7 +536,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                             disabled={saving}
                             className="w-full appearance-none pl-4 pr-9 py-2.5 text-sm font-bold rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50 dark:[color-scheme:dark]"
                           >
-                            <option value="">— Seleccionar responder —</option>
+                            <option value="">{t('support.selectResponder')}</option>
                             {filteredResponders().map((r) => (
                               <option key={r.id} value={r.id}>
                                 {r.name}{r.group ? ` (${r.group})` : ''}
@@ -548,13 +553,13 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                       <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] p-5 space-y-3">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray flex items-center gap-1.5">
                           <CheckCircle2 size={11} strokeWidth={2.5} />
-                          Solución
+                          {t('support.solution')}
                         </label>
                         <textarea
                           value={solution}
                           onChange={(e) => { setSolution(e.target.value); setActionError(null); }}
                           disabled={saving}
-                          placeholder="Describe cómo se resolvió el problema…"
+                          placeholder={t('support.solutionPlaceholder')}
                           rows={5}
                           className="w-full resize-none px-4 py-3 text-sm font-medium rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white placeholder:text-wellq-gray/50 focus:outline-none focus:ring-2 focus:ring-wellq-cyan focus:border-wellq-cyan transition-all disabled:opacity-50"
                         />
@@ -570,7 +575,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                           onClick={handleTakeTicket}
                           loading={saving}
                           icon={UserCheck}
-                          label="Tomar ticket"
+                          label={t('support.takeTicket')}
                           variant="primary"
                         />
                       )}
@@ -580,7 +585,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                             onClick={handleReassign}
                             loading={saving}
                             icon={UserCog}
-                            label="Reasignar"
+                            label={t('support.reassign')}
                             variant="secondary"
                             disabled={!selectedResp}
                           />
@@ -588,7 +593,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                             onClick={handleCloseTicket}
                             loading={saving}
                             icon={CheckCircle2}
-                            label="Cerrar ticket"
+                            label={t('support.closeTicket')}
                             variant="success"
                             disabled={!solution.trim()}
                           />
@@ -602,7 +607,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
               {/* ══════════════════════════════════════════════════════════════
                   AVANZADO TAB — Siempre visible, contiene Danger Zone
                 ══════════════════════════════════════════════════════════════ */}
-              {activeTab === 'avanzado' && (
+              {canManageTickets && activeTab === 'avanzado' && (
                 <motion.div
                   key="tab-avanzado"
                   initial={{ opacity: 0, y: 8 }}
@@ -613,10 +618,10 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                 >
                   <div className="space-y-2">
                     <h3 className="text-sm font-bold text-wellq-dark dark:text-white tracking-tight">
-                      Opciones Avanzadas
+                      {t('support.advancedOptions')}
                     </h3>
                     <p className="text-xs font-medium text-wellq-gray leading-relaxed">
-                      Acciones críticas y configuraciones adicionales del ticket.
+                      {t('support.advancedOptionsDesc')}
                     </p>
                   </div>
 
@@ -625,6 +630,7 @@ export const SupportTicketDrawer = ({ ticketId, onClose, onUpdated, categories =
                     setConfirmDelete={setConfirmDelete}
                     deleting={deleting}
                     onDelete={handleDelete}
+                    t={t}
                   />
                 </motion.div>
               )}
@@ -717,15 +723,15 @@ const TimelineItem = ({ Icon, label, dateShort, dateLong, relative, dotColor, ac
 );
 
 // ─── Danger Zone ──────────────────────────────────────────────────────────────
-const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => {
+const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete, t }) => {
   return (
     <div className="rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50/50 dark:bg-red-500/5 p-5 space-y-3">
       <div className="flex items-center gap-2">
         <Trash2 size={16} className="text-red-500" strokeWidth={2.5} />
-        <h3 className="text-sm font-bold text-red-600 dark:text-red-400">Zona de Peligro</h3>
+        <h3 className="text-sm font-bold text-red-600 dark:text-red-400">{t('support.dangerZone')}</h3>
       </div>
       <p className="text-xs font-medium text-red-600/80 dark:text-red-400/80 leading-relaxed">
-        Eliminar un ticket es una acción irreversible. Todos los datos asociados se perderán permanentemente.
+        {t('support.deleteTicketWarning')}
       </p>
       <AnimatePresence mode="wait">
         {!confirmDelete ? (
@@ -740,7 +746,7 @@ const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => 
               onClick={() => setConfirmDelete(true)}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-white dark:bg-wellq-dark border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
             >
-              Eliminar ticket
+              {t('support.deleteTicket')}
             </button>
           </motion.div>
         ) : (
@@ -756,7 +762,7 @@ const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => 
               disabled={deleting}
               className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-wellq-gray/10 dark:bg-white/10 text-wellq-dark dark:text-white hover:bg-wellq-gray/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               onClick={onDelete}
@@ -764,7 +770,7 @@ const DangerZone = ({ confirmDelete, setConfirmDelete, deleting, onDelete }) => 
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-sm shadow-red-500/20 disabled:opacity-50"
             >
               {deleting ? <Loader2 size={14} strokeWidth={2.5} className="animate-spin" /> : <Trash2 size={14} strokeWidth={2.5} />}
-              Sí, eliminar
+              {t('support.confirmDeleteTicket')}
             </button>
           </motion.div>
         )}

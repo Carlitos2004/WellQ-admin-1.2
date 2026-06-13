@@ -4,7 +4,7 @@ import {
   Settings, Server, Package, Bell, Search, ChevronDown,
   Activity, RefreshCw, PanelLeftClose, PanelLeftOpen,
   Trash2, X, Megaphone, Mail, Smartphone, CheckCircle, Clock,
-  LogOut, Moon, Sun, LifeBuoy,
+  LogOut, Moon, Sun, LifeBuoy, ShieldOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -29,18 +29,18 @@ import { useTheme }    from './contexts/ThemeContext';
 const SIDEBAR_W   = 256;
 const SIDEBAR_COL = 64;
 
+// ── TAREA 1: permission añadido a cada ítem ───────────────────────────────────
 const NAV_KEYS = [
-  { id: 'overview',   key: 'overview',   icon: LayoutDashboard },
-  { id: 'clinics',    key: 'clinics',    icon: Building2 },
-  { id: 'plans',      key: 'plans',      icon: Package },
-  { id: 'financials', key: 'financials', icon: DollarSign },
-  { id: 'platform',   key: 'platform',   icon: Server },
-  { id: 'analytics',  key: 'analytics',  icon: BarChart3 },
-  { id: 'support',    key: 'support',    icon: LifeBuoy },
-  { id: 'settings',   key: 'settings',   icon: Settings },
+  { id: 'overview',   key: 'overview',   icon: LayoutDashboard, permission: 'overview.view'  },
+  { id: 'clinics',    key: 'clinics',    icon: Building2,       permission: 'clinics.view'   },
+  { id: 'plans',      key: 'plans',      icon: Package,         permission: 'plans.view'     },
+  { id: 'financials', key: 'financials', icon: DollarSign,      permission: 'billing.view'   },
+  { id: 'platform',   key: 'platform',   icon: Server,          permission: 'platform.view'  },
+  { id: 'analytics',  key: 'analytics',  icon: BarChart3,       permission: 'analytics.view' },
+  { id: 'support',    key: 'support',    icon: LifeBuoy,        permission: 'tickets.view'   },
+  { id: 'settings',   key: 'settings',   icon: Settings,        permission: 'settings.view'  },
 ];
 
-// ✅ clinics removido — no necesita filtro de fechas
 const VIEWS_WITH_DATERANGE = ['overview', 'financials', 'platform', 'analytics'];
 
 const getDateRangeFromPeriod = (period) => {
@@ -101,20 +101,20 @@ const STATUS_STYLE = {
   failed:   { color: 'text-red-500',     bg: 'bg-red-50',     icon: X },
 };
 
-// ── Metadatos por vista para el Topbar header ────────────────────────────────
 const VIEW_META = {
-  overview:   { icon: LayoutDashboard, gradient: 'from-[#2cb7e4] to-[#16f8f9]',  sub: 'Resumen general y estado' },
-  clinics:    { icon: Building2,       gradient: 'from-[#16f8f9] to-[#1fed92]', sub: 'Gestión de clínicas activas' },
+  overview:   { icon: LayoutDashboard, gradient: 'from-[#2cb7e4] to-[#16f8f9]',  sub: 'General overview and status' },
+  clinics:    { icon: Building2,       gradient: 'from-[#16f8f9] to-[#1fed92]', sub: 'Active clinic management' },
   plans:      { icon: Package,         gradient: 'from-[#2cb7e4] to-[#16f8f9]',  sub: 'Planes y suscripciones' },
   financials: { icon: DollarSign,      gradient: 'from-[#1fed92] to-[#16f8f9]', sub: 'MRR, churn y finanzas' },
   platform:   { icon: Server,          gradient: 'from-[#2cb7e4] to-[#16f8f9]',  sub: 'Infraestructura y costos AI' },
   analytics:  { icon: BarChart3,       gradient: 'from-[#2cb7e4] to-[#16f8f9]',  sub: 'Adopción y calidad del sistema' },
-  support:    { icon: LifeBuoy,        gradient: 'from-[#16f8f9] to-[#1fed92]', sub: 'Gestión de tickets' },
-  settings:   { icon: Settings,        gradient: 'from-[#8c9299] to-[#2cb7e4]',  sub: 'Configuración global' },
+  support:    { icon: LifeBuoy,        gradient: 'from-[#16f8f9] to-[#1fed92]', sub: 'Ticket management' },
+  settings:   { icon: Settings,        gradient: 'from-[#8c9299] to-[#2cb7e4]',  sub: 'Global configuration' },
 };
 
 // ── Notification Panel ───────────────────────────────────────────────────────
 const NotificationPanel = ({ onClose }) => {
+  const { t } = useLanguage();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
@@ -169,8 +169,8 @@ const NotificationPanel = ({ onClose }) => {
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-gray-700">
         <div>
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Notificaciones</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Historial de mensajes enviados</p>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('topbar.notifications')}</h3>
+          <p className="text-xs text-slate-400 mt-0.5">{t('topbar.notificationHistory')}</p>
         </div>
         <button
           onClick={onClose}
@@ -184,7 +184,7 @@ const NotificationPanel = ({ onClose }) => {
         {loading && (
           <div className="flex items-center justify-center py-12 gap-2">
             <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-slate-400">Cargando…</span>
+            <span className="text-xs text-slate-400">{t('common.loading')}</span>
           </div>
         )}
 
@@ -195,7 +195,7 @@ const NotificationPanel = ({ onClose }) => {
         {!loading && !error && notifications.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
             <Bell size={28} className="text-slate-200 dark:text-gray-600" />
-            <p className="text-sm text-slate-400 dark:text-gray-500">Sin notificaciones</p>
+            <p className="text-sm text-slate-400 dark:text-gray-500">{t('topbar.noNotifications')}</p>
           </div>
         )}
 
@@ -220,7 +220,7 @@ const NotificationPanel = ({ onClose }) => {
                     onClick={() => handleDelete(n.id)}
                     disabled={deletingId === n.id}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all flex-shrink-0"
-                    title="Eliminar"
+                    title={t('common.delete')}
                   >
                     {deletingId === n.id
                       ? <div className="w-3.5 h-3.5 border border-red-300 border-t-transparent rounded-full animate-spin" />
@@ -252,7 +252,7 @@ const NotificationPanel = ({ onClose }) => {
       {!loading && !error && notifications.length > 0 && (
         <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-800">
           <p className="text-xs text-slate-400 dark:text-gray-500 text-center">
-            {notifications.length} notificación{notifications.length !== 1 ? 'es' : ''}
+            {notifications.length} {notifications.length === 1 ? t('topbar.notification') : t('topbar.notificationsLower')}
           </p>
         </div>
       )}
@@ -261,7 +261,9 @@ const NotificationPanel = ({ onClose }) => {
 };
 
 // ── ProfileDropdown ──────────────────────────────────────────────────────────
-const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, above = false, toRight = false }) => {
+// 🔥 NUEVO: Recibe canViewSettings para ocultar la tuerca
+const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, above = false, toRight = false, canViewSettings }) => {
+  const { t } = useLanguage();
   const dropRef = useRef(null);
 
   useEffect(() => {
@@ -312,20 +314,21 @@ const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, 
         animation: 'fadeScaleIn 200ms cubic-bezier(0.22,1,0.36,1) both',
       }}
     >
-      {/* Settings */}
-      <button
-        onClick={() => { onGoSettings(); onClose(); }}
-        style={{ ...btnBase, color: '#e2e8f0', fontFamily: FONT }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(22,248,249,0.06)'; e.currentTarget.style.color = '#fff'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#e2e8f0'; }}
-      >
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(100,116,139,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Settings size={14} style={{ color: '#94a3b8' }} />
-        </div>
-        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>Settings</span>
-      </button>
+      {/* 🔥 RBAC: Solo mostramos settings si el usuario tiene permiso */}
+      {canViewSettings && (
+        <button
+          onClick={() => { onGoSettings(); onClose(); }}
+          style={{ ...btnBase, color: '#e2e8f0', fontFamily: FONT }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(22,248,249,0.06)'; e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#e2e8f0'; }}
+        >
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(100,116,139,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Settings size={14} style={{ color: '#94a3b8' }} />
+          </div>
+          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>{t('sidebar.settings')}</span>
+        </button>
+      )}
 
-      {/* Theme toggle */}
       <button
         onClick={() => { toggleTheme(); onClose(); }}
         style={{ ...btnBase, color: '#e2e8f0', fontFamily: FONT }}
@@ -338,14 +341,12 @@ const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, 
             : <Moon size={14} style={{ color: '#94a3b8' }} />}
         </div>
         <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>
-          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          {theme === 'dark' ? t('topbar.lightMode') : t('topbar.darkMode')}
         </span>
       </button>
 
-      {/* Divider */}
       <div style={{ height: 1, background: 'rgba(22,248,249,0.08)', margin: '6px 12px' }} />
 
-      {/* Log out */}
       <button
         onClick={() => { onLogout(); onClose(); }}
         style={{ ...btnBase, color: '#fca5a5', fontFamily: FONT }}
@@ -355,7 +356,7 @@ const ProfileDropdown = ({ onGoSettings, onClose, onLogout, theme, toggleTheme, 
         <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(239,68,68,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <LogOut size={14} style={{ color: '#f87171' }} />
         </div>
-        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>Log out</span>
+        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>{t('topbar.logOut')}</span>
       </button>
     </div>
   );
@@ -366,9 +367,12 @@ const Sidebar = ({
   open, setOpen, view, setView, visibleW, NAV,
   unreadAlerts, profileOpen, setProfileOpen,
   currentUser, theme, toggleTheme, handleLogout,
-  tooltip, setTooltip,
-}) => (
-  <aside
+  tooltip, setTooltip, canViewSettings // 🔥 RECIBE EL PERMISO
+}) => {
+  const { t } = useLanguage();
+
+  return (
+    <aside
     style={{
       width:         `${visibleW}px`,
       transition:    'width 300ms cubic-bezier(0.4,0,0.2,1)',
@@ -416,7 +420,7 @@ const Sidebar = ({
 
       <button
         onClick={() => setOpen((o) => !o)}
-        title={open ? 'Colapsar menú' : 'Expandir menú'}
+        title={open ? t('sidebar.collapse') : t('sidebar.expand')}
         style={{
           background:     'transparent',
           border:         'none',
@@ -488,7 +492,6 @@ const Sidebar = ({
               overflow:       'hidden',
             }}
           >
-            {/* Indicador izquierdo animado */}
             <span style={{
               position:     'absolute',
               left:         0,
@@ -581,6 +584,7 @@ const Sidebar = ({
           toggleTheme={toggleTheme}
           above={open}
           toRight={!open}
+          canViewSettings={canViewSettings} // 🔥 PASAMOS EL PERMISO AQUÍ
         />
       )}
 
@@ -634,9 +638,10 @@ const Sidebar = ({
           marginLeft:     open ? 12 : 0,
           minWidth:       0,
         }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>{currentUser?.full_name ?? 'Usuario'}</p>
-            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>{currentUser?.role?.replace('_', ' ') ?? 'Admin'}</p>
+          <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>{currentUser?.full_name ?? t('common.user')}</p>
+            {/* 🔥 LIMPIEZA DE ROL: Mostrará exactamente lo que venga del backend */}
+            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>{currentUser?.role_name || currentUser?.role || t('settings.noRole')}</p>
           </div>
           <ChevronDown
             size={16}
@@ -689,15 +694,16 @@ const Sidebar = ({
         )}
       </div>
     )}
-  </aside>
-);
+    </aside>
+  );
+};
 
 // ── Topbar Unificado ─────────────────────────────────────────────────────────
 const Topbar = ({
   view, dateRange, setDateRange, searchQuery, setSearchQuery,
   refreshing, unreadAlerts, bellOpen, setBellOpen,
   profileOpen, setProfileOpen, fetchAll, currentUser,
-  theme, toggleTheme, setView, handleLogout, t,
+  theme, toggleTheme, setView, handleLogout, t, canViewSettings
 }) => {
   const showDateRange = VIEWS_WITH_DATERANGE.includes(view);
   const meta = VIEW_META[view] ?? VIEW_META.overview;
@@ -714,8 +720,7 @@ const Topbar = ({
   return (
     <header className="h-[72px] bg-[#0f1c2e] border-b border-[rgba(22,248,249,0.06)] z-40 flex-shrink-0">
       <div className="flex items-center justify-between px-8 h-full gap-4">
-        
-        {/* Título unificado: Misma altura (72px), letra text-2xl y color blanco */}
+
         <div key={view} className="flex items-center gap-4 min-w-0 anim-topbar">
           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center shadow-lg shadow-[#16f8f9]/20 flex-shrink-0`}>
             <ViewIcon size={20} className="text-black" strokeWidth={2.5} />
@@ -729,24 +734,32 @@ const Topbar = ({
 
         <div className="flex items-center gap-3">
           {showDateRange && (
-            <div className="flex items-center gap-1 bg-[#1e293b] rounded-lg p-1 border border-[#334155]/50">
-              {['24H', '7D', '30D', 'QTD', 'YTD'].map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setDateRange(r)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
-                    dateRange === r
-                      ? 'bg-[#0f172a] text-[#16f8f9] shadow-sm border border-[#16f8f9]/30'
-                      : 'text-[#94a3b8] hover:text-white'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
+            <div
+              className="hidden lg:flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1 shadow-inner"
+              aria-label={t('topbar.timeRange')}
+            >
+              <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-[#94a3b8]">
+                {t('topbar.timeRange')}
+              </span>
+              <div className="flex items-center gap-1">
+                {['24H', '7D', '30D', 'QTD', 'YTD'].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setDateRange(r)}
+                    title={t(`topbar.ranges.${r}`)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                      dateRange === r
+                        ? 'bg-[#16f8f9] text-[#08111d] shadow-sm shadow-[#16f8f9]/20'
+                        : 'text-[#94a3b8] hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Search Input Adaptado al Fondo Oscuro */}
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
             <input
@@ -761,7 +774,7 @@ const Topbar = ({
           <button
             onClick={() => {
               fetchAll(dateRange);
-              toast.success('Datos actualizados');
+              toast.success(t('topbar.dataUpdated'));
             }}
             className="p-2 hover:bg-[#1e293b] rounded-lg transition-colors topbar-btn"
             title={t('topbar.refresh')}
@@ -805,6 +818,7 @@ const Topbar = ({
                 theme={theme}
                 toggleTheme={toggleTheme}
                 above={false}
+                canViewSettings={canViewSettings} // 🔥 PASAMOS EL PERMISO AQUÍ TAMBIÉN
               />
             )}
           </div>
@@ -824,50 +838,62 @@ export default function App() {
   const { t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
 
-  const NAV = useMemo(() => NAV_KEYS.map(item => ({
-    ...item,
-    label: t(`sidebar.${item.key}`),
-  })), [t]);
+  // ── TAREA 2: NAV filtrado por permisos del usuario autenticado ───────────────
+  const NAV = useMemo(() =>
+    NAV_KEYS
+      .filter((item) =>
+        currentUser?.role === 'super_admin' ||
+        (Array.isArray(currentUser?.permissions) && currentUser.permissions.includes(item.permission))
+      )
+      .map((item) => ({
+        ...item,
+        label: t(`sidebar.${item.key}`),
+      })),
+    [t, currentUser]
+  );
 
-  const [view,        setView]        = useState('overview');
-  const [open,        setOpen]        = useState(true);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [dateRange,   setDateRange]   = useState('30D');
-  const [bellOpen,    setBellOpen]    = useState(false);
-  const [profileOpen, setProfileOpen] = useState(null);
-  const [tooltip,     setTooltip]     = useState({ id: null, top: 0 });
+  // 🔥 Verificamos si el usuario tiene permiso específico de settings
+  const canViewSettings = currentUser?.role === 'super_admin' ||
+                         (Array.isArray(currentUser?.permissions) && currentUser.permissions.includes('settings.view'));
 
-  const [kpiArr,          setKpiArr]          = useState(null);
-  const [kpiClinics,      setKpiClinics]      = useState(null);
-  const [kpiPatients,     setKpiPatients]     = useState(null);
-  const [kpiNrr,          setKpiNrr]          = useState(null);
-  const [mrrData,         setMrrData]         = useState(null);
-  const [churnRegions,    setChurnRegions]    = useState([]);
-  const [apiAlerts,       setApiAlerts]       = useState([]);
-  const [unreadAlerts,    setUnreadAlerts]    = useState(0);
-  const [apiClinics,      setApiClinics]      = useState([]);
-  const [clinicsLoading,  setClinicsLoading]  = useState(false);
-  const [apiServers,      setApiServers]      = useState([]);
-  const [apiProcesses,    setApiProcesses]    = useState([]);
-  const [apiCosts,        setApiCosts]        = useState(null);
-  const [apiLatency,      setApiLatency]      = useState(null);
-  const [apiPose,         setApiPose]         = useState(null);
-  const [appStats,        setAppStats]        = useState({});
-  const [featureAdoption, setFeatureAdoption] = useState(null);
-  const [adherence,       setAdherence]       = useState(null);
-  const [cohorts,         setCohorts]         = useState(null);
-  const [soapQuality,     setSoapQuality]     = useState(null);
-  const [globalSettings,  setGlobalSettings]  = useState(null);
-  const [azureStatus,     setAzureStatus]     = useState(null);
-  const [dbStatus,        setDbStatus]        = useState(null);
-  const [systemUsers,     setSystemUsers]     = useState([]);
-  const [kpiSystemHealth, setKpiSystemHealth] = useState(null);
-  const [kpiActiveNow,    setKpiActiveNow]    = useState(null);
-  const [kpiDownloads,    setKpiDownloads]    = useState(null);
-  const [kpiDormant,      setKpiDormant]      = useState(null);
+  const [view,         setView]        = useState('overview');
+  const [open,         setOpen]        = useState(true);
+  const [loading,      setLoading]     = useState(true);
+  const [refreshing,   setRefreshing]  = useState(false);
+  const [dateRange,    setDateRange]   = useState('30D');
+  const [bellOpen,     setBellOpen]    = useState(false);
+  const [profileOpen,  setProfileOpen] = useState(null);
+  const [tooltip,      setTooltip]     = useState({ id: null, top: 0 });
 
-  // ✅ Estado del search
+  const [kpiArr,           setKpiArr]          = useState(null);
+  const [kpiClinics,       setKpiClinics]      = useState(null);
+  const [kpiPatients,      setKpiPatients]     = useState(null);
+  const [kpiNrr,           setKpiNrr]          = useState(null);
+  const [mrrData,          setMrrData]         = useState(null);
+  const [churnRegions,     setChurnRegions]    = useState([]);
+  const [apiAlerts,        setApiAlerts]       = useState([]);
+  const [unreadAlerts,     setUnreadAlerts]    = useState(0);
+  const [apiClinics,       setApiClinics]      = useState([]);
+  const [clinicsLoading,   setClinicsLoading]  = useState(false);
+  const [apiServers,       setApiServers]      = useState([]);
+  const [apiProcesses,     setApiProcesses]    = useState([]);
+  const [apiCosts,         setApiCosts]        = useState(null);
+  const [apiLatency,       setApiLatency]      = useState(null);
+  const [apiPose,          setApiPose]         = useState(null);
+  const [appStats,         setAppStats]        = useState({});
+  const [featureAdoption,  setFeatureAdoption] = useState(null);
+  const [adherence,        setAdherence]       = useState(null);
+  const [cohorts,          setCohorts]         = useState(null);
+  const [soapQuality,      setSoapQuality]     = useState(null);
+  const [globalSettings,   setGlobalSettings]  = useState(null);
+  const [azureStatus,      setAzureStatus]     = useState(null);
+  const [dbStatus,         setDbStatus]        = useState(null);
+  const [systemUsers,      setSystemUsers]     = useState([]);
+  const [kpiSystemHealth,  setKpiSystemHealth] = useState(null);
+  const [kpiActiveNow,     setKpiActiveNow]    = useState(null);
+  const [kpiDownloads,     setKpiDownloads]    = useState(null);
+  const [kpiDormant,       setKpiDormant]      = useState(null);
+
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleLogout = async () => {
@@ -1019,6 +1045,37 @@ export default function App() {
   }
 
   const renderView = () => {
+    const navItem = NAV_KEYS.find((item) => item.id === view);
+    if (navItem) {
+      const isSuperAdmin  = currentUser?.role === 'super_admin';
+      const hasPermission =
+        isSuperAdmin ||
+        (Array.isArray(currentUser?.permissions) && currentUser.permissions.includes(navItem.permission));
+
+      if (!hasPermission) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+            <div className="w-20 h-20 rounded-2xl bg-red-500/10 flex items-center justify-center">
+              <ShieldOff size={40} className="text-red-400" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-white mb-2">Acceso Denegado</h2>
+              <p className="text-slate-400 text-sm max-w-xs mx-auto">
+                No tienes los permisos necesarios para ver esta sección.
+                Contacta a tu administrador si crees que esto es un error.
+              </p>
+            </div>
+            <button
+              onClick={() => setView('overview')}
+              className="px-5 py-2.5 bg-[#16f8f9]/10 hover:bg-[#16f8f9]/20 text-[#16f8f9] rounded-xl text-sm font-medium border border-[#16f8f9]/30 transition-colors"
+            >
+              Volver al inicio
+            </button>
+          </div>
+        );
+      }
+    }
+
     switch (view) {
       case 'overview':
         return (
@@ -1050,16 +1107,14 @@ export default function App() {
             apiClinics={apiClinics}
             clinicsLoading={clinicsLoading}
             onImpersonate={handleImpersonate}
-            // 🔥 ¡AQUÍ ESTÁ EL CAMBIO PRINCIPAL PARA RECIBIR LOS PARÁMETROS!
             onRefreshClinics={async (params = {}) => {
               setClinicsLoading(true);
               try {
-                // Convertimos el objeto params en un query string
                 const qs = new URLSearchParams(
                   Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
                 ).toString();
                 const endpoint = `/api/clinics${qs ? `?${qs}` : ''}`;
-                
+
                 const res = await apiFetch(endpoint);
                 if (res?.data) setApiClinics(res.data);
               } catch (err) {
@@ -1172,6 +1227,7 @@ export default function App() {
         handleLogout={handleLogout}
         tooltip={tooltip}
         setTooltip={setTooltip}
+        canViewSettings={canViewSettings} // 🔥 SE PASA EL PERMISO
       />
 
       <div className="flex-1 flex flex-col min-w-0 relative bg-slate-50 overflow-hidden dark:bg-[#070b12]">
@@ -1194,6 +1250,7 @@ export default function App() {
           setView={setView}
           handleLogout={handleLogout}
           t={t}
+          canViewSettings={canViewSettings} // 🔥 SE PASA EL PERMISO
         />
         <main className="flex-1 overflow-y-auto overflow-x-hidden relative main-scroll">
           <div key={view} className="p-8 anim-view">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom'; // ← NUEVO
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   DollarSign, Zap, Activity, ArrowDownRight, ArrowUpRight, 
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Skeleton } from '../components/ui';
+import useHasPermission from '../hooks/useHasPermission'; // ← NUEVO: hook de permisos
 
 // ─── Design Tokens para Platform Ops ───
 const PLATFORM_META = {
@@ -56,7 +57,15 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 };
 
-// ── ForceUpdateModal (CORREGIDO: Portal + scroll interno) ────────────────────
+const VERSION_COLORS = [
+  'from-wellq-cyan to-wellq-blue',
+  'from-wellq-blue to-indigo-500',
+  'from-indigo-500 to-purple-500',
+  'from-purple-500 to-pink-500',
+  'from-emerald-400 to-teal-500'
+];
+
+// ── ForceUpdateModal ────────────────────
 const ForceUpdateModal = ({ versions, onClose }) => {
   const { t } = useLanguage();
   const [minVersions, setMinVersions] = useState({});
@@ -93,17 +102,14 @@ const ForceUpdateModal = ({ versions, onClose }) => {
     }
   };
 
-  // Renderizado mediante portal directamente en document.body
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      {/* Backdrop con animación */}
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
         onClick={onClose} 
       />
       
-      {/* Modal con altura máxima y scroll interno */}
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -111,7 +117,6 @@ const ForceUpdateModal = ({ versions, onClose }) => {
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="relative bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-lg border border-wellq-gray/20 dark:border-white/10 overflow-hidden max-h-[90vh] flex flex-col"
       >
-        {/* Cabecera fija */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] flex-shrink-0">
           <div>
             <h3 className="font-bold text-lg text-wellq-dark dark:text-white leading-tight">{t('platform.forceUpdateTitle')}</h3>
@@ -127,7 +132,6 @@ const ForceUpdateModal = ({ versions, onClose }) => {
           </button>
         </div>
 
-        {/* Contenido scrolleable */}
         <div className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             {saved ? (
@@ -222,15 +226,7 @@ const ForceUpdateModal = ({ versions, onClose }) => {
 };
 
 // ── App Version Distribution ──────────────────────────────────────────────────
-const VERSION_COLORS = [
-  'from-wellq-cyan to-wellq-blue',
-  'from-wellq-green to-teal-400',
-  'from-wellq-blue to-indigo-400',
-  'from-amber-400 to-orange-400',
-  'from-wellq-gray to-slate-400',
-];
-
-const AppVersionDistribution = () => {
+const AppVersionDistribution = ({ canEdit }) => { 
   const { t } = useLanguage();
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -241,7 +237,6 @@ const AppVersionDistribution = () => {
     const fetchVersions = async () => {
       try {
         setLoading(true);
-        // ✨ AQUÍ ESTÁ LA MAGIA FINAL ✨
         const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/analytics/versions`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
@@ -259,12 +254,15 @@ const AppVersionDistribution = () => {
     <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-wellq-gray/30 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h3 className="font-bold text-wellq-dark dark:text-white text-base tracking-tight">{t('platform.appVersionDistribution')}</h3>
-        <button
-          onClick={() => setForceUpdateOpen(true)}
-          className="text-xs font-bold text-wellq-cyan bg-wellq-cyan/10 hover:bg-wellq-cyan/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
-        >
-          {t('platform.forceUpdateBtn')} <ArrowUpRight size={14} />
-        </button>
+        {/* REGLA RBAC: solo usuarios con permiso pueden ver el botón de Force Update */}
+        {canEdit && (
+          <button
+            onClick={() => setForceUpdateOpen(true)}
+            className="text-xs font-bold text-wellq-cyan bg-wellq-cyan/10 hover:bg-wellq-cyan/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            {t('platform.forceUpdateBtn')} <ArrowUpRight size={14} />
+          </button>
+        )}
       </div>
 
       <div className="flex-1">
@@ -327,15 +325,17 @@ const AppVersionDistribution = () => {
         )}
       </div>
 
-      {/* Modal fuera del flujo normal (portal) */}
-      <AnimatePresence>
-        {forceUpdateOpen && (
-          <ForceUpdateModal
-            versions={versions}
-            onClose={() => setForceUpdateOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Modal fuera del flujo normal (portal) – solo se renderiza si tiene permisos */}
+      {canEdit && (
+        <AnimatePresence>
+          {forceUpdateOpen && (
+            <ForceUpdateModal
+              versions={versions}
+              onClose={() => setForceUpdateOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+      )}
     </motion.div>
   );
 };
@@ -343,6 +343,8 @@ const AppVersionDistribution = () => {
 // ── Main Component ──────────────────────────────────────────────────────────
 export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) => {
   const { t } = useLanguage();
+  // 🔥 REGLA 1: Aplicación del permiso para Platform
+  const canEdit = useHasPermission('platform.manage');
 
   return (
     <motion.div 
@@ -477,6 +479,7 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
                   </div>
                   <span className="text-sm font-bold text-wellq-dark dark:text-white/90">{s.name}</span>
                 </div>
+                {/* En esta sección no había botones ocultos, solo indicadores de lectura */}
                 <span
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                     s.status === 'healthy'
@@ -502,8 +505,8 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
           </div>
         </motion.div>
 
-        {/* App Version Distribution Component */}
-        <AppVersionDistribution />
+        {/* App Version Distribution Component – pasamos permiso */}
+        <AppVersionDistribution canEdit={canEdit} />
       </div>
     </motion.div>
   );

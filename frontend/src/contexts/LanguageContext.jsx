@@ -7,7 +7,7 @@ const LanguageContext = createContext();
 
 export function LanguageProvider({ children }) {
   const [locale, setLocale] = useState(() => {
-    return localStorage.getItem('lang') || 'es';
+    return localStorage.getItem('lang') || 'en';
   });
 
   const setLanguage = (lang) => {
@@ -16,14 +16,15 @@ export function LanguageProvider({ children }) {
   };
 
   const t = useCallback((key, params = {}) => {
-  const keys = key.split('.');
-  let result = translations[locale];
-  for (const k of keys) {
-    result = result?.[k];
-  }
-  if (result == null) return key;
-  return result.replace(/\{\{(\w+)\}\}/g, (_, k) => params[k] ?? `{{${k}}}`);
-}, [locale]);
+    const fallback = typeof params === 'string' ? params : key;
+    const values = typeof params === 'object' && params !== null ? params : {};
+    const keys = key.split('.');
+    const resolve = (dict) => keys.reduce((acc, k) => acc?.[k], dict);
+    const result = resolve(translations[locale]) ?? resolve(translations.en) ?? fallback;
+    return typeof result === 'string'
+      ? result.replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? `{{${k}}}`)
+      : result;
+  }, [locale]);
 
   const tVal = useCallback((value) => {
     if (!value) return value;

@@ -23,10 +23,10 @@ import re
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, distinct
-from typing import Optional
+from sqlalchemy import select, func, desc, distinct, or_
+from typing import Any, Optional
 
 # ── NUEVO: importar TicketCategory ────────────────────────────────────────────
 from app.models_db import SupportTicket, Clinic, Responder, TicketCategory
@@ -51,6 +51,26 @@ VALID_CATEGORIES = {"Bug", "Billing", "Feature", "Request"}
 
 # ── NUEVO: regex de validación de email ──────────────────────────────────────
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+class ExternalPayloadModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
+def _as_payload_dict(value: Any) -> Any:
+    if isinstance(value, dict):
+        return dict(value)
+    return value
+
+
+def _copy_if_missing(data: dict, target: str, *sources: str) -> None:
+    if data.get(target) not in (None, ""):
+        return
+    for source in sources:
+        source_value = data.get(source)
+        if source_value not in (None, ""):
+            data[target] = source_value
+            return
 
 
 def _validate_email_format(email: str | None, field_label: str = "email") -> None:

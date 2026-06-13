@@ -34,3 +34,26 @@
 body {
   font-family: 'Poppins', 'Inter', sans-serif; /* ← actualizada a Poppins */
 }
+
+.wellq-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 146, 153, 0.55) rgba(255, 255, 255, 0.04);
+}
+
+.wellq-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.wellq-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.wellq-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(140, 146, 153, 0.45);
+  border: 2px solid rgba(11, 16, 23, 0.95);
+  border-radius: 999px;
+}
+
+.wellq-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(22, 248, 249, 0.45);
+}

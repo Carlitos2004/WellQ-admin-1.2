@@ -17,6 +17,14 @@ CORRECCIONES v2:
   para tablas con ID auto-generado (evita duplicados en cada run).
 - CL-007 añadida como ejemplo de clínica churned (soft-deleted).
 - text() movido a imports globales.
+
+RBAC v3:
+- Importa Role, Permission, RolePermission desde models_db.
+- PERMISSIONS_DATA: catálogo fijo de 13 permisos del sistema.
+- ROLES_DATA: 4 roles base (Super Admin, Billing, Tech Support, Platform Ops).
+- seed_permissions / seed_roles / seed_role_permissions — todos idempotentes.
+- create_tables añade role_id e invite_token a admin_users si no existen.
+- run_seed llama las 3 funciones RBAC antes de seed_admin_users.
 """
 
 import asyncio
@@ -45,6 +53,8 @@ from app.models_db import (
     InfrastructureCostSnapshot, InfraNode,
     ClinicianSummary, PatientHealthSummary, SupportTicket, Responder,
     TicketCategory,
+    # ── RBAC ──────────────────────────────────────────────────────────────────
+    Role, Permission, RolePermission,
 )
 
 DATABASE_URL = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
@@ -738,11 +748,68 @@ SUPPORT_TICKETS_DATA = [
 ]
 
 TICKET_CATEGORIES_DATA = [
-    {"category_id": "cat-001", "name": "Bug",     "team": "Técnico",    "emails": '["soporte@wellq.co"]',  "is_active": True},
-    {"category_id": "cat-002", "name": "Billing", "team": "Financiero", "emails": '["pagos@wellq.co"]',    "is_active": True},
-    {"category_id": "cat-003", "name": "Feature", "team": "Técnico",    "emails": '["producto@wellq.co"]', "is_active": True},
-    {"category_id": "cat-004", "name": "Request", "team": "General",    "emails": '["contacto@wellq.co"]', "is_active": True},
+    {"category_id": "cat-001", "name": "Bug",     "team": "Técnico",    "emails": '[\"soporte@wellq.co\"]',  "is_active": True},
+    {"category_id": "cat-002", "name": "Billing", "team": "Financiero", "emails": '[\"pagos@wellq.co\"]',    "is_active": True},
+    {"category_id": "cat-003", "name": "Feature", "team": "Técnico",    "emails": '[\"producto@wellq.co\"]', "is_active": True},
+    {"category_id": "cat-004", "name": "Request", "team": "General",    "emails": '[\"contacto@wellq.co\"]', "is_active": True},
 ]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DATA DEFINITIONS — RBAC
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# NOTA sobre separación de conceptos:
+# - PERMISSIONS_DATA / ROLES_DATA → controlan acceso de usuarios INTERNOS de WellQ
+#   al Admin Console (quién puede ver Financials, quién puede gestionar Clinics, etc.)
+# - TICKET_CATEGORIES_DATA → clasifican los tickets que envían las CLÍNICAS al soporte
+# - Responder.team ("Técnico", "Financiero") → equipo que atiende cada categoría de ticket
+
+PERMISSIONS_DATA = [
+    {"key": "overview.view",  "label": "View Overview",          "module": "Overview"},
+    {"key": "clinics.view",   "label": "View Clinics",           "module": "Clinic Management"},
+    {"key": "clinics.edit",   "label": "Manage Clinics",         "module": "Clinic Management"},
+    {"key": "plans.view",     "label": "View Plans & Pricing",   "module": "Plans & Pricing"},
+    {"key": "plans.manage",   "label": "Manage Plans & Pricing", "module": "Plans & Pricing"},
+    {"key": "billing.view",   "label": "View Financials",        "module": "Financials"},
+    {"key": "billing.edit",   "label": "Manage Financials",      "module": "Financials"},
+    {"key": "platform.view",  "label": "View Platform Ops",      "module": "Platform Ops"},
+    {"key": "platform.manage","label": "Manage Platform Ops",    "module": "Platform Ops"},
+    {"key": "analytics.view", "label": "View Product Analytics", "module": "Product Analytics"},
+    {"key": "tickets.view",   "label": "View Support Tickets",   "module": "Support"},
+    {"key": "tickets.manage", "label": "Manage Support Tickets", "module": "Support"},
+
+    # 🔥 AQUI ESTÁN LOS DE SETTINGS SEPARADOS
+    {"key": "settings.view",  "label": "View General Settings",  "module": "Settings"}, # <-- Para el idioma y temas
+    {"key": "settings.manage","label": "Manage Settings",         "module": "Settings"}, # <-- Para API Keys y Team Manager
+    {"key": "users.manage",   "label": "Manage Users",           "module": "Settings"}, # <-- Para Team Manager
+    {"key": "roles.manage",   "label": "Manage Roles",           "module": "Settings"}, # <-- Para Team Manager
+]
+
+ROLES_DATA = [
+    {"name": "Super Administrator",     "description": "Full access to the entire platform"},
+    {"name": "Finance Specialist",      "description": "Access to financial modules and billing support tickets"},
+    {"name": "Technical Support Agent", "description": "Access to platform operations and technical support tickets"},
+    {"name": "Operations Analyst",      "description": "Access to platform operations, product analytics, and support tickets"},
+]
+
+# Mapeo de permisos por rol (se usa en seed_role_permissions)
+ROLE_PERMISSIONS_MAP = {
+    "Super Administrator": [
+        "settings.view", "settings.manage",
+        "overview.view", "clinics.view", "clinics.edit",
+        "billing.view", "billing.edit",
+        "platform.view", "platform.manage",
+        "analytics.view",
+        "tickets.view", "tickets.manage",
+        "plans.view", "plans.manage",
+        "users.manage", "roles.manage",
+    ],
+    # 🔥 Fíjate cómo TODOS los roles empiezan ahora con "settings.view"
+    "Finance Specialist":      ["settings.view", "overview.view", "billing.view", "billing.edit", "tickets.view"],
+    "Technical Support Agent": ["settings.view", "platform.view", "tickets.view", "tickets.manage"],
+    "Operations Analyst":      ["settings.view", "overview.view", "platform.view", "platform.manage", "analytics.view", "tickets.view"],
+}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -802,6 +869,12 @@ async def create_tables():
                 END IF;
             END $$;
         """))
+
+        # ── RBAC: nuevas columnas en admin_users ──────────────────────────────
+        # role_id: FK nullable a roles.id — si NULL y role="super_admin" → acceso total
+        # invite_token: token de activación para el flujo de invitación por email
+        await conn.execute(text("ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role_id integer DEFAULT NULL"))
+        await conn.execute(text("ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_token varchar DEFAULT NULL"))
 
     print("✅ Tablas verificadas y actualizadas de forma segura en Neon")
 
@@ -1011,6 +1084,77 @@ async def seed_ticket_categories(session):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# FUNCIONES DE SEED — RBAC
+# Se llaman ANTES de seed_admin_users porque admin_users referenciará role_id.
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def seed_permissions(session):
+    """
+    Seedea el catálogo fijo de 13 permisos del sistema.
+    Usa insert_if_not_exists con key ["key"] para ser idempotente.
+    """
+    count = await insert_if_not_exists(session, Permission, PERMISSIONS_DATA, ["key"])
+    print(f"  → {count}/{len(PERMISSIONS_DATA)} permissions seededados")
+
+
+async def seed_roles(session):
+    """
+    Seedea los 4 roles base del sistema.
+    Usa insert_if_not_exists con key ["name"] para ser idempotente.
+    """
+    count = await insert_if_not_exists(session, Role, ROLES_DATA, ["name"])
+    print(f"  → {count}/{len(ROLES_DATA)} roles seededados")
+
+
+async def remove_viewer_role(session):
+    """
+    Elimina el rol Viewer si quedo creado por un seed anterior.
+    Limpia primero asignaciones y permisos para evitar restricciones FK.
+    """
+    await session.execute(text("""
+        UPDATE admin_users
+        SET role_id = NULL
+        WHERE role_id IN (SELECT id FROM roles WHERE name = 'Viewer')
+    """))
+    await session.execute(text("""
+        DELETE FROM role_permissions
+        WHERE role_id IN (SELECT id FROM roles WHERE name = 'Viewer')
+    """))
+    result = await session.execute(text("DELETE FROM roles WHERE name = 'Viewer'"))
+    await session.commit()
+    deleted = result.rowcount or 0
+    print(f"  → Viewer roles eliminados: {deleted}")
+
+
+async def seed_role_permissions(session):
+    """
+    Asigna permisos a cada uno de los 4 roles base.
+
+    Estrategia:
+    - Para cada (role_name, perm_key) en ROLE_PERMISSIONS_MAP, hace un INSERT
+      usando un SELECT de JOIN para resolver los IDs sin hardcodearlos.
+    - ON CONFLICT DO NOTHING garantiza idempotencia — se puede correr múltiples veces.
+    - Una sola llamada a session.commit() al final para eficiencia.
+    """
+    total = 0
+    for role_name, perm_keys in ROLE_PERMISSIONS_MAP.items():
+        for perm_key in perm_keys:
+            await session.execute(text("""
+                INSERT INTO role_permissions (role_id, permission_id)
+                SELECT r.id, p.id
+                FROM roles r
+                CROSS JOIN permissions p
+                WHERE r.name = :role_name
+                  AND p.key  = :perm_key
+                ON CONFLICT DO NOTHING
+            """), {"role_name": role_name, "perm_key": perm_key})
+            total += 1
+
+    await session.commit()
+    print(f"  → role_permissions seededadas ({total} asignaciones intentadas, duplicados ignorados)")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # RUNNER
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1030,6 +1174,14 @@ async def run_seed():
         await seed_alerts(session)
         await seed_notifications(session)
         await seed_jobs(session)
+        # ── RBAC: primero permisos y roles, luego sus asignaciones ────────────
+        # Se ejecutan ANTES de seed_admin_users para que role_id pueda
+        # referenciar un rol existente si se asigna manualmente luego.
+        await seed_permissions(session)
+        await remove_viewer_role(session)
+        await seed_roles(session)
+        await seed_role_permissions(session)
+        # ── Admin users (pueden tener role_id asignado en futuras migraciones) ─
         await seed_admin_users(session)
         await seed_kpi_snapshots(session)
         await seed_app_metrics(session)

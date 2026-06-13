@@ -10,9 +10,10 @@ import {
 import { Skeleton } from '../components/ui';
 import { ClinicRow }        from '../components/clinics/ClinicRow';
 import { ClinicDrawer }     from '../components/clinics/ClinicDrawer';
-import { ImpersonateModal } from '../components/clinics/ImpersonateModal'; // ← NUEVO
+import { ImpersonateModal } from '../components/clinics/ImpersonateModal';
 import { API_BASE, apiFetch } from '../api/client';
 import { useLanguage } from '../contexts/LanguageContext';
+import useHasPermission from '../hooks/useHasPermission';
 
 // ─── Animaciones ─────────────────────────────────────────────────────────────
 const containerVariants = {
@@ -63,7 +64,7 @@ const BulkEmailModal = ({ onClose, clinicCount }) => {
       });
       setSent(true);
     } catch (err) {
-      if (err.status === 403) return; // Si es 403, SweetAlert se encarga, no muestra error genérico
+      if (err.status === 403) return;
       setError(t('clinics.sendError'));
     } finally {
       setSending(false);
@@ -629,6 +630,7 @@ const KpiCard = ({ icon: Icon, label, value, colorClass, bgClass, borderClass, r
 // ─── ClinicsView Principal ────────────────────────────────────────────────────
 export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefreshClinics }) => {
   const { t } = useLanguage();
+  const canEdit = useHasPermission('clinics.edit');
 
   const [filter,         setFilter]         = useState('all');
   const [filterOpen,     setFilterOpen]     = useState(false);
@@ -645,7 +647,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
   const [selected,         setSelected]         = useState(null);
   const [settingsClinic,   setSettingsClinic]   = useState(null);
   const [invoiceClinic,    setInvoiceClinic]    = useState(null);
-  const [impersonateTarget, setImpersonateTarget] = useState(null); // ← NUEVO
+  const [impersonateTarget, setImpersonateTarget] = useState(null);
 
   const [bulkOpen,       setBulkOpen]       = useState(false);
   const [createOpen,     setCreateOpen]     = useState(false);
@@ -1088,22 +1090,25 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportExcel}
-              disabled={exportState === 'loading'}
-              className={`flex items-center gap-2 px-3.5 py-2 border rounded-xl text-sm font-semibold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
-                exportState === 'error'
-                  ? 'border-red-400/50 text-red-400 bg-red-500/5'
-                  : 'border-wellq-gray/30 dark:border-wellq-gray/20 text-wellq-dark dark:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5'
-              }`}
-            >
-              {exportState === 'loading'
-                ? <><Loader2 size={14} className="animate-spin" /> {t('clinics.export')}</>
-                : exportState === 'error'
-                ? <><X size={14} /> Export fallido</>
-                : <><Download size={14} strokeWidth={2.2} /> {t('clinics.export')}</>
-              }
-            </button>
+            {/* 🔥 REGLA DE RBAC: Ocultamos el botón de exportación si no es editor */}
+            {canEdit && (
+              <button
+                onClick={handleExportExcel}
+                disabled={exportState === 'loading'}
+                className={`flex items-center gap-2 px-3.5 py-2 border rounded-xl text-sm font-semibold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+                  exportState === 'error'
+                    ? 'border-red-400/50 text-red-400 bg-red-500/5'
+                    : 'border-wellq-gray/30 dark:border-wellq-gray/20 text-wellq-dark dark:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5'
+                }`}
+              >
+                {exportState === 'loading'
+                  ? <><Loader2 size={14} className="animate-spin" /> {t('clinics.export')}</>
+                  : exportState === 'error'
+                  ? <><X size={14} /> Export fallido</>
+                  : <><Download size={14} strokeWidth={2.2} /> {t('clinics.export')}</>
+                }
+              </button>
+            )}
 
             <div className="relative" ref={filterRef}>
               <button
@@ -1178,19 +1183,23 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               </AnimatePresence>
             </div>
 
-            <button
-              onClick={() => setBulkOpen(true)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
-            >
-              <Mail size={14} strokeWidth={2.2} /> {t('clinics.bulkEmail')}
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => setBulkOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
+              >
+                <Mail size={14} strokeWidth={2.2} /> {t('clinics.bulkEmail')}
+              </button>
+            )}
 
-            <button
-              onClick={() => setCreateOpen(true)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
-            >
-              <Plus size={14} strokeWidth={2.5} /> Crear Clínica
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => setCreateOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
+              >
+                <Plus size={14} strokeWidth={2.5} /> Crear Clínica
+              </button>
+            )}
           </div>
         </div>
 
@@ -1198,6 +1207,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
           <table className="w-full">
             <thead className="bg-wellq-gray/4 dark:bg-white/[0.02] border-b border-wellq-gray/15 dark:border-wellq-gray/20 sticky top-0">
               <tr>
+                {/* 🔥 REGLA DE RBAC: Filtramos la cabecera 'Actions' si no tiene permisos */}
                 {[
                   t('clinics.columns.clinic'),
                   t('clinics.columns.plan'),
@@ -1205,8 +1215,8 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                   t('clinics.columns.licenseUsage'),
                   t('clinics.columns.health'),
                   t('clinics.columns.lastLogin'),
-                  t('clinics.columns.actions'),
-                ].map((h) => (
+                  canEdit ? t('clinics.columns.actions') : null, // Mágico filtro visual
+                ].filter(Boolean).map((h) => (
                   <th key={h} className="py-4 px-4 text-left text-[10px] font-bold text-wellq-gray uppercase tracking-wider">
                     {h}
                   </th>
@@ -1231,10 +1241,11 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                         selected?.clinic_id === clinic.clinic_id ||
                         selected?.id === clinic.id
                       }
-                      onImpersonate={setImpersonateTarget} // ← CORREGIDO
+                      onImpersonate={setImpersonateTarget} 
                       onSettings={(c) => { closeAll(); setSettingsClinic(c); }}
                       onInvoices={(c) => { closeAll(); setInvoiceClinic(c); }}
-                      onDelete={setDeleteTarget}
+                      onDelete={canEdit ? setDeleteTarget : undefined}
+                      canEdit={canEdit}
                       animationDelay={i * 0.03}
                     />
                   ))}
@@ -1273,14 +1284,15 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               clinic={activeDrawer}
               mode={settingsClinic ? 'settings' : invoiceClinic ? 'invoices' : 'overview'}
               onClose={closeAll}
-              onImpersonate={setImpersonateTarget} // ← NUEVO: permite lanzar el modal desde el drawer
+              onImpersonate={setImpersonateTarget} 
+              canEdit={canEdit} // 🔥 ¡ESTO ERA LO QUE FALTABA!
             />
           </>
         )}
       </AnimatePresence>
 
       {/* ── Modal Bulk Email ── */}
-      {bulkOpen && (
+      {bulkOpen && canEdit && (
         <BulkEmailModal
           onClose={() => setBulkOpen(false)}
           clinicCount={filtered.length}
@@ -1288,7 +1300,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
       )}
 
       {/* ── Modal Crear Clínica ── */}
-      {createOpen && (
+      {createOpen && canEdit && (
         <CreateClinicModal
           onClose={() => setCreateOpen(false)}
           onSuccess={() => { onRefreshClinics && onRefreshClinics(filter === 'churned' ? { status: 'churned' } : {}); }}
@@ -1296,12 +1308,14 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
       )}
 
       {/* ── Modal Eliminar ── */}
-      <DeleteClinicModal
-        clinic={deleteTarget}
-        deleting={deleting}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDeleteConfirm}
-      />
+      {canEdit && (
+        <DeleteClinicModal
+          clinic={deleteTarget}
+          deleting={deleting}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+        />
+      )}
 
       {/* ── Modal Impersonation (Acceso de Soporte) ── */}
       {impersonateTarget && (

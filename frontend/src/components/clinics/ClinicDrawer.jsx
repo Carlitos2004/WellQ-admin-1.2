@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import {
   X, Mail, Settings as SettingsIcon, Receipt, Download,
   Loader2, CheckCircle, User, Phone, CreditCard,
-  Activity, TrendingUp, Send, AlertCircle, FileDown,
+  Activity, TrendingUp, Send, AlertCircle, FileDown, Lock,
 } from 'lucide-react';
 import { UtilizationBar } from '../ui';
 import { apiFetch, API_BASE } from '../../api/client';
@@ -225,7 +225,12 @@ const FALLBACK_INVOICES = [
 ];
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
-export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
+export const ClinicDrawer = ({
+  clinic,
+  mode = 'overview',
+  onClose,
+  canEdit = true,   // ← RBAC: false → oculta acciones de escritura
+}) => {
   const [activeTab,     setActiveTab]    = useState(mode);
   const [subscription, setSubscription] = useState(null);
   const [license,      setLicense]      = useState(null);
@@ -248,7 +253,14 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
   const [downloadingId,   setDownloadingId]   = useState(null);
   const [downloadError,   setDownloadError]   = useState(null);
 
-  useEffect(() => { setActiveTab(mode); }, [mode]);
+  // Si !canEdit y se intenta abrir en modo settings O INVOICES, redirigir a overview
+  useEffect(() => {
+    if (!canEdit && (mode === 'settings' || mode === 'invoices')) {
+      setActiveTab('overview');
+    } else {
+      setActiveTab(mode);
+    }
+  }, [mode, canEdit]);
 
   useEffect(() => {
     if (!clinic) return;
@@ -544,26 +556,24 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
 
     // ── Paleta de colores WellQ ───────────────────────────────────────────────
     const C = {
-      darkBg:      '0B1017', // Fondo oscuro principal
-      darkMid:     '1A2535', // Fondo oscuro secundario
-      cyan:        '16F8F9', // Cyan WellQ
+      darkBg:      '0B1017',
+      darkMid:     '1A2535',
+      cyan:        '16F8F9',
       white:       'FFFFFF',
-      green:       '10B981', // Pagada
+      green:       '10B981',
       greenBg:     'ECFDF5',
-      amber:       'F59E0B', // Pendiente
+      amber:       'F59E0B',
       amberBg:     'FFFBEB',
-      red:         'EF4444', // Vencida
+      red:         'EF4444',
       redBg:       'FEF2F2',
-      rowAlt:      'F8FAFC', // Fila alternada suave
+      rowAlt:      'F8FAFC',
       rowWhite:    'FFFFFF',
-      headerText:  '0F172A', // Texto oscuro para headers de sección
-      subText:     '64748B', // Texto secundario gris
-      borderColor: 'E2E8F0', // Borde suave
+      headerText:  '0F172A',
+      subText:     '64748B',
+      borderColor: 'E2E8F0',
     };
 
     // ── Estilos reutilizables ─────────────────────────────────────────────────
-
-    // Cabecera principal de columnas (fondo oscuro, texto cyan)
     const colHeaderStyle = {
       font:      { bold: true, color: { argb: `FF${C.white}` }, size: 10 },
       fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkBg}` } },
@@ -576,7 +586,6 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       },
     };
 
-    // Estilo de celda de datos (normal, con borde suave)
     const cellStyle = (isAlt = false) => ({
       font:      { size: 10, color: { argb: `FF${C.headerText}` } },
       fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
@@ -589,7 +598,6 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       },
     });
 
-    // Estilo de chip de estado por valor
     const statusStyle = (statusRaw) => {
       const map = {
         paid:    { fg: C.green,  bg: C.greenBg },
@@ -610,21 +618,18 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       };
     };
 
-    // Estilo de título de hoja (mega fila de título)
     const sheetTitleStyle = (accentColor = C.cyan) => ({
       font:      { bold: true, color: { argb: `FF${accentColor}` }, size: 13 },
       fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkBg}` } },
       alignment: { vertical: 'middle', horizontal: 'left' },
     });
 
-    // Estilo de fila de sección (ej: ▶ ESTADÍSTICAS)
     const sectionHeaderStyle = (accentColor = C.cyan) => ({
       font:      { bold: true, color: { argb: `FF${accentColor}` }, size: 10 },
       fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } },
       alignment: { vertical: 'middle', horizontal: 'left' },
     });
 
-    // Estilo de clave en hoja General
     const summaryKeyStyle = (isAlt = false) => ({
       font:      { bold: true, size: 10, color: { argb: `FF${C.headerText}` } },
       fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
@@ -637,7 +642,6 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       },
     });
 
-    // Estilo de valor en hoja General
     const summaryValStyle = (isAlt = false, accent = false) => ({
       font:      { size: 10, color: { argb: `FF${accent ? C.cyan : C.subText}` } },
       fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${isAlt ? C.rowAlt : C.rowWhite}` } },
@@ -653,7 +657,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
     // ── Función genérica: aplica estilos a una hoja de facturas ──────────────
     const buildInvoiceSheet = (wb, sheetName, filteredInvoices, accentColor = C.cyan) => {
       const ws = wb.addWorksheet(sheetName, {
-        views: [{ state: 'frozen', ySplit: 3 }], // Congela 3 filas: título + vacía + cabeceras
+        views: [{ state: 'frozen', ySplit: 3 }],
       });
 
       const COLS = [
@@ -668,20 +672,17 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       ];
       ws.columns = COLS;
 
-      // Fila 1: Título de hoja (fusionada)
       ws.mergeCells(1, 1, 1, COLS.length);
       const titleCell = ws.getCell(1, 1);
       titleCell.value = `WellQ · Facturación — ${clinic.name ?? ''}  |  ${sheetName.toUpperCase()}`;
       Object.assign(titleCell, sheetTitleStyle(accentColor));
       ws.getRow(1).height = 28;
 
-      // Fila 2: Separador visual vacío
       ws.getRow(2).height = 6;
       for (let c = 1; c <= COLS.length; c++) {
         ws.getCell(2, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } };
       }
 
-      // Fila 3: Cabeceras de columnas
       const headerRow = ws.getRow(3);
       COLS.forEach((col, idx) => {
         const cell = headerRow.getCell(idx + 1);
@@ -690,7 +691,6 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       });
       headerRow.height = 22;
 
-      // Filas de datos
       if (filteredInvoices.length === 0) {
         const emptyRow = ws.addRow(['Sin registros para esta categoría']);
         ws.mergeCells(emptyRow.number, 1, emptyRow.number, COLS.length);
@@ -714,12 +714,10 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
           });
           row.height = 20;
 
-          // Aplica estilo base a todas las celdas de la fila
           row.eachCell({ includeEmpty: true }, (cell, colNum) => {
             Object.assign(cell, cellStyle(isAlt));
           });
 
-          // Celda de monto: negrita + alineada a la derecha
           const montoCell = row.getCell('monto');
           montoCell.numFmt = '$#,##0.00';
           montoCell.font      = { bold: true, size: 10, color: { argb: `FF${C.headerText}` } };
@@ -727,13 +725,11 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
           montoCell.fill      = cellStyle(isAlt).fill;
           montoCell.border    = cellStyle(isAlt).border;
 
-          // Celda de estado: color según valor
           const estadoCell = row.getCell('estado');
           Object.assign(estadoCell, statusStyle(statusRaw));
         });
       }
 
-      // Autofilter desde fila de cabeceras
       ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: COLS.length } };
     };
 
@@ -752,33 +748,30 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       { key: 'valor',   width: 40 },
     ];
 
-    // Título principal de la hoja General
     wsSummary.mergeCells('A1:B1');
     const genTitle = wsSummary.getCell('A1');
     genTitle.value = `WellQ · Resumen de Facturación — ${clinic.name ?? ''}`;
     Object.assign(genTitle, sheetTitleStyle(C.cyan));
     wsSummary.getRow(1).height = 28;
 
-    // Separador
     wsSummary.getRow(2).height = 5;
     ['A2', 'B2'].forEach((addr) => {
       wsSummary.getCell(addr).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.darkMid}` } };
     });
 
-    // Datos de resumen con estructura de secciones
     const summaryData = [
       { type: 'header',  metrica: '◆  INFORMACIÓN DE LA CLÍNICA',  valor: '',         accent: C.cyan  },
       { type: 'data',    metrica: 'Nombre de Clínica',              valor: clinic.name ?? '—'         },
       { type: 'data',    metrica: 'ID de Sistema',                  valor: clinicId                   },
       { type: 'data',    metrica: 'Plan Contratado',                valor: clinic.tier?.toUpperCase() ?? '—' },
       { type: 'data',    metrica: 'Fecha de Exportación',           valor: new Date().toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' }) },
-      { type: 'spacer'                                                                                                                                },
+      { type: 'spacer'                                                                                                                             },
       { type: 'header',  metrica: '◆  ESTADÍSTICAS DE FACTURAS',   valor: '',         accent: C.cyan  },
       { type: 'data',    metrica: 'Total Facturas Registradas',     valor: invoices.length             },
       { type: 'dataGreen', metrica: 'Cantidad Pagadas',             valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'paid').length    },
       { type: 'dataAmber', metrica: 'Cantidad Pendientes',          valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'pending').length },
       { type: 'dataRed',   metrica: 'Cantidad Vencidas',            valor: invoices.filter((i) => (i.status ?? '').toLowerCase() === 'overdue').length },
-      { type: 'spacer'                                                                                                                                },
+      { type: 'spacer'                                                                                                                             },
       { type: 'header',  metrica: '◆  RESUMEN FINANCIERO',         valor: '',         accent: C.cyan  },
       { type: 'dataGreen', metrica: 'Total Recaudado (Pagado)',     valor: fmt$(total((i) => (i.status ?? '').toLowerCase() === 'paid'))    },
       { type: 'dataAmber', metrica: 'Total por Cobrar (Pendiente)', valor: fmt$(total((i) => (i.status ?? '').toLowerCase() === 'pending')) },
@@ -797,14 +790,13 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
         wsSummary.mergeCells(`A${r.number}:B${r.number}`);
         Object.assign(r.getCell(1), sectionHeaderStyle(item.accent ?? C.cyan));
         r.height = 20;
-        dataRowCount = 0; // Reset alternado por sección
+        dataRowCount = 0;
         return;
       }
 
       const isAlt = dataRowCount % 2 === 1;
       dataRowCount++;
 
-      // Color de acento para el valor según tipo
       const valColor = item.type === 'dataGreen' ? C.green
                      : item.type === 'dataAmber' ? C.amber
                      : item.type === 'dataRed'   ? C.red
@@ -813,10 +805,8 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
       const r = wsSummary.addRow({ metrica: item.metrica, valor: item.valor });
       r.height = 20;
 
-      // Celda clave
       Object.assign(r.getCell(1), summaryKeyStyle(isAlt));
 
-      // Celda valor
       const valCell = r.getCell(2);
       Object.assign(valCell, summaryValStyle(isAlt, !!valColor));
       if (valColor) {
@@ -907,16 +897,19 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
             </button>
           </div>
 
-          {/* Tabs de Navegación */}
+          {/* Tabs de Navegación — Settings e Invoices ocultos para roles de solo lectura */}
           <div className="flex items-center gap-7">
             <TabBtn active={activeTab === 'overview'}  onClick={() => setActiveTab('overview')}  label="Overview" />
-            <TabBtn active={activeTab === 'settings'}  onClick={() => setActiveTab('settings')}  icon={SettingsIcon} label="Settings" />
-            <TabBtn active={activeTab === 'invoices'}  onClick={() => setActiveTab('invoices')}  icon={Receipt}      label="Invoices" />
+            {canEdit && (
+              <>
+                <TabBtn active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={SettingsIcon} label="Settings" />
+                <TabBtn active={activeTab === 'invoices'}  onClick={() => setActiveTab('invoices')}  icon={Receipt}      label="Invoices" />
+              </>
+            )}
           </div>
         </div>
 
         {/* ── Body Content ─────────────────────────────────────────────────────── */}
-        {/* AQUÍ SE AÑADEN LAS CLASES DE SCROLLBAR OSCURO */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-[#0b1017] p-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-wellq-gray/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full">
           <AnimatePresence mode="wait">
 
@@ -987,7 +980,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
             )}
 
             {/* SETTINGS TAB */}
-            {activeTab === 'settings' && (
+            {activeTab === 'settings' && canEdit && (
               <motion.div
                 key="settings"
                 variants={containerVariants}
@@ -1001,7 +994,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
                     <div className="w-11 h-11 rounded-xl bg-wellq-gray/10 dark:bg-white/5 flex items-center justify-center">
                       <SettingsIcon size={20} className="text-wellq-dark dark:text-white" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h3 className="font-bold text-base text-wellq-dark dark:text-white">Clinic Configuration</h3>
                       <p className="text-xs font-medium text-wellq-gray">Manage core details and status for this tenant.</p>
                     </div>
@@ -1068,7 +1061,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
             )}
 
             {/* INVOICES TAB */}
-            {activeTab === 'invoices' && (
+            {activeTab === 'invoices' && canEdit && (
               <motion.div
                 key="invoices"
                 variants={containerVariants}
@@ -1182,7 +1175,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
 
         {/* ── Footer de Acción Rápida (Overview) ───────────────────────────────── */}
         <AnimatePresence>
-          {activeTab === 'overview' && (
+          {activeTab === 'overview' && canEdit && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1190,6 +1183,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
               transition={{ duration: 0.25, ease: 'easeOut' }}
               className="flex-none p-6 border-t border-wellq-gray/10 dark:border-white/5 bg-white dark:bg-wellq-dark shadow-[0_-10px_30px_rgba(0,0,0,0.02)]"
             >
+              {/* ── Botón Contactar: solo visible para usuarios con canEdit ── */}
               <button
                 onClick={() => setContactModalOpen(true)}
                 className="w-full px-4 py-3.5 border-2 border-wellq-cyan/30 hover:border-wellq-cyan bg-wellq-cyan/5 hover:bg-wellq-cyan/10 text-wellq-cyan dark:text-wellq-cyan rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
@@ -1203,7 +1197,7 @@ export const ClinicDrawer = ({ clinic, mode = 'overview', onClose }) => {
 
       {/* ── Modal de Contacto ─────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {contactModalOpen && (
+        {contactModalOpen && canEdit && (
           <ContactClinicModal
             clinic={clinic}
             contact={contact}

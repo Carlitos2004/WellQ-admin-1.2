@@ -262,7 +262,7 @@ const FilterBar = ({
           }`}
         >
           <Tag size={11} strokeWidth={2.5} />
-          {activeCatOption ? activeCatOption.label : t('support.category', 'Categoría')}
+          {activeCatOption ? activeCatOption.label : t('support.category')}
           <ChevronDown
             size={10}
             strokeWidth={2.5}
@@ -285,7 +285,7 @@ const FilterBar = ({
               >
                 <div className="px-4 pt-3.5 pb-2 border-b border-wellq-gray/10 dark:border-white/5 flex-shrink-0">
                   <p className="text-[9px] font-bold uppercase tracking-widest text-wellq-gray/70">
-                    {t('support.filterByCategory', 'Filtrar por categoría')}
+                    {t('support.filterByCategory')}
                   </p>
                 </div>
                 <div className={`flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
@@ -328,7 +328,7 @@ const FilterBar = ({
               }`}
             >
               <Building size={11} strokeWidth={2.5} />
-              {activeClinicOption ? activeClinicOption.name : t('support.allClinics', 'Todas las Clínicas')}
+              {activeClinicOption ? activeClinicOption.name : t('support.allClinics')}
               <ChevronDown
                 size={10}
                 strokeWidth={2.5}
@@ -351,7 +351,7 @@ const FilterBar = ({
                   >
                     <div className="px-4 pt-3.5 pb-2 border-b border-wellq-gray/10 dark:border-white/5 flex-shrink-0">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-wellq-gray/70">
-                        {t('support.filterByClinic', 'Filtrar por clínica')}
+                        {t('support.filterByClinic')}
                       </p>
                     </div>
 
@@ -367,7 +367,7 @@ const FilterBar = ({
                         <span className="w-6 h-6 rounded-lg bg-wellq-cyan/10 dark:bg-wellq-cyan/10 text-wellq-cyan flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-gray/10 dark:ring-white/5">
                           <Building size={11} strokeWidth={2.5} />
                         </span>
-                        <span className="flex-1">{t('support.allClinics', 'Todas las Clínicas')}</span>
+                        <span className="flex-1">{t('support.allClinics')}</span>
                         {!filters.clinic_id && (
                           <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />
                         )}
@@ -428,7 +428,7 @@ const FilterBar = ({
             className="inline-flex items-center gap-1.5 text-[11px] font-bold text-wellq-gray hover:text-red-500 dark:hover:text-red-400 transition-colors ml-1 uppercase tracking-wider"
           >
             <X size={12} strokeWidth={2.5} />
-            Clear
+            {t('common.clear')}
           </motion.button>
         )}
       </AnimatePresence>
@@ -552,7 +552,7 @@ const Pagination = ({ page, totalPages, total, pageSize, onPageChange, t }) => {
   return (
     <div className="flex items-center justify-between px-6 py-4 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
       <p className="text-xs font-semibold text-wellq-gray uppercase tracking-wider">
-        {start}–{end} <span className="lowercase font-medium opacity-70">de</span> {total.toLocaleString()} {t('support.tickets')}
+        {start}–{end} <span className="lowercase font-medium opacity-70">{t('support.of')}</span> {total.toLocaleString()} {t('support.tickets')}
       </p>
 
       <div className="flex items-center gap-1.5">

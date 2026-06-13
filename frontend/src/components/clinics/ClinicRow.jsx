@@ -5,7 +5,8 @@ import { StatusBadge, UtilizationBar, HealthBadge } from '../ui';
 
 export const ClinicRow = ({
   clinic, onSelect, selected, onImpersonate,
-  onSettings, onInvoices, onDelete, animationDelay = 0
+  onSettings, onInvoices, onDelete, animationDelay = 0,
+  canEdit = true,   // ← RBAC: si false, oculta la columna de acciones de escritura
 }) => (
   <motion.tr
     initial={{ opacity: 0, y: 10 }}
@@ -78,36 +79,38 @@ export const ClinicRow = ({
       {clinic.lastLogin ?? '-'}
     </td>
 
-    {/* Actions */}
-    <td className="py-4 px-4">
-      <div className="flex items-center gap-1 transition-opacity duration-200">
-        <ActionBtn
-          icon={Settings}
-          title="Configuración"
-          hoverClass="hover:bg-wellq-gray/10 dark:hover:bg-white/5 hover:text-wellq-dark dark:hover:text-white"
-          onClick={(e) => { e.stopPropagation(); onSettings && onSettings(clinic); }}
-        />
-        <ActionBtn
-          icon={DollarSign}
-          title="Facturación"
-          hoverClass="hover:bg-wellq-green/10 hover:text-wellq-green"
-          onClick={(e) => { e.stopPropagation(); onInvoices && onInvoices(clinic); }}
-        />
-        {/* ── Eye → Acceso de Soporte (antes abría el drawer, ahora lanza el ImpersonateModal) ── */}
-        <ActionBtn
-          icon={Eye}
-          title="Acceso de Soporte"
-          hoverClass="hover:bg-amber-500/10 hover:text-amber-500"
-          onClick={(e) => { e.stopPropagation(); onImpersonate && onImpersonate(clinic); }}
-        />
-        <ActionBtn
-          icon={Trash2}
-          title="Eliminar Clínica"
-          hoverClass="hover:bg-red-500/10 hover:text-red-400"
-          onClick={(e) => { e.stopPropagation(); onDelete && onDelete(clinic); }}
-        />
-      </div>
-    </td>
+    {/* ── Actions: solo visible para usuarios con permisos de edición ── */}
+    {canEdit && (
+      <td className="py-4 px-4">
+        <div className="flex items-center gap-1 transition-opacity duration-200">
+          <ActionBtn
+            icon={Settings}
+            title="Configuración"
+            hoverClass="hover:bg-wellq-gray/10 dark:hover:bg-white/5 hover:text-wellq-dark dark:hover:text-white"
+            onClick={(e) => { e.stopPropagation(); onSettings && onSettings(clinic); }}
+          />
+          <ActionBtn
+            icon={DollarSign}
+            title="Facturación"
+            hoverClass="hover:bg-wellq-green/10 hover:text-wellq-green"
+            onClick={(e) => { e.stopPropagation(); onInvoices && onInvoices(clinic); }}
+          />
+          {/* ── Eye → Acceso de Soporte (lanza el ImpersonateModal) ── */}
+          <ActionBtn
+            icon={Eye}
+            title="Acceso de Soporte"
+            hoverClass="hover:bg-amber-500/10 hover:text-amber-500"
+            onClick={(e) => { e.stopPropagation(); onImpersonate && onImpersonate(clinic); }}
+          />
+          <ActionBtn
+            icon={Trash2}
+            title="Eliminar Clínica"
+            hoverClass="hover:bg-red-500/10 hover:text-red-400"
+            onClick={(e) => { e.stopPropagation(); onDelete && onDelete(clinic); }}
+          />
+        </div>
+      </td>
+    )}
   </motion.tr>
 );
 
