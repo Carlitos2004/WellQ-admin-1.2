@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from app.db.neon import get_db
 from app.models_db import PlatformSetting, AdminUser
+from app.routers.auth import require_permission   # RBAC: refuerzo de escrituras sensibles
 
 router = APIRouter(prefix="/api/settings", tags=["Configuración Global"])
 
@@ -50,7 +51,7 @@ async def get_global_settings(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.patch("", summary="Actualizar configuración global")
+@router.patch("", summary="Actualizar configuración global", dependencies=[Depends(require_permission("settings.manage"))])
 async def update_global_settings(updates: dict = Body(...), db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create(db, "global_config")
     data = _load(setting)
@@ -96,7 +97,7 @@ async def get_azure_status(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/azure", summary="Configurar credenciales Azure")
+@router.post("/azure", summary="Configurar credenciales Azure", dependencies=[Depends(require_permission("settings.manage"))])
 async def setup_azure(config: dict = Body(...), db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create(db, "azure_config")
     data = _load(setting)
@@ -129,7 +130,7 @@ async def get_db_status(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/database", summary="Configuración de base de datos")
+@router.post("/database", summary="Configuración de base de datos", dependencies=[Depends(require_permission("settings.manage"))])
 async def setup_database(config: dict = Body(...), db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create(db, "db_config")
     data = _load(setting)
@@ -140,7 +141,7 @@ async def setup_database(config: dict = Body(...), db: AsyncSession = Depends(ge
     return {"status": "success"}
 
 
-@router.get("/api-keys/gcp", summary="Obtener API Key GCP")
+@router.get("/api-keys/gcp", summary="Obtener API Key GCP", dependencies=[Depends(require_permission("settings.manage"))])
 async def get_gcp_key(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(PlatformSetting).where(PlatformSetting.setting_key == "gcp_api_key")
@@ -150,7 +151,7 @@ async def get_gcp_key(db: AsyncSession = Depends(get_db)):
     return {"gcp_api_key": data.get("api_key", "")}
 
 
-@router.post("/api-keys/gcp", summary="Guardar API Key GCP")
+@router.post("/api-keys/gcp", summary="Guardar API Key GCP", dependencies=[Depends(require_permission("settings.manage"))])
 async def set_gcp_key(payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
     api_key = payload.get("api_key", "")
     setting = await _get_or_create(db, "gcp_api_key")

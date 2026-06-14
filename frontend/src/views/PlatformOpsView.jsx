@@ -8,6 +8,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { Skeleton } from '../components/ui';
 import useHasPermission from '../hooks/useHasPermission'; // ← NUEVO: hook de permisos
+import { getAccessToken } from '../services/auth';
 
 // ─── Design Tokens para Platform Ops ───
 const PLATFORM_META = {
@@ -89,7 +90,7 @@ const ForceUpdateModal = ({ versions, onClose }) => {
         Object.entries(minVersions).map(([appType, version]) =>
           fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/analytics/versions/force-update`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}) },
             body: JSON.stringify({ appType, minVersion: version }),
           })
         )
@@ -237,7 +238,10 @@ const AppVersionDistribution = ({ canEdit }) => {
     const fetchVersions = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/analytics/versions`);
+        const _t = getAccessToken();
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/analytics/versions`, {
+          headers: _t ? { Authorization: `Bearer ${_t}` } : {},
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         setVersions(json.data ?? []);

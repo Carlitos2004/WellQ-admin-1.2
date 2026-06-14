@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     app_port: int = 8000               # Puerto del servidor
     debug: bool = False                # Modo debug (habilita docs automáticos en /docs)
     allowed_origins: str = "http://localhost:5173"  # CORS: orígenes permitidos
-    
+    db_ssl: bool = True                # SSL de la BD: True para Neon, False para Postgres local (Docker)
+
     resend_api_key: str = ""
     resend_from_email: str = "WellQ Admin <onboarding@resend.dev>"
     

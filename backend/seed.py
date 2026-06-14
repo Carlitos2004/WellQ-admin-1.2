@@ -57,7 +57,9 @@ from app.models_db import (
     Role, Permission, RolePermission,
 )
 
-DATABASE_URL = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
+# La URL se lee del .env (variable DATABASE_URL) — nunca hardcodeada.
+from app.config import settings
+DATABASE_URL = settings.database_url
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

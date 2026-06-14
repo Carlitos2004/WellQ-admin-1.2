@@ -12,6 +12,7 @@ import { ChurnHeatmap } from '../components/charts/ChurnHeatmap';
 import { useLanguage } from '../contexts/LanguageContext';
 import { OpenTicketsWidget } from '../components/overview/OpenTicketsWidget';
 import { ChurnRegionModal } from '../components/charts/ChurnRegionModal';
+import useHasPermission from '../hooks/useHasPermission';
 
 // ── Animaciones Base ──
 const containerVariants = {
@@ -309,6 +310,7 @@ const BusinessHealthTab = ({
   onRegionClick, fmtArr,
 }) => {
   const { t, tVal } = useLanguage();
+  const canBilling = useHasPermission('billing.view');   // RBAC: MRR + Churn sólo si el rol ve facturación
   const arrSpark = kpiArr?.trend_graph?.map((t) => t.value) ?? [0, 0, 0, 0, 0, 0];
 
   return (
@@ -343,14 +345,16 @@ const BusinessHealthTab = ({
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div variants={itemVariants}>
-          <MRRChart />
-        </motion.div>
-        <motion.div variants={itemVariants}>
-          <ChurnHeatmap apiRegions={churnRegions} onRegionClick={onRegionClick} />
-        </motion.div>
-      </div>
+      {canBilling && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div variants={itemVariants}>
+            <MRRChart />
+          </motion.div>
+          <motion.div variants={itemVariants}>
+            <ChurnHeatmap apiRegions={churnRegions} onRegionClick={onRegionClick} />
+          </motion.div>
+        </div>
+      )}
 
       <motion.div variants={itemVariants} className="relative bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/20 dark:border-white/5 overflow-hidden">
         {/* Glow estilo PlatformOps */}
@@ -894,6 +898,8 @@ export const OverviewView = ({
   const [tab, setTab] = useState('business');
   const { t } = useLanguage();
   const [selectedRegion, setSelectedRegion] = useState(null);
+  const canOperational = useHasPermission('platform.view');   // RBAC: pestaña de infraestructura
+  const activeTab = (tab === 'operational' && !canOperational) ? 'business' : tab;
 
   return (
     <div className="space-y-6 font-sans">
@@ -903,29 +909,31 @@ export const OverviewView = ({
         <button
           onClick={() => setTab('business')}
           className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all duration-300 ${
-            tab === 'business' 
-              ? 'bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white shadow-sm ring-1 ring-wellq-gray/20 dark:ring-white/10' 
+            activeTab === 'business'
+              ? 'bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white shadow-sm ring-1 ring-wellq-gray/20 dark:ring-white/10'
               : 'text-wellq-gray hover:text-wellq-dark dark:hover:text-white'
           }`}
         >
-          <TrendingUp size={16} strokeWidth={tab === 'business' ? 2.5 : 2} /> 
+          <TrendingUp size={16} strokeWidth={activeTab === 'business' ? 2.5 : 2} />
           {t('overview.businessHealth')}
         </button>
-        <button
-          onClick={() => setTab('operational')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all duration-300 ${
-            tab === 'operational' 
-              ? 'bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white shadow-sm ring-1 ring-wellq-gray/20 dark:ring-white/10' 
-              : 'text-wellq-gray hover:text-wellq-dark dark:hover:text-white'
-          }`}
-        >
-          <Server size={16} strokeWidth={tab === 'operational' ? 2.5 : 2} /> 
-          {t('overview.operationalStatus')}
-        </button>
+        {canOperational && (
+          <button
+            onClick={() => setTab('operational')}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all duration-300 ${
+              activeTab === 'operational'
+                ? 'bg-white dark:bg-wellq-dark text-wellq-dark dark:text-white shadow-sm ring-1 ring-wellq-gray/20 dark:ring-white/10'
+                : 'text-wellq-gray hover:text-wellq-dark dark:hover:text-white'
+            }`}
+          >
+            <Server size={16} strokeWidth={activeTab === 'operational' ? 2.5 : 2} />
+            {t('overview.operationalStatus')}
+          </button>
+        )}
       </div>
 
       <AnimatePresence mode="wait">
-        {tab === 'business' && (
+        {activeTab === 'business' && (
           <motion.div key="business" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <BusinessHealthTab
               loading={loading} kpiArr={kpiArr} kpiClinics={kpiClinics} kpiPatients={kpiPatients} kpiNrr={kpiNrr}
@@ -934,7 +942,7 @@ export const OverviewView = ({
             />
           </motion.div>
         )}
-        {tab === 'operational' && (
+        {activeTab === 'operational' && canOperational && (
           <motion.div key="operational" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <OperationalStatusTab
               apiServers={apiServers} apiProcesses={apiProcesses} kpiSystemHealth={kpiSystemHealth} kpiActiveNow={kpiActiveNow}

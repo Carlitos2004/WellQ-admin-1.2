@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { UtilizationBar } from '../ui';
 import { apiFetch, API_BASE } from '../../api/client';
+import { getAccessToken } from '../../services/auth';
 import { PatientHealthSection } from './PatientHealthSection';
 
 // ─── Animaciones Coreografiadas (Estilo Analytics) ───────────────────────────
@@ -300,7 +301,7 @@ export const ClinicDrawer = ({
     try {
       const res = await fetch(`${API_BASE}/api/clinics/${id}`, {
         method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}) },
         body:    JSON.stringify({ name: clinicName, tier: clinicPlan, status: clinicStatus }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

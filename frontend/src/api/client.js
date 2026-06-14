@@ -13,16 +13,20 @@ export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 // ─── Core fetch ───────────────────────────────────────────────────────────────
 
 export const apiFetch = async (path, options = {}) => {
+  // `silent: true` → no muestra el popup de Swal en 401/403 (para cargas de
+  // fondo donde un 403 sólo significa "este rol no ve este módulo"). Se sigue
+  // lanzando el error para que el caller lo ignore con .catch().
+  const { silent = false, ...fetchOptions } = options;
   const token = getAccessToken(); // ✅ lee 'wellq_access_token' desde auth.js
 
   const headers = {
-    ...(options.body != null ? { 'Content-Type': 'application/json' } : {}),
+    ...(fetchOptions.body != null ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(options.headers ?? {}),
+    ...(fetchOptions.headers ?? {}),
   };
 
   const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers,
   });
 
@@ -38,28 +42,32 @@ export const apiFetch = async (path, options = {}) => {
     }
 
     if (res.status === 403) {
-      Swal.fire({
-        icon:                'error',
-        title:               'Acceso denegado',
-        text:                detail || "Se requiere el rol 'super_admin' para esta operación.",
-        confirmButtonColor:  '#0D9488',
-        confirmButtonText:   'Entendido',
-      });
+      if (!silent) {
+        Swal.fire({
+          icon:                'error',
+          title:               'Acceso denegado',
+          text:                detail || "No tienes permiso para esta operación.",
+          confirmButtonColor:  '#0D9488',
+          confirmButtonText:   'Entendido',
+        });
+      }
       const err = new Error(detail || 'Forbidden');
       err.status = 403;
       throw err;
     }
 
     if (res.status === 401) {
-      Swal.fire({
-        icon:               'warning',
-        title:              'Sesión expirada',
-        text:               'Tu sesión ha expirado. Por favor, vuelve a iniciar sesión.',
-        confirmButtonColor: '#0D9488',
-      }).then(() => {
-        clearTokens();                   // ✅ borra wellq_access_token, wellq_refresh_token y wellq_user
-        window.location.href = '/login';
-      });
+      if (!silent) {
+        Swal.fire({
+          icon:               'warning',
+          title:              'Sesión expirada',
+          text:               'Tu sesión ha expirado. Por favor, vuelve a iniciar sesión.',
+          confirmButtonColor: '#0D9488',
+        }).then(() => {
+          clearTokens();                   // ✅ borra wellq_access_token, wellq_refresh_token y wellq_user
+          window.location.href = '/login';
+        });
+      }
       const err = new Error('Unauthorized');
       err.status = 401;
       throw err;
@@ -162,7 +170,7 @@ export const fetchPatientHealth = (clinicId) =>
   apiFetch(`/api/clinics/${clinicId}/patient-health`);
 
 export const fetchSyncStatus = () =>
-  apiFetch('/api/sync-status');
+  apiFetch('/api/sync-status', { silent: true });   // indicador de fondo: 403 sin popup si el rol no ve plataforma
 
 // ─── Clínicas ─────────────────────────────────────────────────────────────────
 

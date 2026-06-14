@@ -6,6 +6,7 @@ from sqlalchemy import select, func, desc, asc, or_, delete
 from app.db.neon import get_db
 from app.models_db import Plan, PlanFeature, ClinicPlan
 from .dependencies import require_super_admin
+from app.routers.auth import require_permission   # RBAC: permisos por rol en escrituras
 
 router = APIRouter(prefix="/api/plans", tags=["Constructor de Planes"])
 
@@ -192,7 +193,7 @@ async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
 async def create_plan(
     body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_super_admin),
+    _: None = Depends(require_permission("plans.manage")),
 ):
     name = body.get("name", "").strip()
     if not name or len(name) < 3:
@@ -408,7 +409,7 @@ async def restore_plan(planId: str = Path(...), db: AsyncSession = Depends(get_d
 async def delete_plan(
     planId: str = Path(...),
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_super_admin),
+    _: None = Depends(require_permission("plans.manage")),
 ):
     result = await db.execute(select(Plan).where(Plan.plan_id == planId))
     plan = result.scalars().first()

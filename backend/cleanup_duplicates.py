@@ -16,13 +16,15 @@ SEGURO para ejecutar en cualquier momento:
 """
 
 import asyncio
+import sys, os
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 
-DATABASE_URL = (
-    "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM"
-    "@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
-)
+sys.path.insert(0, os.path.dirname(__file__))
+
+# La URL se lee del .env (variable DATABASE_URL) — nunca hardcodeada.
+from app.config import settings
+DATABASE_URL = settings.database_url
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 

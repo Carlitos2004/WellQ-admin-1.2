@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { TrendingUp, TrendingDown, ChevronLeft, ChevronRight, AlertTriangle, Activity } from 'lucide-react';
+import { getAccessToken } from '../../services/auth';
 
 const fmt = (val) => {
   if (!val && val !== 0) return '$0';
@@ -25,7 +26,10 @@ export const MRRChart = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/financials/mrr/snapshots`);
+        const _t = getAccessToken();
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/financials/mrr/snapshots`, {
+          headers: _t ? { Authorization: `Bearer ${_t}` } : {},
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         const data = json.data ?? [];

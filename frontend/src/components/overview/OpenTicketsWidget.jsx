@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { LifeBuoy, ArrowRight, Bug, CreditCard, Sparkles, MessageSquare } from 'lucide-react';
 import { fetchSupportTickets } from '../../api/client';
 import { useLanguage } from '../../contexts/LanguageContext';
+import useHasPermission from '../../hooks/useHasPermission';
 
 // ─── Diseño de Categorías (Estilo PlatformOps tokens) ────────────────────────
 const CATEGORY_STYLE = {
@@ -41,15 +42,19 @@ const CATEGORY_STYLE = {
 // ── Componente ───────────────────────────────────────────────────────────────
 export const OpenTicketsWidget = ({ onGoSupport }) => {
   const { t } = useLanguage();
+  const canViewTickets = useHasPermission('tickets.view');   // RBAC: oculta el widget si el rol no ve tickets
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!canViewTickets) { setLoading(false); return; }
     fetchSupportTickets({ status: 'Open', page_size: 5, page: 1 })
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [canViewTickets]);
+
+  if (!canViewTickets) return null;
 
   const tickets = data?.data ?? [];
   const total   = data?.total ?? 0;

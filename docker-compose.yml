@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Postgres local para desarrollo — réplica aislada (NO usa la Neon compartida).
+# Levanta con:  docker compose up -d
+# Detén con:    docker compose down        (los datos persisten en el volumen)
+# Borrar todo:  docker compose down -v     (¡elimina los datos!)
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: wellq_local_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wellq
+      POSTGRES_PASSWORD: wellq_local_pass
+      POSTGRES_DB: wellq
+    ports:
+      - "5432:5432"
+    volumes:
+      - wellq_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wellq -d wellq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  wellq_pgdata:

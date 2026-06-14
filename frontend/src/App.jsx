@@ -21,7 +21,13 @@ import ClinicPortalPage    from './views/ClinicPortalPage';
 
 import LoginPage from "./components/login/LoginPage";
 
-import { logout as authLogout, getStoredUser } from './services/auth';
+import { logout as authLogout, getStoredUser, getAccessToken } from './services/auth';
+
+// RBAC: cabecera Authorization para los fetch() crudos (los que no usan apiFetch).
+const authHeaders = () => {
+  const t = getAccessToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
 
 import { useLanguage } from './contexts/LanguageContext';
 import { useTheme }    from './contexts/ThemeContext';
@@ -125,7 +131,7 @@ const NotificationPanel = ({ onClose }) => {
     const fetchNotifs = async () => {
       try {
         setLoading(true);
-        const res  = await fetch(`${API_BASE}/api/notifications?limit=30`);
+        const res  = await fetch(`${API_BASE}/api/notifications?limit=30`, { headers: authHeaders() });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         setNotifications(json.data ?? []);
@@ -151,7 +157,7 @@ const NotificationPanel = ({ onClose }) => {
   const handleDelete = async (id) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`${API_BASE}/api/notifications/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/notifications/${id}`, { method: 'DELETE', headers: authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {
@@ -913,37 +919,40 @@ export default function App() {
     setRefreshing(true);
     const { start_date, end_date } = getDateRangeFromPeriod(range);
     const withDates = (url) => `${url}?start_date=${start_date}&end_date=${end_date}`;
+    // Carga de fondo: 403 = "este rol no ve este módulo". Modo silencioso para
+    // que no salte el popup; el dato simplemente queda vacío y su widget se oculta.
+    const g    = (url) => apiFetch(url, { silent: true });
     const safe = (p) => p.catch(() => null);
 
     const results = await Promise.allSettled([
-      safe(apiFetch(withDates('/api/dashboard/arr'))),
-      safe(apiFetch(withDates('/api/dashboard/clinics/active'))),
-      safe(apiFetch(withDates('/api/dashboard/patients/total'))),
-      safe(apiFetch(withDates('/api/dashboard/nrr'))),
-      safe(apiFetch(withDates('/api/financials/mrr/breakdown'))),
-      safe(apiFetch(withDates('/api/financials/churn-risk/by-region'))),
-      safe(apiFetch('/api/alerts')),
-      safe(apiFetch('/api/clinics')),
-      safe(apiFetch('/api/platform/servers')),
-      safe(apiFetch('/api/platform/background-processes')),
-      safe(apiFetch('/api/platform/ai/costs')),
-      safe(apiFetch('/api/platform/ai/latency')),
-      safe(apiFetch('/api/platform/ai/pose-analysis/success-rate')),
-      safe(apiFetch('/api/analytics/apps/patients')),
-      safe(apiFetch('/api/analytics/apps/tablet')),
-      safe(apiFetch('/api/analytics/apps/web')),
-      safe(apiFetch('/api/analytics/features/adoption')),
-      safe(apiFetch('/api/analytics/adherence/global')),
-      safe(apiFetch('/api/analytics/retention/cohorts')),
-      safe(apiFetch('/api/analytics/ai/soap-quality')),
-      safe(apiFetch('/api/settings')),
-      safe(apiFetch('/api/settings/azure')),
-      safe(apiFetch('/api/settings/database')),
-      safe(apiFetch('/api/users')),
-      safe(apiFetch(withDates('/api/dashboard/system-health'))),
-      safe(apiFetch(withDates('/api/dashboard/users/active-now'))),
-      safe(apiFetch(withDates('/api/dashboard/downloads/total'))),
-      safe(apiFetch(withDates('/api/dashboard/users/dormant'))),
+      safe(g(withDates('/api/dashboard/arr'))),
+      safe(g(withDates('/api/dashboard/clinics/active'))),
+      safe(g(withDates('/api/dashboard/patients/total'))),
+      safe(g(withDates('/api/dashboard/nrr'))),
+      safe(g(withDates('/api/financials/mrr/breakdown'))),
+      safe(g(withDates('/api/financials/churn-risk/by-region'))),
+      safe(g('/api/alerts')),
+      safe(g('/api/clinics')),
+      safe(g('/api/platform/servers')),
+      safe(g('/api/platform/background-processes')),
+      safe(g('/api/platform/ai/costs')),
+      safe(g('/api/platform/ai/latency')),
+      safe(g('/api/platform/ai/pose-analysis/success-rate')),
+      safe(g('/api/analytics/apps/patients')),
+      safe(g('/api/analytics/apps/tablet')),
+      safe(g('/api/analytics/apps/web')),
+      safe(g('/api/analytics/features/adoption')),
+      safe(g('/api/analytics/adherence/global')),
+      safe(g('/api/analytics/retention/cohorts')),
+      safe(g('/api/analytics/ai/soap-quality')),
+      safe(g('/api/settings')),
+      safe(g('/api/settings/azure')),
+      safe(g('/api/settings/database')),
+      safe(g('/api/users')),
+      safe(g(withDates('/api/dashboard/system-health'))),
+      safe(g(withDates('/api/dashboard/users/active-now'))),
+      safe(g(withDates('/api/dashboard/downloads/total'))),
+      safe(g(withDates('/api/dashboard/users/dormant'))),
     ]);
 
     const v = (i) => results[i].value;
@@ -1005,7 +1014,7 @@ export default function App() {
   };
 
   const handleAckAlert = (alertId) => {
-    fetch(`${API_BASE}/api/alerts/${alertId}/acknowledge`, { method: 'POST' })
+    fetch(`${API_BASE}/api/alerts/${alertId}/acknowledge`, { method: 'POST', headers: authHeaders() })
       .then(() => {
         setApiAlerts((prev) => prev.filter((a) => a.alert_id !== alertId));
         setUnreadAlerts((n) => Math.max(0, n - 1));
@@ -1015,7 +1024,7 @@ export default function App() {
   const handleSaveSettings = (changes) => {
     fetch(`${API_BASE}/api/settings`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(changes),
     }).then((r) => r.json())
       .then((d) => setGlobalSettings((prev) => ({ ...prev, ...d })))

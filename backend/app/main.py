@@ -6,7 +6,7 @@ Para ejecutar:
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
 import logging
@@ -41,6 +41,9 @@ from app.routers import (
     roles,                # RBAC: Roles, Permisos y asignación
     # kpis eliminado: sus endpoints fueron fusionados en dashboard.py
 )
+
+# RBAC: dependencia que bloquea el acceso a cada módulo según el permiso del rol.
+from app.routers.auth import require_permission
 
 structlog.configure(
     processors=[
@@ -105,25 +108,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Registro de routers existentes
+# ─────────────────────────────────────────────────────────────────────────────
+# Registro de routers + BLOQUEO RBAC por módulo.
+# Cada router de datos exige el permiso ".view" de su módulo (piso de lectura):
+# si el rol del usuario no lo tiene, TODOS los endpoints de ese router responden 403.
+# Las escrituras sensibles se refuerzan además con ".manage" dentro de cada router.
+# auth/password_reset quedan abiertos (login, registro, recuperación).
+# roles se auto-protege internamente con require_permission("roles.manage").
+# ─────────────────────────────────────────────────────────────────────────────
+def _perm(key: str):
+    return [Depends(require_permission(key))]
+
 app.include_router(auth.router)
 app.include_router(password_reset.router)
-app.include_router(dashboard.router)       # único owner de /api/kpis/*
-app.include_router(clinics.router)
-app.include_router(clinic_portal.router)
-app.include_router(platform.router)
-app.include_router(notifications.router)
-app.include_router(jobs.router)
-app.include_router(financials.router)
-app.include_router(alerts.router)
-app.include_router(search.router)
-app.include_router(infrastructure.router)
-app.include_router(analytics.router)
-app.include_router(users.router)
-app.include_router(settings_router.router)
-app.include_router(features.router)
-app.include_router(plans.router)
-app.include_router(clinic_plans.router)
+app.include_router(dashboard.router,       dependencies=_perm("overview.view"))   # KPIs / overview
+app.include_router(clinics.router,          dependencies=_perm("clinics.view"))
+app.include_router(clinic_portal.router)    # portal externo: se autentica con su propio token de impersonación, NO con JWT admin
+app.include_router(platform.router,         dependencies=_perm("platform.view"))
+app.include_router(notifications.router,     dependencies=_perm("platform.view"))
+app.include_router(jobs.router,              dependencies=_perm("platform.view"))
+app.include_router(financials.router,        dependencies=_perm("billing.view"))
+app.include_router(alerts.router,            dependencies=_perm("overview.view"))
+app.include_router(search.router,            dependencies=_perm("overview.view"))
+app.include_router(infrastructure.router,    dependencies=_perm("platform.view"))
+app.include_router(analytics.router,          dependencies=_perm("analytics.view"))
+app.include_router(users.router,             dependencies=_perm("users.manage"))   # gestión de usuarios = manage
+app.include_router(settings_router.router,    dependencies=_perm("settings.view"))
+app.include_router(features.router,           dependencies=_perm("plans.view"))
+app.include_router(plans.router,             dependencies=_perm("plans.view"))
+app.include_router(clinic_plans.router,       dependencies=_perm("clinics.view"))
 
 # Registro de los nuevos componentes adaptados
 # ─────────────────────────────────────────────────────────────────────────────
@@ -132,10 +145,10 @@ app.include_router(clinic_plans.router)
 # conflicto. El nuevo endpoint queda en:
 #   GET /api/clinics/{clinic_id}/patient-health
 # ─────────────────────────────────────────────────────────────────────────────
-app.include_router(support.router)
-app.include_router(clinic_health.router)
-app.include_router(sync.router)
-app.include_router(roles.router)       # RBAC: GET|POST /api/roles, GET /api/permissions
+app.include_router(support.router,           dependencies=_perm("tickets.view"))
+app.include_router(clinic_health.router,      dependencies=_perm("clinics.view"))
+app.include_router(sync.router,              dependencies=_perm("platform.view"))
+app.include_router(roles.router)       # RBAC: se auto-protege con roles.manage
 
 
 @app.get("/health", tags=["Sistema"])

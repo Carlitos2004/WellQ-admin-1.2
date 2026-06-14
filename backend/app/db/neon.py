@@ -27,7 +27,7 @@ def init_neon() -> None:
             max_overflow=5,
             pool_pre_ping=True,
             echo=settings.debug,
-            connect_args={"ssl": True},
+            connect_args={"ssl": True} if settings.db_ssl else {},
         )
 
         _session_factory = async_sessionmaker(

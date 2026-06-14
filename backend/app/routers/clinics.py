@@ -25,7 +25,8 @@ from app.models_db import (
     ActionLog                                                         # ← NUEVO
 )
 from app.db.neon import get_db
-from .dependencies import require_super_admin
+from .dependencies import require_super_admin, get_current_user
+from app.routers.auth import require_permission   # RBAC: permisos por rol en escrituras
 
 router = APIRouter(prefix="/api/clinics", tags=["Gestión de Clínicas"])
 
@@ -139,11 +140,11 @@ async def list_clinics(
 # ─────────────────────────────────────────────────────────────────────────────
 # 15. POST /clinics — Registro de una nueva clínica en el sistema
 # ─────────────────────────────────────────────────────────────────────────────
-@router.post("", summary="Registro de una nueva clínica", status_code=status.HTTP_201_CREATED)
+@router.post("", summary="Registro de una nueva clínica", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("clinics.edit"))])
 async def create_clinic(
     body:         dict = Body(...),
     db:           AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_super_admin),           # ← NUEVO (Opción A)
+    current_user: dict = Depends(get_current_user),           # RBAC: permiso clinics.edit en el decorador
 ):
     _validate_email_format(body.get("contact_email"), "correo de contacto")
     _validate_email_format(body.get("billing_email"), "correo de facturación")
@@ -208,7 +209,7 @@ async def create_clinic(
 # ─────────────────────────────────────────────────────────────────────────────
 # 24. POST /clinics/bulk/email — Envío de comunicaciones masivas
 # ─────────────────────────────────────────────────────────────────────────────
-@router.post("/bulk/email", summary="Envío de comunicaciones masivas a clínicas")
+@router.post("/bulk/email", summary="Envío de comunicaciones masivas a clínicas", dependencies=[Depends(require_permission("clinics.edit"))])
 async def bulk_email(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     clinic_ids = body.get('clinic_ids', [])
     subject    = body.get("subject", "Actualización importante")
@@ -410,12 +411,12 @@ async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_
 # ─────────────────────────────────────────────────────────────────────────────
 # 17. PATCH /clinics/{clinic_id} — Actualizar campos de una clínica
 # ─────────────────────────────────────────────────────────────────────────────
-@router.patch("/{clinic_id}", summary="Actualizar campos de una clínica")
+@router.patch("/{clinic_id}", summary="Actualizar campos de una clínica", dependencies=[Depends(require_permission("clinics.edit"))])
 async def update_clinic(
     clinic_id:    str  = Path(...),
     updates:      dict = Body(...),
     db:           AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_super_admin),           # ← NUEVO (Opción A)
+    current_user: dict = Depends(get_current_user),           # RBAC: permiso clinics.edit en el decorador
 ):
     if "contact_email" in updates:
         _validate_email_format(updates.get("contact_email"), "correo de contacto")
@@ -479,11 +480,11 @@ async def update_clinic(
 # ─────────────────────────────────────────────────────────────────────────────
 # 17b. DELETE /clinics/{clinic_id} — Eliminar clínica (Soft Delete o Hard Delete)
 # ─────────────────────────────────────────────────────────────────────────────
-@router.delete("/{clinic_id}", summary="Eliminar clínica del sistema (Soft/Hard Delete)")
+@router.delete("/{clinic_id}", summary="Eliminar clínica del sistema (Soft/Hard Delete)", dependencies=[Depends(require_permission("clinics.edit"))])
 async def delete_clinic(
     clinic_id:    str  = Path(...),
     db:           AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_super_admin),           # ← renombrado de _ a current_user
+    current_user: dict = Depends(get_current_user),           # RBAC: permiso clinics.edit en el decorador
 ):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
     clinic = result.scalar_one_or_none()
