@@ -211,6 +211,7 @@ const ErrorBanner = ({ message, onRetry, errorLabel, retryLabel }) => (
 // overflow/z-index del árbol de componentes padre. Mismo patrón que
 // "Force Update Options" en AnalyticsView.
 const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
+  const { t } = useLanguage(); // 🐛 BUG FIX AQUÍ: Faltaba inicializar el hook
   const isDelete = type === 'delete';
   const activeClinics   = plan?.metrics?.activeClinics   ?? 0;
   const historicalClinics = plan?.metrics?.historicalClinics ?? 0;
