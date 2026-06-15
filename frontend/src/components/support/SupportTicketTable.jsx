@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, AlertCircle,
   Bug, CreditCard, Sparkles, MessageSquare,
   SlidersHorizontal, Clock, CheckCircle2, Send, X, ChevronDown,
-  User, Tag, Building
+  User, Tag, Building, Users
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -52,6 +52,8 @@ const AVATAR_PALETTE = [
   { bg: 'bg-red-50 dark:bg-red-500/10',              text: 'text-red-600 dark:text-red-400' },
   { bg: 'bg-indigo-50 dark:bg-indigo-500/10',        text: 'text-indigo-600 dark:text-indigo-400' },
 ];
+
+const UNASSIGNED_RESPONDER_FILTER = '__unassigned';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = (iso) => {
@@ -136,16 +138,21 @@ const FilterBar = ({
   clinics,
   onFilterChange,
   categories = [],
+  responders = [],
 }) => {
   const { t } = useLanguage();
 
   const [catPanelOpen,    setCatPanelOpen]    = useState(false);
+  const [teamPanelOpen,   setTeamPanelOpen]   = useState(false);
   const [clinicPanelOpen, setClinicPanelOpen] = useState(false);
   const catButtonRef    = useRef(null);
   const catPanelRef     = useRef(null);
+  const teamButtonRef   = useRef(null);
+  const teamPanelRef    = useRef(null);
   const clinicButtonRef = useRef(null);
   const clinicPanelRef  = useRef(null);
   const [catPanelPos,    setCatPanelPos]    = useState({ top: 0, right: 0 });
+  const [teamPanelPos,   setTeamPanelPos]   = useState({ top: 0, left: 0 });
   const [clinicPanelPos, setClinicPanelPos] = useState({ top: 0, left: 0 });
 
   // Cerrar al hacer clic afuera
@@ -162,23 +169,34 @@ const FilterBar = ({
         clinicPanelRef.current  && !clinicPanelRef.current.contains(e.target) &&
         clinicButtonRef.current && !clinicButtonRef.current.contains(e.target)
       ) setClinicPanelOpen(false);
+
+      if (
+        teamPanelOpen &&
+        teamPanelRef.current    && !teamPanelRef.current.contains(e.target) &&
+        teamButtonRef.current   && !teamButtonRef.current.contains(e.target)
+      ) setTeamPanelOpen(false);
     };
-    if (catPanelOpen || clinicPanelOpen)
+    if (catPanelOpen || clinicPanelOpen || teamPanelOpen)
       document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [catPanelOpen, clinicPanelOpen]);
+  }, [catPanelOpen, clinicPanelOpen, teamPanelOpen]);
 
   // Cerrar al hacer scroll fuera del panel
   useEffect(() => {
     const handleScroll = (e) => {
-      if (catPanelRef.current?.contains(e.target) || clinicPanelRef.current?.contains(e.target)) return;
+      if (
+        catPanelRef.current?.contains(e.target) ||
+        clinicPanelRef.current?.contains(e.target) ||
+        teamPanelRef.current?.contains(e.target)
+      ) return;
       if (catPanelOpen)    setCatPanelOpen(false);
+      if (teamPanelOpen)   setTeamPanelOpen(false);
       if (clinicPanelOpen) setClinicPanelOpen(false);
     };
-    if (catPanelOpen || clinicPanelOpen)
+    if (catPanelOpen || clinicPanelOpen || teamPanelOpen)
       window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
     return () => window.removeEventListener('scroll', handleScroll, { capture: true });
-  }, [catPanelOpen, clinicPanelOpen]);
+  }, [catPanelOpen, clinicPanelOpen, teamPanelOpen]);
 
   const handleToggleCatPanel = () => {
     if (!catPanelOpen && catButtonRef.current) {
@@ -186,7 +204,18 @@ const FilterBar = ({
       setCatPanelPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
     }
     if (clinicPanelOpen) setClinicPanelOpen(false);
+    if (teamPanelOpen) setTeamPanelOpen(false);
     setCatPanelOpen(v => !v);
+  };
+
+  const handleToggleTeamPanel = () => {
+    if (!teamPanelOpen && teamButtonRef.current) {
+      const rect = teamButtonRef.current.getBoundingClientRect();
+      setTeamPanelPos({ top: rect.bottom + 8, left: rect.left });
+    }
+    if (catPanelOpen) setCatPanelOpen(false);
+    if (clinicPanelOpen) setClinicPanelOpen(false);
+    setTeamPanelOpen(v => !v);
   };
 
   const handleToggleClinicPanel = () => {
@@ -195,11 +224,13 @@ const FilterBar = ({
       setClinicPanelPos({ top: rect.bottom + 8, left: rect.left });
     }
     if (catPanelOpen) setCatPanelOpen(false);
+    if (teamPanelOpen) setTeamPanelOpen(false);
     setClinicPanelOpen(v => !v);
   };
 
   const OFF              = 'border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-wellq-dark text-wellq-gray hover:border-wellq-gray/40 dark:hover:border-white/20 hover:text-wellq-dark dark:hover:text-white';
   const DEFAULT_CAT_ON   = 'border-wellq-blue/30 bg-wellq-blue/10 text-wellq-blue dark:border-wellq-blue/20 dark:bg-wellq-blue/10 dark:text-wellq-blue';
+  const DEFAULT_TEAM_ON  = 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400';
   const DEFAULT_CLINIC_ON= 'border-wellq-cyan/30 bg-wellq-cyan/10 text-wellq-cyan dark:border-wellq-cyan/20 dark:bg-wellq-cyan/10 dark:text-wellq-cyan';
 
   const STATUS_OPTIONS = [
@@ -219,14 +250,28 @@ const FilterBar = ({
         { value: 'Bug',     label: 'Bug',     icon: Bug,           on: CATEGORY_META.Bug.chip },
         { value: 'Billing', label: 'Billing', icon: CreditCard,    on: CATEGORY_META.Billing.chip },
         { value: 'Feature', label: 'Feature', icon: Sparkles,      on: CATEGORY_META.Feature.chip },
-        { value: 'Request', label: 'Request', icon: MessageSquare, on: CATEGORY_META.Request.chip },
+      { value: 'Request', label: 'Request', icon: MessageSquare, on: CATEGORY_META.Request.chip },
       ];
+
+  const RESPONDER_OPTIONS = responders
+    .map((responder) => ({
+      value: responder.id || responder.responder_id,
+      label: responder.name,
+      team: responder.team || responder.group,
+      user: responder.user || responder.username,
+    }))
+    .filter((responder) => responder.value && responder.label)
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const toggle = (key, val) =>
     onFilterChange?.({ ...filters, [key]: filters[key] === val ? undefined : val, page: 1 });
 
-  const hasActive          = !!(filters.status || filters.category || filters.clinic_id);
+  const hasActive          = !!(filters.status || filters.category || filters.responder_id || filters.responder_team || filters.clinic_id);
   const activeCatOption    = CATEGORY_OPTIONS.find(o => o.value === filters.category);
+  const activeResponderOption = RESPONDER_OPTIONS.find(o => o.value === filters.responder_id);
+  const activeResponderLabel  = filters.responder_id === UNASSIGNED_RESPONDER_FILTER
+    ? t('support.unassigned')
+    : activeResponderOption?.label;
   const activeClinicOption = clinics.find(c => c.clinic_id === filters.clinic_id);
 
   return (
@@ -314,6 +359,121 @@ const FilterBar = ({
       </div>
 
       {/* ── PANEL DE CLÍNICAS ── */}
+      <span className="w-px h-5 bg-wellq-gray/10 dark:bg-white/10 mx-1 flex-shrink-0" />
+
+      <div className="relative flex-shrink-0">
+        <motion.button
+          ref={teamButtonRef}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleToggleTeamPanel}
+          className={`inline-flex items-center font-bold tracking-wide rounded-lg border cursor-pointer select-none transition-all px-3 py-1.5 text-[11px] gap-1.5 ${
+            filters.responder_id ? DEFAULT_TEAM_ON : OFF
+          }`}
+        >
+          <Users size={11} strokeWidth={2.5} />
+          <span className="max-w-[150px] truncate">
+            {activeResponderLabel || t('support.responderFilter')}
+          </span>
+          <ChevronDown
+            size={10}
+            strokeWidth={2.5}
+            className={`transition-transform duration-200 ${teamPanelOpen ? 'rotate-180' : ''}`}
+          />
+        </motion.button>
+
+        {createPortal(
+          <AnimatePresence>
+            {teamPanelOpen && (
+              <motion.div
+                ref={teamPanelRef}
+                key="team-panel"
+                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0,  scale: 1 }}
+                exit={{   opacity: 0, y: -8,  scale: 0.96 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                style={{ top: teamPanelPos.top, left: teamPanelPos.left }}
+                className="fixed z-[200] bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden min-w-[250px] max-h-[300px] flex flex-col"
+              >
+                <div className="px-4 pt-3.5 pb-2 border-b border-wellq-gray/10 dark:border-white/5 flex-shrink-0">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-wellq-gray/70">
+                    {t('support.filterByResponder')}
+                  </p>
+                </div>
+
+                <div className={`flex-1 min-h-0 flex flex-col gap-1 p-2 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
+                  <button
+                    onClick={() => { onFilterChange?.({ ...filters, responder_id: undefined, responder_team: undefined, page: 1 }); setTeamPanelOpen(false); }}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                      !filters.responder_id ? DEFAULT_TEAM_ON : OFF
+                    }`}
+                  >
+                    <span className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-gray/10 dark:ring-white/5">
+                      <Users size={11} strokeWidth={2.5} />
+                    </span>
+                    <span className="flex-1">{t('support.allResponders')}</span>
+                    {!filters.responder_id && (
+                      <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => { onFilterChange?.({ ...filters, responder_id: UNASSIGNED_RESPONDER_FILTER, responder_team: undefined, page: 1 }); setTeamPanelOpen(false); }}
+                    className={`flex items-start gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                      filters.responder_id === UNASSIGNED_RESPONDER_FILTER ? DEFAULT_TEAM_ON : OFF
+                    }`}
+                  >
+                    <span className="w-6 h-6 rounded-lg bg-wellq-gray/10 dark:bg-white/10 text-wellq-gray flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-gray/10 dark:ring-white/5">
+                      <Send size={11} strokeWidth={2.5} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block">{t('support.unassigned')}</span>
+                      <span className="block mt-0.5 text-[10px] font-semibold normal-case tracking-normal text-wellq-gray/70">
+                        {t('support.unassignedTicketsHint')}
+                      </span>
+                    </span>
+                    {filters.responder_id === UNASSIGNED_RESPONDER_FILTER && (
+                      <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80 mt-1" />
+                    )}
+                  </button>
+
+                  {RESPONDER_OPTIONS.length > 0 && (
+                    <div className="my-1 h-px bg-wellq-gray/10 dark:bg-white/5" />
+                  )}
+
+                  {RESPONDER_OPTIONS.map(({ value, label, team, user }) => {
+                    const active = filters.responder_id === value;
+                    return (
+                      <motion.button
+                        key={value}
+                        whileHover={{ x: 2 }}
+                        transition={{ duration: 0.15 }}
+                        onClick={() => { onFilterChange?.({ ...filters, responder_id: value, responder_team: undefined, page: 1 }); setTeamPanelOpen(false); }}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold text-left w-full border transition-all ${
+                          active ? DEFAULT_TEAM_ON : OFF
+                        }`}
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0 ring-1 ring-wellq-gray/10 dark:ring-white/5">
+                          <User size={11} strokeWidth={2.5} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate">{label}</span>
+                          <span className="block mt-0.5 text-[10px] font-semibold normal-case tracking-normal text-wellq-gray/70">
+                            {team || t('common.general')}{user ? ` - ${user}` : ''}
+                          </span>
+                        </span>
+                        {active && <CheckCircle2 size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-80" />}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+      </div>
+
       {clinics.length > 0 && (
         <>
           <span className="w-px h-5 bg-wellq-gray/10 dark:bg-white/10 mx-1 flex-shrink-0" />
@@ -421,8 +581,16 @@ const FilterBar = ({
             animate={{ opacity: 1, scale: 1, width: 'auto' }}
             exit={{   opacity: 0, scale: 0.85, width: 0 }}
             onClick={() => {
-              onFilterChange?.({ page: 1 });
+              onFilterChange?.({
+                status: undefined,
+                category: undefined,
+                responder_id: undefined,
+                responder_team: undefined,
+                clinic_id: undefined,
+                page: 1,
+              });
               setCatPanelOpen(false);
+              setTeamPanelOpen(false);
               setClinicPanelOpen(false);
             }}
             className="inline-flex items-center gap-1.5 text-[11px] font-bold text-wellq-gray hover:text-red-500 dark:hover:text-red-400 transition-colors ml-1 uppercase tracking-wider"
@@ -486,6 +654,15 @@ const TicketRow = ({ ticket, index, onSelect }) => {
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-wellq-blue dark:text-wellq-blue/80 truncate max-w-[120px]">
                 <User size={10} strokeWidth={2.5} className="flex-shrink-0" />
                 {ticket.responder_name}
+              </span>
+            </>
+          )}
+          {ticket.responder_team && (
+            <>
+              <span className="text-wellq-gray/40 dark:text-wellq-gray/30 text-xs">-</span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold uppercase tracking-wider max-w-[120px] truncate">
+                <Users size={9} strokeWidth={2.5} className="flex-shrink-0" />
+                {ticket.responder_team}
               </span>
             </>
           )}
@@ -602,6 +779,7 @@ export const SupportTicketTable = ({
   filters = {},
   clinics = [],
   categories = [],
+  responders = [],
   onFilterChange,
   onPageChange,
   onSelectTicket,
@@ -618,6 +796,7 @@ export const SupportTicketTable = ({
           clinics={clinics}
           onFilterChange={onFilterChange}
           categories={categories}
+          responders={responders}
         />
       </div>
 

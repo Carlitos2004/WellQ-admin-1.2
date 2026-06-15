@@ -15,6 +15,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import LanguageSelector from './LanguageSelector';
 import useHasPermission from '../hooks/useHasPermission';
+import { filterAndSortBySearch, hasSearchQuery, matchesSearch } from '../utils/search';
 
 // ─── Design Tokens (Meta) ────────────────────────────────────────────────────
 const SYNC_STATUS_META = {
@@ -77,6 +78,21 @@ const tableRowVariants = {
   show: { opacity: 1, x: 0 },
 };
 
+const normalizeUserSaveError = (message, fallback) => {
+  if (!message || message.includes('HTTP 422')) return fallback;
+  return message;
+};
+
+const SearchEmptyState = ({ query }) => {
+  const { t } = useLanguage();
+  return (
+    <motion.div variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="bg-white rounded-2xl p-10 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10 text-center">
+      <p className="text-sm font-bold text-wellq-dark dark:text-white">{t('common.noResults')}</p>
+      <p className="mt-1 text-xs font-medium text-wellq-gray">{t('common.noMatchesInSection', { query })}</p>
+    </motion.div>
+  );
+};
+
 export const SettingsView = ({
   globalSettings,
   dbStatus,
@@ -84,10 +100,11 @@ export const SettingsView = ({
   loading,
   onSaveSettings,
   onRefreshUsers,
+  searchQuery = '',
 }) => {
   const [activeTab, setActiveTab] = useState('general');
   const { theme, toggleTheme } = useTheme();
-  const { t, locale, setLanguage } = useLanguage();
+  const { t, tVal } = useLanguage();
   const canManageSettings = useHasPermission('settings.manage');
 
   const [localSettings, setLocalSettings] = useState({});
@@ -100,7 +117,7 @@ export const SettingsView = ({
   }, [activeTab, canManageSettings]);
 
   const [serverStatus, setServerStatus] = useState({
-    status: 'Checking...',
+    status: 'checking',
     version: '...',
     environment: '...',
     database: '...',
@@ -113,14 +130,14 @@ export const SettingsView = ({
         const health = await apiFetch('/health');
         const latencyMs = Math.floor(Math.random() * 20 + 5);
         setServerStatus({
-          status: health.status === 'ok' ? 'Online' : 'Degraded',
+          status: health.status === 'ok' ? 'online' : 'degraded',
           version: health.version,
           environment: health.environment,
-          database: health.database === 'neon_connected' ? 'Connected' : 'Disconnected',
+          database: health.database === 'neon_connected' ? 'connected' : 'disconnected',
           latency: `${latencyMs} ms`,
         });
       } catch {
-        setServerStatus({ status: 'Unreachable', version: '?', environment: '?', database: '?', latency: '?' });
+        setServerStatus({ status: 'unreachable', version: '?', environment: '?', database: '?', latency: '?' });
       }
     })();
   }, []);
@@ -204,18 +221,41 @@ export const SettingsView = ({
   // 🔥 CORE FIX: Forzamos que role_id sea enviado como número, no como string
   const handleUserSubmit = async (e) => {
     e.preventDefault();
-    setSavingUser(true);
     setUserError('');
+
+    const userId = form.user_id.trim();
+    const fullName = form.full_name.trim();
+    const email = form.email.trim();
+    const roleId = Number(form.role_id);
+
+    if (!editUser && !userId) {
+      setUserError(t('settings.userValidationUserIdRequired'));
+      return;
+    }
+    if (!fullName) {
+      setUserError(t('settings.userValidationNameRequired'));
+      return;
+    }
+    if (!email) {
+      setUserError(t('settings.userValidationEmailRequired'));
+      return;
+    }
+    if (!form.role_id || !Number.isFinite(roleId)) {
+      setUserError(t('settings.userValidationRoleRequired'));
+      return;
+    }
+
+    setSavingUser(true);
     try {
       const payload = {
-        full_name: form.full_name,
-        email: form.email,
-        role_id: form.role_id ? Number(form.role_id) : null,
-        status: form.status
+        full_name: fullName,
+        email,
+        role_id: roleId,
+        status: form.status,
       };
 
       if (editUser) {
-        await apiFetch(`/api/users/${form.user_id}`, {
+        await apiFetch(`/api/users/${userId}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         });
@@ -223,14 +263,14 @@ export const SettingsView = ({
       } else {
         await apiFetch('/api/users', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ ...payload, user_id: userId }),
         });
         toast.success(t('settings.userCreated'));
       }
       closeModal();
       if (onRefreshUsers) onRefreshUsers();
     } catch (err) {
-      setUserError(err.message || 'Error saving');
+      setUserError(normalizeUserSaveError(err.message, t('settings.userSaveFailed')));
     } finally {
       setSavingUser(false);
     }
@@ -337,6 +377,51 @@ export const SettingsView = ({
   const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? null;
   const assignedPermsList = allPermissions.filter((p) => localAssignedIds.has(p.id));
   const availablePermsList = allPermissions.filter((p) => !localAssignedIds.has(p.id));
+  const searchActive = hasSearchQuery(searchQuery);
+  const permissionValues = (perm) => [
+    perm.label,
+    perm.key,
+    perm.module,
+    t(`sidebar.${String(perm.module ?? '').toLowerCase()}`, perm.module),
+  ];
+  const visibleRoles = filterAndSortBySearch(roles, searchQuery, (role) => [
+    t('settings.rolesAndPermissions'),
+    t('settings.roles'),
+    role.name,
+    role.description,
+    role.permissions?.length,
+    ...(role.permissions ?? []),
+  ]);
+  const visibleAssignedPermsList = filterAndSortBySearch(assignedPermsList, searchQuery, permissionValues);
+  const visibleAvailablePermsList = filterAndSortBySearch(availablePermsList, searchQuery, permissionValues);
+  const visibleUsers = filterAndSortBySearch(users, searchQuery, (u) => [
+    t('settings.users'),
+    u.user_id,
+    u.full_name,
+    u.email,
+    u.role,
+    roles.find((r) => String(r.id) === String(u.role_id))?.name,
+    u.status,
+    t(`values.${u.status}`, u.status),
+  ]);
+  const settingRows = [
+    { key: 'maintenance_mode', label: t('settings.maintenanceMode'), desc: t('settings.maintenanceModeDesc') },
+    { key: 'enforce_2fa', label: t('settings.enforce2FA'), desc: t('settings.enforce2FADesc') },
+  ];
+  const visibleSettingRows = filterAndSortBySearch(settingRows, searchQuery, (row) => [t('settings.globalConfig'), row.key, row.label, row.desc]);
+  const visibleSyncSources = filterAndSortBySearch(syncSources, searchQuery, (src) => {
+    const meta = SYNC_STATUS_META[src.status] ?? SYNC_STATUS_META.error;
+    return [t('settings.syncStatus'), src.name, src.status, t(meta.labelKey), src.last_sync];
+  });
+  const showApiKeys = !searchActive || matchesSearch(searchQuery, t('settings.apiKeys'), t('settings.gcpKeyTitle'), t('settings.gcpKeySubtitle'), t('settings.gcpKeyLabel'), t('settings.gcpKeyHint'), apiKey);
+  const showGeneralConfig = !searchActive || visibleSettingRows.length > 0 || matchesSearch(searchQuery, t('settings.globalConfig'), t('settings.apiVersion'), globalSettings?.api_version, t('settings.supportEmail'), 'wellq.admin@gmail.com');
+  const showAppearance = !searchActive || matchesSearch(searchQuery, t('settings.appearance'), t('settings.darkMode'), theme);
+  const showLanguage = !searchActive || matchesSearch(searchQuery, t('settings.language'), 'english', 'spanish', 'espanol', 'espaÃ±ol');
+  const showBackend = !searchActive || matchesSearch(searchQuery, t('settings.backendServer'), t('settings.status'), tVal(serverStatus.status), serverStatus.version, serverStatus.environment, serverStatus.latency);
+  const showDatabase = !searchActive || matchesSearch(searchQuery, t('settings.database'), t('settings.engine'), t('settings.collections'), t('settings.latency'), dbStatus?.database, dbStatus?.status, dbStatus?.collections_count, dbStatus?.latency_ms);
+  const showSync = !searchActive || visibleSyncSources.length > 0 || matchesSearch(searchQuery, t('settings.syncStatus'));
+  const showTeamRoles = !searchActive || visibleRoles.length > 0 || visibleAssignedPermsList.length > 0 || visibleAvailablePermsList.length > 0 || matchesSearch(searchQuery, t('settings.rolesAndPermissions'), t('settings.assigned'), t('settings.available'));
+  const showTeamUsers = !searchActive || visibleUsers.length > 0 || matchesSearch(searchQuery, t('settings.users'), t('settings.colName'), t('settings.colEmail'), t('settings.colRole'), t('settings.colStatus'));
 
   const moveToAssigned = (permId) => {
     setLocalAssignedIds((prev) => new Set([...prev, permId]));
@@ -451,6 +536,7 @@ export const SettingsView = ({
     const currentTab = canManageSettings ? activeTab : 'general';
 
     if (currentTab === 'api_keys') {
+      if (!showApiKeys) return <SearchEmptyState query={searchQuery} />;
       return (
         <motion.div key="api_keys" variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
           <div className="flex items-center gap-3 mb-6">
@@ -509,6 +595,9 @@ export const SettingsView = ({
 
     // ── Team tab ───────────────────────────────────────────────────────────────
     if (currentTab === 'team') {
+      if ((teamSubTab === 'roles' && !showTeamRoles) || (teamSubTab === 'users' && !showTeamUsers)) {
+        return <SearchEmptyState query={searchQuery} />;
+      }
       return (
         <motion.div key="team" variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
 
@@ -581,11 +670,11 @@ export const SettingsView = ({
                       <div className="rounded-2xl border border-wellq-gray/10 dark:border-white/5 overflow-hidden">
                         <div className="px-4 py-3 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/5 dark:bg-white/[0.02]">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">
-                            {t('settings.roles')} <span className="ml-1 text-wellq-gray/40">({roles.length})</span>
+                            {t('settings.roles')} <span className="ml-1 text-wellq-gray/40">({visibleRoles.length})</span>
                           </span>
                         </div>
                         <div className="p-2 space-y-1 min-h-[240px]">
-                          {roles.map((role, idx) => {
+                          {visibleRoles.map((role, idx) => {
                             const color = ROLE_COLORS[idx % ROLE_COLORS.length];
                             const isSelected = selectedRoleId === role.id;
                             return (
@@ -621,7 +710,7 @@ export const SettingsView = ({
                               </div>
                             );
                           })}
-                          {roles.length === 0 && (
+                          {visibleRoles.length === 0 && (
                             <p className="text-xs text-center text-wellq-gray/40 py-8">{t('settings.noRoles')}</p>
                           )}
                         </div>
@@ -636,7 +725,7 @@ export const SettingsView = ({
                               <span className="ml-1.5 font-normal text-wellq-gray/50">— {selectedRole.name}</span>
                             )}
                           </span>
-                          <span className="text-[10px] font-bold text-wellq-cyan tabular-nums">{assignedPermsList.length}</span>
+                          <span className="text-[10px] font-bold text-wellq-cyan tabular-nums">{visibleAssignedPermsList.length}</span>
                         </div>
                         <div
                           className={`flex-1 p-3 min-h-[240px] transition-colors ${
@@ -651,7 +740,7 @@ export const SettingsView = ({
                               <Shield size={24} className="text-wellq-gray/20" />
                               <p className="text-xs text-wellq-gray/40 text-center">{t('settings.selectRoleToManage')}</p>
                             </div>
-                          ) : assignedPermsList.length === 0 ? (
+                          ) : visibleAssignedPermsList.length === 0 ? (
                             <div className={`flex flex-col items-center justify-center h-full gap-2 py-8 border-2 border-dashed rounded-xl transition-colors ${
                               dragOverPanel === 'assigned' ? 'border-wellq-cyan/40' : 'border-wellq-gray/10 dark:border-white/5'
                             }`}>
@@ -659,7 +748,7 @@ export const SettingsView = ({
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              {assignedPermsList.map((perm) => (
+                              {visibleAssignedPermsList.map((perm) => (
                                 <PermCard
                                   key={perm.id}
                                   perm={perm}
@@ -676,7 +765,7 @@ export const SettingsView = ({
                       <div className="rounded-2xl border border-wellq-gray/10 dark:border-white/5 overflow-hidden flex flex-col">
                         <div className="px-4 py-3 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/5 dark:bg-white/[0.02] flex items-center justify-between flex-shrink-0">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">{t('settings.available')}</span>
-                          <span className="text-[10px] font-bold text-wellq-gray/40 tabular-nums">{availablePermsList.length}</span>
+                          <span className="text-[10px] font-bold text-wellq-gray/40 tabular-nums">{visibleAvailablePermsList.length}</span>
                         </div>
                         <div
                           className={`flex-1 p-3 min-h-[240px] transition-colors ${
@@ -690,7 +779,7 @@ export const SettingsView = ({
                             <div className="flex flex-col items-center justify-center h-full py-8">
                               <p className="text-xs text-wellq-gray/40 text-center">{t('settings.availablePermissionsEmpty')}</p>
                             </div>
-                          ) : availablePermsList.length === 0 ? (
+                          ) : visibleAvailablePermsList.length === 0 ? (
                             <div className={`flex flex-col items-center justify-center h-full gap-2 py-8 border-2 border-dashed rounded-xl transition-colors ${
                               dragOverPanel === 'available' ? 'border-wellq-gray/30' : 'border-wellq-gray/10 dark:border-white/5'
                             }`}>
@@ -698,7 +787,7 @@ export const SettingsView = ({
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              {availablePermsList.map((perm) => (
+                              {visibleAvailablePermsList.map((perm) => (
                                 <PermCard
                                   key={perm.id}
                                   perm={perm}
@@ -765,7 +854,7 @@ export const SettingsView = ({
                       </tr>
                     </thead>
                     <motion.tbody initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.05 } } }}>
-                      {users.map((u) => (
+                      {visibleUsers.map((u) => (
                         <motion.tr variants={tableRowVariants} key={u.user_id} className="border-b border-wellq-gray/10 dark:border-white/5 hover:bg-wellq-gray/3 dark:hover:bg-white/[0.01] transition-colors group">
                           <td className="py-3 px-4 font-semibold text-wellq-dark dark:text-white break-words max-w-[200px]">{u.full_name}</td>
                           <td className="py-3 px-4 text-wellq-gray dark:text-wellq-gray/80 break-words max-w-[250px]">{u.email}</td>
@@ -795,7 +884,7 @@ export const SettingsView = ({
                           </td>
                         </motion.tr>
                       ))}
-                      {users.length === 0 && (
+                      {visibleUsers.length === 0 && (
                         <tr>
                           <td colSpan={5} className="py-8 text-center text-sm font-medium text-wellq-gray dark:text-wellq-gray/70">{t('settings.noUsers')}</td>
                         </tr>
@@ -810,21 +899,23 @@ export const SettingsView = ({
       );
     }
 
-    // ── General tab ────────────────────────────────────────────────────────
+    // General tab
+    if (searchActive && !showGeneralConfig && !showAppearance && !showLanguage && !showBackend && !showDatabase && !showSync) {
+      return <SearchEmptyState query={searchQuery} />;
+    }
+
     return (
       <motion.div key="general" variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="space-y-6">
 
         {/* Global Settings */}
+        {showGeneralConfig && (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
           <h3 className="font-bold text-lg text-wellq-dark dark:text-white mb-6">{t('settings.globalConfig')}</h3>
           {loading ? (
             <Skeleton className="h-32 w-full rounded-xl" />
           ) : (
             <div className="space-y-3">
-              {[
-                { key: 'maintenance_mode', label: t('settings.maintenanceMode'), desc: t('settings.maintenanceModeDesc') },
-                { key: 'enforce_2fa', label: t('settings.enforce2FA'), desc: t('settings.enforce2FADesc') },
-              ].map(({ key, label, desc }) => {
+              {visibleSettingRows.map(({ key, label, desc }) => {
                 const val = localSettings[key] ?? globalSettings?.[key] ?? false;
                 return (
                   <div key={key} className="flex items-center justify-between p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5 hover:border-wellq-gray/10 transition-colors">
@@ -836,7 +927,7 @@ export const SettingsView = ({
                       onClick={() => canManageSettings && toggleSetting(key)}
                       disabled={!canManageSettings}
                       className={`focus:outline-none active:scale-95 transition-transform ${!canManageSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      title={!canManageSettings ? 'Solo lectura' : undefined}
+                      title={!canManageSettings ? t('settings.readOnly') : undefined}
                     >
                       {val ? <ToggleRight size={32} className="text-wellq-cyan" strokeWidth={1.5} /> : <ToggleLeft size={32} className="text-wellq-gray/40" strokeWidth={1.5} />}
                     </button>
@@ -857,7 +948,7 @@ export const SettingsView = ({
                 <div className="flex items-center justify-between p-4 rounded-2xl bg-wellq-gray/5 dark:bg-white/[0.03] border border-transparent dark:border-white/5">
                   <div>
                     <div className="text-sm font-bold text-wellq-dark dark:text-white">{t('settings.supportEmail')}</div>
-                    <div className="text-xs font-medium text-wellq-gray mt-0.5">Contacto técnico</div>
+                    <div className="text-xs font-medium text-wellq-gray mt-0.5">{t('settings.technicalContact')}</div>
                   </div>
                   <a
                     href="https://mail.google.com/mail/?view=cm&fs=1&to=wellq.admin@gmail.com"
@@ -881,9 +972,11 @@ export const SettingsView = ({
             </div>
           )}
         </div>
+        )}
 
         {/* Appearance & Language */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {showAppearance && (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 rounded-xl bg-wellq-gray/10 dark:bg-white/5 flex items-center justify-center">
@@ -898,6 +991,8 @@ export const SettingsView = ({
               </button>
             </div>
           </div>
+          )}
+          {showLanguage && (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:bg-wellq-dark dark:border-white/10">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 rounded-xl bg-wellq-blue/10 flex items-center justify-center">
@@ -907,11 +1002,13 @@ export const SettingsView = ({
             </div>
             <LanguageSelector />
           </div>
+          )}
         </div>
 
         {/* Backend & DB & Sync Status */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
+          {showBackend && (
           <div className="relative bg-white rounded-2xl p-6 shadow-sm border border-wellq-blue/20 dark:bg-wellq-dark dark:border-wellq-blue/20 overflow-hidden group">
             <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-wellq-blue/10 to-transparent opacity-50 pointer-events-none" />
             <div className="relative flex items-center gap-3 mb-5">
@@ -924,10 +1021,10 @@ export const SettingsView = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-wellq-gray">{t('settings.status')}</span>
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                  serverStatus.status === 'Online' ? 'bg-wellq-green/10 text-wellq-green border border-wellq-green/20' : 'bg-red-50 text-red-600 border border-red-200'
+                  serverStatus.status === 'online' ? 'bg-wellq-green/10 text-wellq-green border border-wellq-green/20' : 'bg-red-50 text-red-600 border border-red-200'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.status === 'Online' ? 'bg-wellq-green' : 'bg-red-500 animate-pulse'}`} />
-                  {serverStatus.status}
+                  <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.status === 'online' ? 'bg-wellq-green' : 'bg-red-500 animate-pulse'}`} />
+                  {tVal(serverStatus.status)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -936,7 +1033,7 @@ export const SettingsView = ({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-wellq-gray">{t('settings.environment')}</span>
-                <span className="text-sm font-bold text-wellq-dark dark:text-white capitalize">{serverStatus.environment}</span>
+                <span className="text-sm font-bold text-wellq-dark dark:text-white capitalize">{tVal(serverStatus.environment)}</span>
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-wellq-gray/10 dark:border-white/5">
                 <span className="text-xs font-semibold uppercase tracking-wider text-wellq-gray">{t('settings.latency')}</span>
@@ -944,7 +1041,9 @@ export const SettingsView = ({
               </div>
             </div>
           </div>
+          )}
 
+          {showDatabase && (
           <div className="relative bg-white rounded-2xl p-6 shadow-sm border border-wellq-green/20 dark:bg-wellq-dark dark:border-wellq-green/20 overflow-hidden group">
             <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-wellq-green/10 to-transparent opacity-50 pointer-events-none" />
             <div className="relative flex items-center gap-3 mb-5">
@@ -964,7 +1063,7 @@ export const SettingsView = ({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-wellq-gray">{t('settings.status')}</span>
                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-wellq-green/10 text-wellq-green border border-wellq-green/20 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-wellq-green" /> {dbStatus?.status ?? t('common.loading')}
+                    <span className="w-1.5 h-1.5 rounded-full bg-wellq-green" /> {tVal(dbStatus?.status) ?? t('common.loading')}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -978,7 +1077,9 @@ export const SettingsView = ({
               </div>
             )}
           </div>
+          )}
 
+          {showSync && (
           <div className="relative bg-white rounded-2xl p-6 shadow-sm border border-wellq-cyan/20 dark:bg-wellq-dark dark:border-wellq-cyan/20 overflow-hidden group">
             <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-wellq-cyan/10 to-transparent opacity-50 pointer-events-none" />
             <div className="relative flex items-center justify-between mb-5">
@@ -1002,7 +1103,7 @@ export const SettingsView = ({
               </div>
             ) : (
               <div className="relative space-y-2.5">
-                {syncSources.map((src) => {
+                {visibleSyncSources.map((src) => {
                   const meta = SYNC_STATUS_META[src.status] ?? SYNC_STATUS_META.error;
                   const SyncIcon = meta.icon;
                   const fmtSync = src.last_sync
@@ -1025,7 +1126,7 @@ export const SettingsView = ({
                     </div>
                   );
                 })}
-                {syncSources.length === 0 && (
+                {visibleSyncSources.length === 0 && (
                   <p className="text-xs font-medium text-center text-wellq-gray py-4">
                     {t('settings.syncNoData')}
                   </p>
@@ -1033,6 +1134,7 @@ export const SettingsView = ({
               </div>
             )}
           </div>
+          )}
         </div>
       </motion.div>
     );
@@ -1040,9 +1142,9 @@ export const SettingsView = ({
 
   // ─── Modal usuario (Portal) ────────────────────────────────────────────────
   const modalContent = showModal && createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center p-3 sm:items-center sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-      <div className="relative bg-white dark:bg-wellq-dark rounded-[24px] shadow-2xl w-full max-w-md border border-wellq-gray/20 dark:border-white/10 overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative flex min-h-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-[24px] border border-wellq-gray/20 bg-white shadow-2xl dark:border-white/10 dark:bg-wellq-dark sm:max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] flex-shrink-0">
           <div>
             <h3 className="text-lg font-bold text-wellq-dark dark:text-white leading-tight">
@@ -1054,13 +1156,13 @@ export const SettingsView = ({
             <X size={18} className="text-wellq-gray" strokeWidth={2.5} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          <form onSubmit={handleUserSubmit}>
+        <form onSubmit={handleUserSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto overscroll-contain wellq-scrollbar">
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.userId')}</label>
                 <input
-                  required disabled={!!editUser}
+                  required disabled={!!editUser} autoFocus={!editUser}
                   className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan disabled:opacity-50"
                   value={form.user_id}
                   onChange={(e) => setForm({ ...form, user_id: e.target.value })}
@@ -1084,10 +1186,11 @@ export const SettingsView = ({
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.colRole')}</label>
                   <select
+                    required
                     className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan appearance-none cursor-pointer dark:[color-scheme:dark]"
                     value={form.role_id}
                     onChange={(e) => setForm({ ...form, role_id: e.target.value })}
@@ -1103,6 +1206,7 @@ export const SettingsView = ({
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-1.5">{t('settings.colStatus')}</label>
                   <select
+                    required
                     className="w-full px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/20 dark:border-white/10 rounded-xl text-sm font-semibold text-wellq-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-wellq-cyan appearance-none cursor-pointer dark:[color-scheme:dark]"
                     value={form.status}
                     onChange={(e) => setForm({ ...form, status: e.target.value })}
@@ -1119,7 +1223,8 @@ export const SettingsView = ({
                 </motion.div>
               )}
             </div>
-            <div className="flex justify-end gap-3 px-6 py-5 border-t border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02] flex-shrink-0">
+          </div>
+            <div className="flex flex-col-reverse gap-3 border-t border-wellq-gray/10 bg-white px-6 py-5 dark:border-white/5 dark:bg-wellq-dark sm:flex-row sm:justify-end">
               <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl text-sm font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/10 dark:hover:bg-white/5 transition-colors">
                 {t('common.cancel')}
               </button>
@@ -1127,8 +1232,7 @@ export const SettingsView = ({
                 {savingUser ? <><div className="w-4 h-4 border-2 border-wellq-black/30 border-t-wellq-black rounded-full animate-spin" /> {t('settings.saving')}</> : t('common.save')}
               </button>
             </div>
-          </form>
-        </div>
+        </form>
       </div>
     </div>,
     document.body
@@ -1251,6 +1355,7 @@ export const SettingsView = ({
 // ─── PermCard — componente interno ───────────────────────────────────────────
 const PermCard = ({ perm, onDragStart, onDoubleClick, muted = false }) => {
   const { t } = useLanguage();
+  const moduleLabel = t(`sidebar.${String(perm.module ?? '').toLowerCase()}`, perm.module);
 
   return (
     <div
@@ -1274,7 +1379,7 @@ const PermCard = ({ perm, onDragStart, onDoubleClick, muted = false }) => {
           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md leading-tight ${
             MODULE_COLORS[perm.module] ?? 'bg-wellq-gray/10 text-wellq-gray'
           }`}>
-            {perm.module}
+            {moduleLabel}
           </span>
           <span className="text-[9px] text-wellq-gray/40 font-mono truncate">{perm.key}</span>
         </div>

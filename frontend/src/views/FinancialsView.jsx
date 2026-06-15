@@ -9,6 +9,7 @@ import { MRRChart } from '../components/charts/MRRChart';
 import { ChurnHeatmap } from '../components/charts/ChurnHeatmap';
 import { ChurnRegionModal } from '../components/charts/ChurnRegionModal';
 import { useLanguage } from '../contexts/LanguageContext';
+import { filterAndSortBySearch, hasSearchQuery, matchesSearch } from '../utils/search';
 
 // ─── Design Tokens para Financials ─────────────────────────────────────────
 const FINANCIALS_META = {
@@ -52,7 +53,20 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 };
 
-export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
+const SearchEmptyState = ({ query }) => {
+  const { t } = useLanguage();
+  return (
+    <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl p-10 border border-wellq-gray/20 dark:border-white/5 text-center">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-wellq-gray/10 dark:bg-white/5 flex items-center justify-center">
+        <AlertCircle size={20} className="text-wellq-gray" />
+      </div>
+      <p className="text-sm font-bold text-wellq-dark dark:text-white">{t('common.noResults')}</p>
+      <p className="mt-1 text-xs font-medium text-wellq-gray">{t('common.noMatchesInSection', { query })}</p>
+    </motion.div>
+  );
+};
+
+export const FinancialsView = ({ mrrData, churnRegions, loading = false, searchQuery = '' }) => {
   const { t } = useLanguage();
   const [selectedRegion, setSelectedRegion] = useState(null);
 
@@ -79,6 +93,32 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
     return configs[key] || { color: 'bg-wellq-gray', text: 'text-wellq-gray', bgSoft: 'bg-wellq-gray/10', icon: DollarSign };
   };
 
+  const searchActive = hasSearchQuery(searchQuery);
+  const kpiSearchItems = [
+    { id: 'totalMrr', values: [t('financials.totalMrr'), 'total mrr', 'mrr', totalMrr, mrrData?.monthly_growth_percentage, t('financials.vsLastMonth')] },
+    { id: 'newBusiness', values: [t('financials.newBusiness'), 'new business', breakdown?.new_business] },
+    { id: 'expansion', values: [t('financials.expansion'), 'expansion', breakdown?.expansion] },
+    { id: 'churn', values: [t('financials.churnMrr'), 'churn mrr', 'churn', breakdown?.churn] },
+  ];
+  const visibleKpiIds = new Set(filterAndSortBySearch(kpiSearchItems, searchQuery, (item) => item.values).map((item) => item.id));
+  const showKpi = (id) => !searchActive || visibleKpiIds.has(id);
+  const breakdownEntries = breakdown
+    ? filterAndSortBySearch(Object.entries(breakdown), searchQuery, ([key, value]) => [
+        key,
+        breakdownLabels[key],
+        value,
+        t('financials.mrrBreakdown'),
+        t('financials.mrrBreakdownSub'),
+      ])
+    : [];
+  const showMrrChart = !searchActive || matchesSearch(searchQuery, t('financials.mrrBreakdown'), t('financials.totalMrr'), 'mrr', 'arr', 'revenue', 'monthly recurring revenue');
+  const regionSearchValues = (churnRegions ?? []).flatMap((region) => [region.region, region.name, region.risk_level, region.risk, region.clinics_at_risk, region.potential_mrr_loss]);
+  const showChurnHeatmap = !searchActive || matchesSearch(searchQuery, t('financials.churnRisk'), t('financials.churnRiskSub'), t('financials.mrrAtRisk'), 'churn', 'risk', 'region', ...regionSearchValues);
+
+  if (searchActive && visibleKpiIds.size === 0 && !showMrrChart && !showChurnHeatmap && breakdownEntries.length === 0) {
+    return <SearchEmptyState query={searchQuery} />;
+  }
+
   return (
     <motion.div
       className="space-y-6 font-sans"
@@ -90,6 +130,7 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         
         {/* Total MRR */}
+        {showKpi('totalMrr') && (
         <motion.div variants={itemVariants} className={`bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border ${FINANCIALS_META.totalMrr.border}`}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-wellq-gray">{t('financials.totalMrr')}</span>
@@ -103,8 +144,10 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
             <span className="text-xs font-medium text-wellq-gray">{t('financials.vsLastMonth')}</span>
           </div>
         </motion.div>
+        )}
 
         {/* New Business */}
+        {showKpi('newBusiness') && (
         <motion.div variants={itemVariants} className={`bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border ${FINANCIALS_META.newBusiness.border}`}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-wellq-gray">{t('financials.newBusiness')}</span>
@@ -114,8 +157,10 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
           </div>
           {loading ? <Skeleton className="h-8 w-24" /> : <div className={`text-3xl font-black ${FINANCIALS_META.newBusiness.color}`}>+${(breakdown?.new_business ?? 0).toLocaleString()}</div>}
         </motion.div>
+        )}
 
         {/* Expansion */}
+        {showKpi('expansion') && (
         <motion.div variants={itemVariants} className={`bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border ${FINANCIALS_META.expansion.border}`}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-wellq-gray">{t('financials.expansion')}</span>
@@ -125,8 +170,10 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
           </div>
           {loading ? <Skeleton className="h-8 w-24" /> : <div className={`text-3xl font-black ${FINANCIALS_META.expansion.color}`}>+${(breakdown?.expansion ?? 0).toLocaleString()}</div>}
         </motion.div>
+        )}
 
         {/* Churn MRR */}
+        {showKpi('churn') && (
         <motion.div variants={itemVariants} className={`bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border ${FINANCIALS_META.churn.border}`}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-wellq-gray">{t('financials.churnMrr')}</span>
@@ -136,12 +183,13 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
           </div>
           {loading ? <Skeleton className="h-8 w-24" /> : <div className={`text-3xl font-black ${FINANCIALS_META.churn.color}`}>-${Math.abs(breakdown?.churn ?? 0).toLocaleString()}</div>}
         </motion.div>
+        )}
       </div>
 
       {/* ── Gráficos ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <MRRChart />
-        <ChurnHeatmap apiRegions={churnRegions} onRegionClick={setSelectedRegion} />
+        {showMrrChart && <MRRChart />}
+        {showChurnHeatmap && <ChurnHeatmap apiRegions={churnRegions} onRegionClick={setSelectedRegion} />}
       </div>
 
       <AnimatePresence>
@@ -149,19 +197,19 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false }) => {
       </AnimatePresence>
 
       {/* ── Desglose detallado de MRR (Premium UI) ── */}
-      {breakdown && (
+      {breakdown && breakdownEntries.length > 0 && (
         <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/20 dark:border-white/10 overflow-hidden">
           <div className="px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
             <h3 className="font-bold text-wellq-dark dark:text-white text-lg flex items-center gap-2">
               <PieChart size={18} className="text-wellq-cyan" /> {t('financials.mrrBreakdown')}
             </h3>
             <p className="text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 mt-1">
-              {t('financials.mrrBreakdownSub') || 'Distribución exacta del ingreso recurrente'}
+              {t('financials.mrrBreakdownSub', 'Monthly breakdown of revenue changes')}
             </p>
           </div>
 
           <div className="p-6 space-y-5">
-            {Object.entries(breakdown).map(([key, value], idx) => {
+            {breakdownEntries.map(([key, value], idx) => {
               const isNeg = value < 0;
               const safeTotal = totalMrr > 0 ? totalMrr : 1;
               const pct = Math.min((Math.abs(value) / safeTotal) * 100, 100);

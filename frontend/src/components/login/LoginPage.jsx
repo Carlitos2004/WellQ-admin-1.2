@@ -81,6 +81,7 @@ export default function LoginPage({ onLoginSuccess }) {
   const regNameError = getNameError(regFullName, t);
   const regEmailError = getEmailError(regEmail, t);
   const regPasswordError = getPasswordError(regPassword, t);
+  const regRoleError = regRole ? "" : t("login.validation.roleRequired");
   const regConfirmError =
     regConfirm && regPassword !== regConfirm
       ? t("login.validation.passwordsMismatch")
@@ -157,8 +158,8 @@ export default function LoginPage({ onLoginSuccess }) {
     setError("");
     setSuccess("");
 
-    if (regNameError || regEmailError || regPasswordError || regConfirmError) {
-      setError(t("login.errors.fixFieldsRegister"));
+    if (regNameError || regEmailError || regPasswordError || regConfirmError || regRoleError) {
+      setError(regRoleError || t("login.errors.fixFieldsRegister"));
       return;
     }
 

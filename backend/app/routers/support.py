@@ -45,6 +45,7 @@ VALID_STATUSES   = {"Sent", "Open", "Closed"}
 # ── NUEVO: VALID_CATEGORIES ahora es un fallback. Las categorías reales viven
 #    en la tabla ticket_categories. Se usa cuando esa tabla aún está vacía.
 VALID_CATEGORIES = {"Bug", "Billing", "Feature", "Request"}
+UNASSIGNED_RESPONDER_FILTER = "__unassigned"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -82,6 +83,19 @@ def _validate_email_format(email: str | None, field_label: str = "email") -> Non
         )
 
 
+async def _canonical_responder_team(team: str | None, db: AsyncSession) -> str:
+    team_name = team.strip() if team else ""
+    if not team_name:
+        raise HTTPException(status_code=422, detail="El equipo es obligatorio")
+
+    existing_team = (await db.execute(
+        select(Responder.team)
+        .where(func.lower(Responder.team) == team_name.lower())
+        .limit(1)
+    )).scalar_one_or_none()
+    return existing_team or team_name
+
+
 async def _notify_responder_by_email(
     responder: "Responder", ticket_id: str, title: str, category: str
 ) -> None:
@@ -105,17 +119,38 @@ async def list_support_tickets(
     status_param: str | None = Query(None, alias="status"),
     clinic_id:   str | None = Query(None),
     category:    str | None = Query(None),
+    responder_id: str | None = Query(None),
+    responder_team: str | None = Query(None),
     page:        int        = Query(1, ge=1),
     page_size:   int        = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    base = select(SupportTicket)
-    if status_param:
-        base = base.where(SupportTicket.status == status_param)
-    if clinic_id:
-        base = base.where(SupportTicket.clinic_id == clinic_id)
-    if category:
-        base = base.where(SupportTicket.category == category)
+    responder_id = responder_id.strip() if responder_id else None
+    responder_team = responder_team.strip() if responder_team else None
+    team_responder_ids: list[str] = []
+    if not responder_id and responder_team and responder_team != UNASSIGNED_RESPONDER_FILTER:
+        team_responder_ids = (await db.execute(
+            select(Responder.responder_id).where(Responder.team == responder_team)
+        )).scalars().all()
+
+    def apply_filters(query, include_status: bool = True):
+        if include_status and status_param:
+            query = query.where(SupportTicket.status == status_param)
+        if clinic_id:
+            query = query.where(SupportTicket.clinic_id == clinic_id)
+        if category:
+            query = query.where(SupportTicket.category == category)
+        if responder_id == UNASSIGNED_RESPONDER_FILTER:
+            query = query.where(SupportTicket.responder_id.is_(None))
+        elif responder_id:
+            query = query.where(SupportTicket.responder_id == responder_id)
+        elif responder_team == UNASSIGNED_RESPONDER_FILTER:
+            query = query.where(SupportTicket.responder_id.is_(None))
+        elif responder_team:
+            query = query.where(SupportTicket.responder_id.in_(team_responder_ids))
+        return query
+
+    base = apply_filters(select(SupportTicket))
 
     # ── Total filtrado ────────────────────────────────────────────────────────
     count_q = select(func.count()).select_from(base.subquery())
@@ -126,10 +161,7 @@ async def list_support_tickets(
         select(SupportTicket.status, func.count().label("n"))
         .group_by(SupportTicket.status)
     )
-    if clinic_id:
-        counts_q = counts_q.where(SupportTicket.clinic_id == clinic_id)
-    if category:
-        counts_q = counts_q.where(SupportTicket.category == category)
+    counts_q = apply_filters(counts_q, include_status=False)
 
     counts_rows      = (await db.execute(counts_q)).all()
     counts_by_status = {row.status: row.n for row in counts_rows}
@@ -148,6 +180,15 @@ async def list_support_tickets(
         )
         clinic_names = {r.clinic_id: r.name for r in rows}
 
+    responder_ids = list({t.responder_id for t in tickets if t.responder_id})
+    responder_teams: dict[str, str | None] = {}
+    if responder_ids:
+        rows = await db.execute(
+            select(Responder.responder_id, Responder.team)
+            .where(Responder.responder_id.in_(responder_ids))
+        )
+        responder_teams = {r.responder_id: r.team for r in rows}
+
     data = [
         {
             "ticket_id":     t.ticket_id,
@@ -157,7 +198,9 @@ async def list_support_tickets(
             "status":        t.status,
             "category":      t.category,
             "reporter_name": t.reporter_name,
+            "responder_id":   t.responder_id,
             "responder_name": t.responder_name,
+            "responder_team": responder_teams.get(t.responder_id),
             "reported_at":   t.reported_at.isoformat() if t.reported_at else None,
             "closed_at":     t.closed_at.isoformat()   if t.closed_at   else None,
         }
@@ -375,6 +418,7 @@ async def list_responders(db: AsyncSession = Depends(get_db)):
             "id":    r.responder_id,
             "name":  r.name,
             "user":  getattr(r, "username", None),
+            "team":  r.team,
             "group": r.team,
             "email": r.email,           # ── NUEVO: incluir email del responder
         }
@@ -406,6 +450,7 @@ async def create_responder(
 ):
     name     = body.name.strip()
     username = body.username.strip()
+    team     = await _canonical_responder_team(body.team, db)
 
     if not name:
         raise HTTPException(status_code=422, detail="El nombre es obligatorio")
@@ -428,7 +473,7 @@ async def create_responder(
     responder = Responder(
         responder_id = f"resp-{uuid.uuid4().hex[:8]}",
         name         = name,
-        team         = body.team.strip(),
+        team         = team,
         username     = username,
         password     = body.password,
         email        = body.email.strip() if body.email else None,
@@ -472,7 +517,7 @@ async def update_responder(
         _validate_email_format(body.email, "email del responder")
 
     if body.name     is not None: responder.name     = body.name.strip()
-    if body.team     is not None: responder.team     = body.team.strip()
+    if body.team     is not None: responder.team     = await _canonical_responder_team(body.team, db)
     if body.email    is not None: responder.email    = body.email.strip() or None
     if body.username is not None:
         username = body.username.strip()
@@ -564,6 +609,12 @@ async def get_support_ticket(
     if clinic_row:
         clinic_name = clinic_row
 
+    responder_team = None
+    if ticket.responder_id:
+        responder_team = (await db.execute(
+            select(Responder.team).where(Responder.responder_id == ticket.responder_id)
+        )).scalar_one_or_none()
+
     return {
         "ticket_id":      ticket.ticket_id,
         "clinic_id":      ticket.clinic_id,
@@ -577,6 +628,7 @@ async def get_support_ticket(
         "reporter_email": ticket.reporter_email,
         "responder_id":   getattr(ticket, "responder_id", None),
         "responder_name": ticket.responder_name,
+        "responder_team": responder_team,
         "reported_at":    ticket.reported_at.isoformat() if ticket.reported_at else None,
         "closed_at":      ticket.closed_at.isoformat()   if ticket.closed_at   else None,
         "recorded_at":    ticket.recorded_at.isoformat() if ticket.recorded_at else None,
@@ -649,11 +701,18 @@ async def update_support_ticket(
     await db.commit()
     await db.refresh(ticket)
 
+    response_responder_team = responder.team if responder else None
+    if not response_responder_team and ticket.responder_id:
+        response_responder_team = (await db.execute(
+            select(Responder.team).where(Responder.responder_id == ticket.responder_id)
+        )).scalar_one_or_none()
+
     return {
         "ticket_id":      ticket.ticket_id,
         "status":         ticket.status,
         "responder_name": ticket.responder_name,
         "responder_id":   getattr(ticket, "responder_id", None),
+        "responder_team": response_responder_team,
         "solution":       ticket.solution,
         "closed_at":      ticket.closed_at.isoformat() if ticket.closed_at else None,
     }
@@ -669,7 +728,6 @@ class CreateTicketBody(BaseModel):
     clinic_id:      str | None = None
     reporter_name:  str | None = None
     reporter_email: str | None = None
-    # ── NUEVO: asignación inicial de responder ─────────────────────────────────
     responder_id:   str | None = None
 
 
@@ -690,10 +748,10 @@ async def create_support_ticket(
     if not body.clinic_id:
         raise HTTPException(status_code=422, detail="Selecciona una clínica para crear el ticket")
 
-    # ── NUEVO: validar formato de email del reportador ────────────────────────
+    # ── Validar formato de email del reportador ───────────────────────────────
     _validate_email_format(reporter_email, "email del reportador")
 
-    # ── NUEVO: validar categoría contra tabla ticket_categories ───────────────
+    # ── Validar categoría contra tabla ticket_categories ─────────────────────
     # Si la tabla está vacía (aún sin datos), cae al conjunto hardcodeado.
     active_category_names = (await db.execute(
         select(TicketCategory.name).where(TicketCategory.is_active == True)
@@ -705,11 +763,11 @@ async def create_support_ticket(
             detail=f"Categoría inválida. Valores válidos: {sorted(valid_cats)}",
         )
 
-    # ── NUEVO: verificar que la clínica existe y NO está eliminada ─────────────
+    # ── Verificar que la clínica existe y NO está eliminada ───────────────────
     clinic = (await db.execute(
         select(Clinic).where(
             Clinic.clinic_id == body.clinic_id,
-            Clinic.is_deleted == False,       # ← filtro soft delete
+            Clinic.is_deleted == False,
         )
     )).scalar_one_or_none()
     if not clinic:
@@ -718,7 +776,7 @@ async def create_support_ticket(
             detail="Clínica no encontrada o fue eliminada del sistema",
         )
 
-    # ── NUEVO: resolver responder si se proporcionó ────────────────────────────
+    # ── Resolver responder si se proporcionó ──────────────────────────────────
     responder = None
     if body.responder_id:
         responder = (await db.execute(
@@ -736,12 +794,11 @@ async def create_support_ticket(
         clinic_id      = body.clinic_id,
         reporter_name  = reporter_name,
         reporter_email = reporter_email,
-        # ── NUEVO: asignar responder desde la creación ─────────────────────────
         responder_id   = responder.responder_id if responder else None,
         responder_name = responder.name         if responder else None,
-        # Si viene con responder asignado → "Sent" (notificado al agente).
-        # Si NO tiene responder → "Open" (queda pendiente de asignación).
-        status         = "Sent" if responder else "Open",
+        # ── Con responder asignado → "Open" (ya tiene dueño, pasa directo a trabajarlo).
+        #    Sin responder → "Sent" (en espera de que alguien lo tome).
+        status         = "Open" if responder else "Sent",
         reported_at    = now,
         recorded_at    = now,
     )
@@ -749,17 +806,13 @@ async def create_support_ticket(
     await db.commit()
     await db.refresh(new_ticket)
 
-    # ── NUEVO: notificar al responder por email (stub listo para conectar) ─────
+    # ── Notificar al responder por email (stub listo para conectar) ───────────
     if responder:
         await _notify_responder_by_email(
             responder, new_ticket.ticket_id, new_ticket.title, body.category
         )
 
-    # ── NUEVO: notificar a los emails de la categoría ─────────────────────────
-    # Cada TicketCategory tiene un array JSON de correos (emails field).
-    # Al crear el ticket, se notifica a todos esos correos además del responder.
-    # Esto implementa lo pedido en la reunión:
-    #   "Bug1.arroba.wellq. Bug2.arroba.wellq. Y ese le llega por correo a bug1."
+    # ── Notificar a los emails de la categoría ────────────────────────────────
     category_obj = (await db.execute(
         select(TicketCategory).where(TicketCategory.name == body.category)
     )).scalar_one_or_none()
@@ -769,7 +822,6 @@ async def create_support_ticket(
         try:
             cat_emails = _json.loads(category_obj.emails)
             for cat_email in cat_emails:
-                # Stub — reemplazar con envío real cuando esté el servicio de email
                 print(
                     f"[EMAIL STUB → CATEGORÍA] → {cat_email} | "
                     f"Ticket {new_ticket.ticket_id} ({body.category}): {title}"
@@ -781,6 +833,7 @@ async def create_support_ticket(
         "ticket_id":      new_ticket.ticket_id,
         "status":         new_ticket.status,
         "responder_name": new_ticket.responder_name,
+        "responder_team": responder.team if responder else None,
         "reported_at":    new_ticket.reported_at.isoformat(),
     }
 

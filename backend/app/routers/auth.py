@@ -119,6 +119,30 @@ async def _load_role_name(user: AdminUser, db: AsyncSession) -> str:
     return name or user.role or ""
 
 
+def _legacy_role_from_rbac(role: Role) -> str:
+    role_name = (role.name or "").strip().lower()
+    if role_name in {"super admin", "super administrator"}:
+        return "super_admin"
+    return "admin"
+
+
+async def _load_register_role(role_id, db: AsyncSession) -> tuple[int | None, str, str | None]:
+    if role_id in (None, ""):
+        return None, "admin", None
+
+    try:
+        role_id_int = int(role_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="role_id inválido")
+
+    result = await db.execute(select(Role).where(Role.id == role_id_int))
+    role = result.scalars().first()
+    if not role:
+        raise HTTPException(status_code=400, detail=f"El role_id {role_id_int} no existe en la tabla de roles")
+
+    return role_id_int, _legacy_role_from_rbac(role), role.name
+
+
 # ── 1. POST /api/auth/register ─────────────────────────────────────────────────
 @router.post(
     "/register",
@@ -129,7 +153,7 @@ async def register(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     email     = body.get("email", "").strip().lower()
     password  = body.get("password", "")
     full_name = body.get("full_name", "")
-    role      = body.get("role", "admin")   # "super_admin" | "admin" | "viewer"
+    role_id, role, role_name = await _load_register_role(body.get("role_id"), db)
 
     if not email or not password or not full_name:
         raise HTTPException(status_code=400, detail="email, password y full_name son requeridos")
@@ -144,6 +168,7 @@ async def register(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
         full_name     = full_name,
         email         = email,
         role          = role,
+        role_id       = role_id,
         status        = "active",
         password_hash = hash_password(password),
     )
@@ -159,6 +184,8 @@ async def register(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
             "email":     new_user.email,
             "full_name": new_user.full_name,
             "role":      new_user.role,
+            "role_id":   new_user.role_id,
+            "role_name": role_name or new_user.role,
         }
     }
 

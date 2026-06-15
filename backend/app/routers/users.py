@@ -27,13 +27,22 @@ class UserUpdate(BaseModel):
 
 
 # ── Helper: aborta si el role_id no existe en la tabla roles ─────────────────
-async def _assert_role_exists(role_id: int, db: AsyncSession) -> None:
+async def _assert_role_exists(role_id: int, db: AsyncSession) -> Role:
     result = await db.execute(select(Role).where(Role.id == role_id))
-    if not result.scalars().first():
+    role = result.scalars().first()
+    if not role:
         raise HTTPException(
             status_code=400,
             detail=f"El role_id {role_id} no existe en la tabla de roles"
         )
+    return role
+
+
+def _legacy_role_from_rbac(role: Role) -> str:
+    role_name = (role.name or "").strip().lower()
+    if role_name in {"super admin", "super administrator"}:
+        return "super_admin"
+    return "admin"
 
 
 # 44. GET /users/me
@@ -86,7 +95,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 @router.post("", summary="Crear nuevo administrador", status_code=status.HTTP_201_CREATED)
 async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     # 1) Validar que el rol existe antes de cualquier otra cosa
-    await _assert_role_exists(payload.role_id, db)
+    role = await _assert_role_exists(payload.role_id, db)
 
     # 2) Verificar duplicado de user_id o email
     result = await db.execute(
@@ -102,6 +111,7 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
         user_id=payload.user_id,
         full_name=payload.full_name,
         email=payload.email,
+        role=_legacy_role_from_rbac(role),
         role_id=payload.role_id,    # ← guarda el FK real, no un string
         status=payload.status,
     )
@@ -136,7 +146,8 @@ async def update_user(
 
     # Validar role_id si viene en el payload
     if "role_id" in update_data:
-        await _assert_role_exists(update_data["role_id"], db)
+        role = await _assert_role_exists(update_data["role_id"], db)
+        update_data["role"] = _legacy_role_from_rbac(role)
 
     for field, value in update_data.items():
         setattr(user, field, value)
@@ -175,9 +186,10 @@ async def update_user_role(
     if new_role_id is None:
         raise HTTPException(status_code=400, detail="El campo 'role_id' es requerido")
 
-    await _assert_role_exists(int(new_role_id), db)
+    role = await _assert_role_exists(int(new_role_id), db)
 
     user.role_id = int(new_role_id)
+    user.role = _legacy_role_from_rbac(role)
     if hasattr(user, "updated_at"):
         user.updated_at = datetime.utcnow()
     await db.commit()
@@ -203,7 +215,8 @@ async def patch_user(
     update_data = payload.dict(exclude_unset=True)
 
     if "role_id" in update_data:
-        await _assert_role_exists(update_data["role_id"], db)
+        role = await _assert_role_exists(update_data["role_id"], db)
+        update_data["role"] = _legacy_role_from_rbac(role)
 
     for field, value in update_data.items():
         setattr(user, field, value)

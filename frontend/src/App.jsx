@@ -43,6 +43,16 @@ const NAV_KEYS = [
 
 const VIEWS_WITH_DATERANGE = ['overview', 'financials', 'platform', 'analytics'];
 
+const SEARCH_PLACEHOLDER_FALLBACKS = {
+  overview:   'Search overview...',
+  clinics:    'Search clinics...',
+  plans:      'Search plans...',
+  financials: 'Search financials...',
+  platform:   'Search platform ops...',
+  analytics:  'Search analytics...',
+  support:    'Search tickets...',
+  settings:   'Search settings...',
+};
 const getDateRangeFromPeriod = (period) => {
   const now = new Date();
   const end = now.toISOString().split('T')[0];
@@ -180,7 +190,7 @@ const NotificationPanel = ({ onClose }) => {
         </button>
       </div>
 
-      <div className="overflow-y-auto flex-1">
+      <div className="overflow-y-auto flex-1 notification-scrollbar">
         {loading && (
           <div className="flex items-center justify-center py-12 gap-2">
             <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
@@ -367,7 +377,8 @@ const Sidebar = ({
   open, setOpen, view, setView, visibleW, NAV,
   unreadAlerts, profileOpen, setProfileOpen,
   currentUser, theme, toggleTheme, handleLogout,
-  tooltip, setTooltip, canViewSettings // 🔥 RECIBE EL PERMISO
+  tooltip, setTooltip, canViewSettings,
+  openTicketCount = 0, // ← CORRECCIÓN: badge de tickets abiertos igual que Overview
 }) => {
   const { t } = useLanguage();
 
@@ -530,6 +541,7 @@ const Sidebar = ({
             }}>
               <span style={{ fontSize: 14, fontWeight: active ? 600 : 500, color: active ? '#16f8f9' : 'inherit' }}>{label}</span>
 
+              {/* Badge rojo para Overview (alertas sin leer) */}
               {id === 'overview' && unreadAlerts > 0 && (
                 <span style={{
                   marginLeft:     12,
@@ -550,8 +562,31 @@ const Sidebar = ({
                   {unreadAlerts}
                 </span>
               )}
+
+              {/* ← CORRECCIÓN: Badge ámbar para Support (tickets abiertos), igual que Overview */}
+              {id === 'support' && openTicketCount > 0 && (
+                <span style={{
+                  marginLeft:     12,
+                  flexShrink:     0,
+                  minWidth:       20,
+                  height:         20,
+                  padding:        '0 6px',
+                  display:        'flex',
+                  alignItems:     'center',
+                  justifyContent: 'center',
+                  background:     '#f59e0b',
+                  color:          'white',
+                  fontSize:       11,
+                  fontWeight:     700,
+                  borderRadius:   999,
+                  animation:      'badgeNum 2s ease-in-out infinite',
+                }}>
+                  {openTicketCount > 99 ? '99+' : openTicketCount}
+                </span>
+              )}
             </div>
 
+            {/* Dot rojo para Overview colapsado */}
             {!open && id === 'overview' && unreadAlerts > 0 && (
               <span style={{
                 position:     'absolute',
@@ -560,6 +595,20 @@ const Sidebar = ({
                 width:        8,
                 height:       8,
                 background:   '#ef4444',
+                borderRadius: '50%',
+                animation:    'badgeDot 2s ease-in-out infinite',
+              }} />
+            )}
+
+            {/* ← CORRECCIÓN: Dot ámbar para Support colapsado */}
+            {!open && id === 'support' && openTicketCount > 0 && (
+              <span style={{
+                position:     'absolute',
+                top:          8,
+                right:        8,
+                width:        8,
+                height:       8,
+                background:   '#f59e0b',
                 borderRadius: '50%',
                 animation:    'badgeDot 2s ease-in-out infinite',
               }} />
@@ -708,6 +757,7 @@ const Topbar = ({
   const showDateRange = VIEWS_WITH_DATERANGE.includes(view);
   const meta = VIEW_META[view] ?? VIEW_META.overview;
   const ViewIcon = meta.icon;
+  const searchPlaceholder = t(`topbar.searchPlaceholders.${view}`, SEARCH_PLACEHOLDER_FALLBACKS[view] ?? t('topbar.searchPlaceholder'));
 
   const getInitials = (name) => {
     if (!name) return '?';
@@ -766,9 +816,20 @@ const Topbar = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('topbar.searchPlaceholder')}
-              className="pl-9 pr-4 py-2 bg-[#1e293b] rounded-lg text-sm w-56 focus:outline-none focus:ring-2 focus:ring-[#16f8f9]/50 focus:bg-[#0f172a] transition-all text-white placeholder:text-[#94a3b8]/60 border border-[#1e293b] focus:border-[#16f8f9]/30"
+              onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery(''); }}
+              placeholder={searchPlaceholder}
+              className="pl-9 pr-9 py-2 bg-[#1e293b] rounded-lg text-sm w-56 focus:outline-none focus:ring-2 focus:ring-[#16f8f9]/50 focus:bg-[#0f172a] transition-all text-white placeholder:text-[#94a3b8]/60 border border-[#1e293b] focus:border-[#16f8f9]/30"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-[#94a3b8] hover:text-white hover:bg-white/10 transition-colors"
+                title={t('common.clear')}
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
 
           <button
@@ -896,6 +957,9 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState('');
 
+  // ← CORRECCIÓN: estado para el badge de tickets abiertos en el sidebar (igual que unreadAlerts en Overview)
+  const [openTicketCount, setOpenTicketCount] = useState(0);
+
   const handleLogout = async () => {
     try {
       await authLogout();
@@ -906,7 +970,7 @@ export default function App() {
     }
     setCurrentUser(null);
     setIsAuthenticated(false);
-    toast.success("Sesión cerrada correctamente");
+    toast.success(t('auth.logoutSuccess'));
   };
 
   const fetchAll = useCallback(async (range = dateRange) => {
@@ -1000,7 +1064,7 @@ export default function App() {
 
   const handleImpersonate = async (clinic, data) => {
     if (data?.success) {
-      toast.success(`✅ Sesión iniciada en ${clinic.name}`);
+      toast.success(t('auth.impersonateSuccess', { clinic: clinic.name }));
     }
   };
 
@@ -1059,17 +1123,16 @@ export default function App() {
               <ShieldOff size={40} className="text-red-400" />
             </div>
             <div className="text-center">
-              <h2 className="text-xl font-bold text-white mb-2">Acceso Denegado</h2>
+              <h2 className="text-xl font-bold text-white mb-2">{t('access.deniedTitle')}</h2>
               <p className="text-slate-400 text-sm max-w-xs mx-auto">
-                No tienes los permisos necesarios para ver esta sección.
-                Contacta a tu administrador si crees que esto es un error.
+                {t('access.deniedMessage')}
               </p>
             </div>
             <button
               onClick={() => setView('overview')}
               className="px-5 py-2.5 bg-[#16f8f9]/10 hover:bg-[#16f8f9]/20 text-[#16f8f9] rounded-xl text-sm font-medium border border-[#16f8f9]/30 transition-colors"
             >
-              Volver al inicio
+              {t('access.backHome')}
             </button>
           </div>
         );
@@ -1097,6 +1160,7 @@ export default function App() {
             kpiDownloads={kpiDownloads}
             kpiDormant={kpiDormant}
             appStats={appStats}
+            searchQuery={searchQuery}
             onGoSupport={() => setView('support')}
           />
         );
@@ -1126,7 +1190,7 @@ export default function App() {
           />
         );
       case 'financials':
-        return <FinancialsView mrrData={mrrData} churnRegions={churnRegions} />;
+        return <FinancialsView mrrData={mrrData} churnRegions={churnRegions} loading={loading} searchQuery={searchQuery} />;
       case 'platform':
         return (
           <PlatformOpsView
@@ -1135,6 +1199,7 @@ export default function App() {
             apiPose={apiPose}
             apiServers={apiServers}
             apiProcesses={apiProcesses}
+            searchQuery={searchQuery}
           />
         );
       case 'analytics':
@@ -1146,14 +1211,17 @@ export default function App() {
             cohorts={cohorts}
             soapQuality={soapQuality}
             loading={loading}
+            searchQuery={searchQuery}
           />
         );
       case 'plans':
-        return <PlansView />;
+        return <PlansView searchQuery={searchQuery} />;
       case 'support':
         return (
           <SupportView
             apiClinics={apiClinics}
+            searchQuery={searchQuery}
+            onOpenCountChange={setOpenTicketCount} // ← CORRECCIÓN: sincroniza badge del sidebar
           />
         );
       case 'settings':
@@ -1164,6 +1232,7 @@ export default function App() {
             dbStatus={dbStatus}
             users={systemUsers}
             loading={loading}
+            searchQuery={searchQuery}
             onSaveSettings={handleSaveSettings}
             onRefreshUsers={handleRefreshUsers}
           />
@@ -1227,7 +1296,8 @@ export default function App() {
         handleLogout={handleLogout}
         tooltip={tooltip}
         setTooltip={setTooltip}
-        canViewSettings={canViewSettings} // 🔥 SE PASA EL PERMISO
+        canViewSettings={canViewSettings}
+        openTicketCount={openTicketCount} // ← CORRECCIÓN: badge ámbar en sidebar para Support
       />
 
       <div className="flex-1 flex flex-col min-w-0 relative bg-slate-50 overflow-hidden dark:bg-[#070b12]">

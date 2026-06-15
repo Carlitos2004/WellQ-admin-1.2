@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, TicketPlus, Loader2, ChevronDown, AlertCircle, Info } from 'lucide-react';
-// ── CORRECCIÓN: Quitamos fetchTicketCategories porque ahora viene por props
+
 import {
   createSupportTicket,
   fetchSupportResponders,
@@ -12,7 +12,6 @@ import { useLanguage } from '../../contexts/LanguageContext';
 // ── regex de validación de email (misma lógica que el backend) ─────────
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// ── CORRECCIÓN: Agregamos categories como prop ────────────────────────
 export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCreated }) => {
   const { t } = useLanguage();
 
@@ -28,11 +27,10 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState(null);
 
-  // ── CORRECCIÓN: Eliminados los estados redundantes de categories ────────
   const [responders,      setResponders]      = useState([]); // [{id, name, group, email}]
   const [loadingMeta,     setLoadingMeta]     = useState(true);
 
-  // ── NUEVO: cargar solo responders al montar el modal ───────────────────
+  // ── Cargar responders al montar el modal ─────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -53,11 +51,30 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
     return () => { cancelled = true; };
   }, []);
 
-  // ── CORRECCIÓN: equipo y lista de responders filtrada usando la prop ────
-  const selectedCategoryTeam = categories.find((c) => c.name === form.category)?.team ?? null;
-  const filteredResponders   = selectedCategoryTeam
-    ? responders.filter((r) => r.group === selectedCategoryTeam)
-    : responders; // si la categoría no tiene equipo mapeado, mostrar todos
+  // ── Agrupación y ordenamiento dinámico optimizado con useMemo ────────────
+  const selectedCategoryTeam = useMemo(() => {
+    if (!form.category) return null;
+    return categories.find((c) => c.name === form.category)?.team ?? null;
+  }, [form.category, categories]);
+
+  const respondersByTeam = useMemo(() => {
+    return responders.reduce((acc, r) => {
+      const group = r.group || 'General';
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(r);
+      return acc;
+    }, {});
+  }, [responders]);
+
+  const sortedTeams = useMemo(() => {
+    return Object.keys(respondersByTeam).sort((a, b) => {
+      if (selectedCategoryTeam) {
+        if (a === selectedCategoryTeam) return -1;
+        if (b === selectedCategoryTeam) return  1;
+      }
+      return a.localeCompare(b);
+    });
+  }, [respondersByTeam, selectedCategoryTeam]);
 
   const set = (field, value) => {
     setFormState((prev) => {
@@ -184,7 +201,6 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
                     <option value="">
                       {loadingMeta ? t('common.loading') : t('common.choose')}
                     </option>
-                    {/* ── CORRECCIÓN: iterar sobre objetos, usando c.name ── */}
                     {categories.map((c) => (
                       <option key={c.name} value={c.name}>{c.name}</option>
                     ))}
@@ -227,15 +243,22 @@ export const CreateTicketModal = ({ clinics = [], categories = [], onClose, onCr
                       <option value="">{t('support.chooseCategoryFirst')}</option>
                     )}
 
-                    {form.category && filteredResponders.length === 0 && (
+                    {form.category && responders.length === 0 && (
                       <option value="">{t('support.noRespondersForTeam')}</option>
                     )}
 
-                    {form.category && filteredResponders.length > 0 && (
+                    {form.category && responders.length > 0 && (
                       <>
                         <option value="">{t('support.unassigned')}</option>
-                        {filteredResponders.map((r) => (
-                          <option key={r.id} value={r.id}>{r.name}</option>
+                        {sortedTeams.map((team) => (
+                          <optgroup
+                            key={team}
+                            label={selectedCategoryTeam === team ? `★ ${team} (Recomendado)` : team}
+                          >
+                            {respondersByTeam[team].map((r) => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </optgroup>
                         ))}
                       </>
                     )}

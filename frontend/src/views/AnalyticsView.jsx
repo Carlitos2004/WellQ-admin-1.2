@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '../components/ui';
 import { useLanguage } from '../contexts/LanguageContext';
+import { filterAndSortBySearch, hasSearchQuery, matchesSearch } from '../utils/search';
 
 // ─── Design Tokens para Analytics (Single Source of Truth) ───
 // Centralizamos la tipología visual mapeada exactamente a tus variables de Tailwind v4
@@ -45,12 +46,67 @@ const METRIC_META = {
 };
 
 export const AnalyticsView = ({
-  appStats, featureAdoption, adherence, cohorts, soapQuality, loading,
+  appStats, featureAdoption, adherence, cohorts, soapQuality, loading, searchQuery = '',
 }) => {
   const { t } = useLanguage();
 
   const patientApp = appStats?.patients;
   const tabletApp = appStats?.tablet;
+  const searchActive = hasSearchQuery(searchQuery);
+  const metricCards = [
+    { label: `${t('overview.patientApp')} - MAU`, value: patientApp?.metrics?.monthly_active_users?.toLocaleString() ?? '0', meta: METRIC_META.patientMau, pct: 100 },
+    { label: `${t('overview.clinicianTablet')} - MAU`, value: tabletApp?.metrics?.monthly_active_users?.toLocaleString() ?? '0', meta: METRIC_META.tabletMau, pct: 100 },
+    { label: t('analytics.avgSessionPatient'), value: `${patientApp?.metrics?.average_session_length_minutes ?? 0} min`, meta: METRIC_META.session, pct: 65 },
+    { label: t('analytics.avgSessionTablet'), value: `${tabletApp?.metrics?.average_session_length_minutes ?? 0} min`, meta: METRIC_META.session, pct: 85 },
+    { label: t('analytics.crashFreePatient'), value: `${patientApp?.metrics?.crash_free_sessions_percentage ?? 0}%`, meta: METRIC_META.crashFree, pct: patientApp?.metrics?.crash_free_sessions_percentage ?? 0 },
+    { label: t('analytics.crashFreeTablet'), value: `${tabletApp?.metrics?.crash_free_sessions_percentage ?? 0}%`, meta: METRIC_META.crashFree, pct: tabletApp?.metrics?.crash_free_sessions_percentage ?? 0 },
+  ];
+  const visibleMetricCards = filterAndSortBySearch(metricCards, searchQuery, (item) => [t('analytics.appUsage'), item.label, item.value, t('analytics.live')]);
+  const featureRows = featureAdoption?.data ?? [
+    { feature_name: t('overview.waitingConnection'), adoption_rate_percentage: 0, total_uses: 0, user_feedback_score: 0 },
+  ];
+  const visibleFeatureRows = filterAndSortBySearch(featureRows, searchQuery, (f) => [
+    t('analytics.featureAdoption'),
+    f.feature_name,
+    f.adoption_rate_percentage,
+    f.total_uses,
+    f.user_feedback_score,
+    t('analytics.uses'),
+  ]);
+  const adherenceRows = adherence?.breakdown_by_week ?? [{ week: t('analytics.weekLabel', { number: 1 }), adherence: 0 }];
+  const visibleAdherenceRows = filterAndSortBySearch(adherenceRows, searchQuery, (w) => [
+    t('analytics.adherence'),
+    w.week,
+    w.adherence,
+    adherence?.overall_adherence_percentage,
+    adherence?.top_dropping_point,
+    t('analytics.topDropOff'),
+  ]);
+  const cohortRows = cohorts?.data ?? [
+    { cohort: t('overview.waitingConnection'), users: 0, retention_by_month: { M1: 0, M2: 0, M3: 0, M4: 0 } },
+  ];
+  const visibleCohortRows = filterAndSortBySearch(cohortRows, searchQuery, (c) => [
+    t('analytics.cohortRetention'),
+    c.cohort,
+    c.users,
+    ...Object.entries(c.retention_by_month ?? {}).flat(),
+  ]);
+  const showAppUsage = !searchActive || visibleMetricCards.length > 0 || matchesSearch(searchQuery, t('analytics.appUsage'), t('overview.patientApp'), t('overview.clinicianTablet'));
+  const showSoapQuality = !searchActive || matchesSearch(searchQuery, t('analytics.soapQuality'), t('analytics.acceptanceRate'), t('analytics.notesGenerated'), t('analytics.requireEdits'), t('analytics.timeSaved'), soapQuality?.acceptance_rate_percentage, soapQuality?.total_notes_generated, soapQuality?.edits_required_percentage, soapQuality?.average_time_saved_minutes_per_note);
+  const showFeatureAdoption = !searchActive || visibleFeatureRows.length > 0 || matchesSearch(searchQuery, t('analytics.featureAdoption'), t('analytics.last30days'));
+  const showAdherence = !searchActive || visibleAdherenceRows.length > 0 || matchesSearch(searchQuery, t('analytics.adherence'), t('analytics.topDropOff'), adherence?.top_dropping_point);
+  const showCohorts = !searchActive || visibleCohortRows.length > 0 || matchesSearch(searchQuery, t('analytics.cohortRetention'), t('analytics.users'));
+
+  if (searchActive && !showAppUsage && !showSoapQuality && !showFeatureAdoption && !showAdherence && !showCohorts) {
+    return (
+      <motion.div className="space-y-7 font-sans" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }} initial="hidden" animate="show">
+        <motion.div variants={{ hidden: { opacity: 0, y: 15 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } } }} className="bg-white dark:bg-[#0b1017] rounded-2xl p-10 border border-wellq-gray/20 dark:border-[#1e293b] text-center">
+          <p className="text-sm font-bold text-wellq-dark dark:text-white">{t('common.noResults')}</p>
+          <p className="mt-1 text-xs font-medium text-wellq-gray">{t('common.noMatchesInSection', { query: searchQuery })}</p>
+        </motion.div>
+      </motion.div>
+    );
+  }
 
   // Variantes de animación idénticas a la coreografía de tu vista Support
   const containerVariants = {
@@ -74,6 +130,7 @@ export const AnalyticsView = ({
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
         {/* Tarjetas de Uso de Aplicaciones */}
+        {showAppUsage && (
         <motion.div 
           variants={itemVariants} 
           className="bg-white dark:bg-[#0b1017] rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-[#1e293b] xl:col-span-2"
@@ -89,21 +146,16 @@ export const AnalyticsView = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { label: `${t('overview.patientApp')} — MAU`, value: patientApp?.metrics?.monthly_active_users?.toLocaleString() ?? '0', meta: METRIC_META.patientMau, pct: 100 },
-                { label: `${t('overview.clinicianTablet')} — MAU`, value: tabletApp?.metrics?.monthly_active_users?.toLocaleString() ?? '0', meta: METRIC_META.tabletMau, pct: 100 },
-                { label: t('analytics.avgSessionPatient'), value: `${patientApp?.metrics?.average_session_length_minutes ?? 0} min`, meta: METRIC_META.session, pct: 65 },
-                { label: t('analytics.avgSessionTablet'), value: `${tabletApp?.metrics?.average_session_length_minutes ?? 0} min`, meta: METRIC_META.session, pct: 85 },
-                { label: t('analytics.crashFreePatient'), value: `${patientApp?.metrics?.crash_free_sessions_percentage ?? 0}%`, meta: METRIC_META.crashFree, pct: patientApp?.metrics?.crash_free_sessions_percentage ?? 0 },
-                { label: t('analytics.crashFreeTablet'), value: `${tabletApp?.metrics?.crash_free_sessions_percentage ?? 0}%`, meta: METRIC_META.crashFree, pct: tabletApp?.metrics?.crash_free_sessions_percentage ?? 0 },
-              ].map((item, i) => (
+              {visibleMetricCards.map((item, i) => (
                 <AnalyticsMetricCard key={i} item={item} />
               ))}
             </div>
           )}
         </motion.div>
+        )}
 
         {/* Calidad de Notas SOAP */}
+        {showSoapQuality && (
         <motion.div 
           variants={itemVariants} 
           className="relative bg-gradient-to-br from-white to-wellq-gray/5 dark:from-[#0b1017] dark:to-white/[0.01] rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-[#1e293b] overflow-hidden"
@@ -173,9 +225,11 @@ export const AnalyticsView = ({
             </div>
           )}
         </motion.div>
+        )}
       </div>
 
       {/* ─── Feature Adoption ─── */}
+      {showFeatureAdoption && (
       <motion.div 
         variants={itemVariants} 
         className="bg-white dark:bg-[#0b1017] rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-[#1e293b]"
@@ -199,11 +253,7 @@ export const AnalyticsView = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {(
-              featureAdoption?.data ?? [
-                { feature_name: t('overview.waitingConnection'), adoption_rate_percentage: 0, total_uses: 0, user_feedback_score: 0 },
-              ]
-            ).map((f, i) => (
+            {visibleFeatureRows.map((f, i) => (
               <div key={i} className="p-3 rounded-xl border border-transparent hover:border-wellq-gray/10 dark:hover:border-white/5 hover:bg-wellq-gray/3 dark:hover:bg-white/[0.01] transition-all group">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                   <div>
@@ -235,11 +285,13 @@ export const AnalyticsView = ({
           </div>
         )}
       </motion.div>
+      )}
 
-      {/* ─── Adherence + Cohorts ─── */}
+      {/* Adherence + Cohorts ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Gráfico de Adherencia Semanal */}
+        {showAdherence && (
         <motion.div 
           variants={itemVariants} 
           className="bg-white dark:bg-[#0b1017] rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-[#1e293b]"
@@ -266,7 +318,7 @@ export const AnalyticsView = ({
               </div>
               
               <div className="space-y-3.5 pt-2">
-                {(adherence?.breakdown_by_week ?? [{ week: 'Week 1', adherence: 0 }]).map((w, i) => (
+                {visibleAdherenceRows.map((w, i) => (
                   <div key={i} className="flex items-center gap-3 group">
                     <span className="text-xs font-bold text-wellq-gray w-14 group-hover:text-wellq-dark dark:group-hover:text-white transition-colors">{w.week}</span>
                     <div className="flex-1 h-2 bg-wellq-gray/10 dark:bg-white/5 rounded-full overflow-hidden">
@@ -286,8 +338,10 @@ export const AnalyticsView = ({
             </>
           )}
         </motion.div>
+        )}
 
         {/* Matriz de Cohortes de Retención */}
+        {showCohorts && (
         <motion.div 
           variants={itemVariants} 
           className="bg-white dark:bg-[#0b1017] rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-[#1e293b]"
@@ -301,11 +355,7 @@ export const AnalyticsView = ({
             <Skeleton className="h-44 w-full rounded-xl" />
           ) : (
             <div className="space-y-4">
-              {(
-                cohorts?.data ?? [
-                  { cohort: t('overview.waitingConnection'), users: 0, retention_by_month: { M1: 0, M2: 0, M3: 0, M4: 0 } },
-                ]
-              ).map((c, i) => {
+              {visibleCohortRows.map((c, i) => {
                 const months = Object.entries(c.retention_by_month);
                 return (
                   <div key={i} className="p-3 rounded-xl bg-wellq-gray/3 dark:bg-white/[0.01] border border-wellq-gray/5 dark:border-white/5">
@@ -340,6 +390,7 @@ export const AnalyticsView = ({
             </div>
           )}
         </motion.div>
+        )}
       </div>
     </motion.div>
   );
@@ -347,6 +398,7 @@ export const AnalyticsView = ({
 
 // ─── Subcomponente Local: Analytics Metric Card (Estilo Support MetricCard) ───
 const AnalyticsMetricCard = ({ item }) => {
+  const { t } = useLanguage();
   const Icon = item.meta.icon;
   
   return (
@@ -356,7 +408,7 @@ const AnalyticsMetricCard = ({ item }) => {
           <Icon size={15} className={item.meta.text} strokeWidth={2.2} />
         </div>
         <span className="text-[10px] font-bold bg-black/5 dark:bg-white/5 text-wellq-gray px-2 py-0.5 rounded-md tracking-wider">
-          Live
+          {t('analytics.live')}
         </span>
       </div>
 

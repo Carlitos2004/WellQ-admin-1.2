@@ -57,3 +57,40 @@ body {
 .wellq-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(22, 248, 249, 0.45);
 }
+
+.notification-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.notification-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notification-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notification-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+.notification-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+.dark .notification-scrollbar {
+  scrollbar-color: rgba(22, 248, 249, 0.38) transparent;
+}
+
+.dark .notification-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(22, 248, 249, 0.24);
+  background-clip: padding-box;
+}
+
+.dark .notification-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(22, 248, 249, 0.46);
+}

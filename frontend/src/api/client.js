@@ -10,6 +10,29 @@ import { getAccessToken, clearTokens } from '../services/auth';
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+const formatApiDetail = (detail) => {
+  if (typeof detail === 'string') return detail;
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        const location = Array.isArray(item?.loc)
+          ? item.loc.filter((part) => part !== 'body').join('.')
+          : '';
+        const message = item?.msg || item?.message || '';
+        return [location, message].filter(Boolean).join(': ');
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (detail && typeof detail === 'object') {
+    return detail.message || detail.error || JSON.stringify(detail);
+  }
+
+  return '';
+};
+
 // ─── Core fetch ───────────────────────────────────────────────────────────────
 
 export const apiFetch = async (path, options = {}) => {
@@ -32,7 +55,7 @@ export const apiFetch = async (path, options = {}) => {
     let detail = '';
     try {
       const payload = text ? JSON.parse(text) : null;
-      detail = typeof payload?.detail === 'string' ? payload.detail : '';
+      detail = formatApiDetail(payload?.detail);
     } catch {
       detail = text;
     }

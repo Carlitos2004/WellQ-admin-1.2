@@ -14,6 +14,7 @@ import { ImpersonateModal } from '../components/clinics/ImpersonateModal';
 import { API_BASE, apiFetch } from '../api/client';
 import { useLanguage } from '../contexts/LanguageContext';
 import useHasPermission from '../hooks/useHasPermission';
+import { filterAndSortBySearch } from '../utils/search';
 
 // ─── Animaciones ─────────────────────────────────────────────────────────────
 const containerVariants = {
@@ -245,6 +246,7 @@ const DeleteClinicModal = ({ clinic, onClose, onConfirm, deleting }) => {
 
 // ─── CreateClinicModal ────────────────────────────────────────────────────────
 const CreateClinicModal = ({ onClose, onSuccess }) => {
+  const { t } = useLanguage();
   const [step,     setStep]     = useState(0);
   const [creating, setCreating] = useState(false);
   const [created,  setCreated]  = useState(false);
@@ -569,7 +571,7 @@ const CreateClinicModal = ({ onClose, onSuccess }) => {
                   onClick={step > 0 ? () => setStep((s) => s - 1) : onClose}
                   className="px-4 py-2 border border-wellq-gray/30 rounded-lg text-sm font-medium text-wellq-dark dark:text-white hover:bg-wellq-gray/10 dark:hover:bg-wellq-dark/40 transition-colors cursor-pointer"
                 >
-                  {step > 0 ? '← Anterior' : 'Cancelar'}
+                  {step > 0 ? `← ${t('clinics.previous')}` : t('common.cancel')}
                 </button>
 
                 {step < 2 ? (
@@ -578,7 +580,7 @@ const CreateClinicModal = ({ onClose, onSuccess }) => {
                     disabled={step === 0 && !form.name.trim()}
                     className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20"
                   >
-                    Siguiente →
+                    {t('clinics.next')} →
                   </button>
                 ) : (
                   <button
@@ -587,8 +589,8 @@ const CreateClinicModal = ({ onClose, onSuccess }) => {
                     className="flex items-center gap-2 px-5 py-2 bg-wellq-cyan text-wellq-black rounded-lg text-sm font-medium hover:bg-wellq-cyan/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-wellq-cyan/20"
                   >
                     {creating
-                      ? <><Loader2 size={15} className="animate-spin" /> Creando...</>
-                      : <><Building2 size={15} /> Crear Clínica</>
+                      ? <><Loader2 size={15} className="animate-spin" /> {t('clinics.creatingClinic')}</>
+                      : <><Building2 size={15} /> {t('clinics.createClinic')}</>
                     }
                   </button>
                 )}
@@ -627,9 +629,11 @@ const KpiCard = ({ icon: Icon, label, value, colorClass, bgClass, borderClass, r
   </div>
 );
 
+
 // ─── ClinicsView Principal ────────────────────────────────────────────────────
-export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefreshClinics }) => {
+export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefreshClinics, searchQuery = '' }) => {
   const { t } = useLanguage();
+  const tVal = (val) => (val ? t(`values.${val}`) ?? val : '');
   const canEdit = useHasPermission('clinics.edit');
 
   const [filter,         setFilter]         = useState('all');
@@ -657,7 +661,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
   const [deleting,       setDeleting]       = useState(false);
 
   const clinics  = apiClinics.length > 0 ? apiClinics : HARDCODED_CLINICS;
-  const filtered = clinics.filter((c) => {
+  const filteredByStatus = clinics.filter((c) => {
     if (filter === 'active'  && !(c.status === 'Active'  || c.status === 'active'))  return false;
     if (filter === 'at_risk' && !((c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0)) return false;
     if (filter === 'churned' && !(c.status === 'churned' || c.status === 'Churned')) return false;
@@ -665,6 +669,29 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
     if (filterStatus && c.status !== filterStatus) return false;
     return true;
   });
+  const filtered = filterAndSortBySearch(filteredByStatus, searchQuery, (c) => [
+    c.name,
+    c.clinic_id,
+    c.id,
+    c.tier,
+    tVal(c.tier),
+    c.status,
+    tVal(c.status),
+    c.lastLogin,
+    c.country,
+    c.region,
+    c.city,
+    c.email,
+    c.contact_email,
+    c.contactEmail,
+    c.plan,
+    c.plan_name,
+    c.subscription_plan,
+    c.patientsUsed,
+    c.patient_count,
+    c.patientsLimit,
+    c.healthScore,
+  ]);
 
   const closeAll     = () => { setSelected(null); setSettingsClinic(null); setInvoiceClinic(null); };
   const activeDrawer = selected ?? settingsClinic ?? invoiceClinic;
@@ -1157,11 +1184,11 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                         onChange={(e) => setFilterStatus(e.target.value)}
                         className="w-full px-3 py-2 border border-wellq-gray/30 rounded-xl text-sm text-wellq-dark dark:text-white dark:bg-wellq-dark/80 focus:outline-none focus:ring-2 focus:ring-wellq-cyan"
                       >
-                        <option value="">Todos</option>
-                        <option value="active">Active</option>
-                        <option value="warning">Warning</option>
-                        <option value="critical">Critical</option>
-                        <option value="churned">Churned</option>
+                        <option value="">{t('clinics.all')}</option>
+                        <option value="active">{t('values.active')}</option>
+                        <option value="warning">{t('values.warning')}</option>
+                        <option value="critical">{t('values.critical')}</option>
+                        <option value="churned">{t('overview.churned')}</option>
                       </select>
                     </div>
                     <div className="flex justify-between pt-1">
@@ -1169,13 +1196,13 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                         onClick={() => { setFilterTier(''); setFilterStatus(''); }}
                         className="text-xs text-wellq-gray hover:text-wellq-dark dark:hover:text-white transition-colors cursor-pointer font-medium"
                       >
-                        Limpiar filtros
+                        {t('common.clear')}
                       </button>
                       <button
                         onClick={() => setFilterOpen(false)}
                         className="px-3 py-1.5 bg-wellq-cyan text-wellq-black rounded-lg text-xs font-bold cursor-pointer"
                       >
-                        Aplicar
+                        {t('common.apply')}
                       </button>
                     </div>
                   </motion.div>
@@ -1197,7 +1224,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                 onClick={() => setCreateOpen(true)}
                 className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-wellq-cyan to-wellq-blue text-wellq-black rounded-xl text-sm font-bold hover:opacity-90 transition-all cursor-pointer shadow-md shadow-wellq-cyan/25"
               >
-                <Plus size={14} strokeWidth={2.5} /> Crear Clínica
+                <Plus size={14} strokeWidth={2.5} /> {t('clinics.createClinic')}
               </button>
             )}
           </div>
@@ -1232,6 +1259,14 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                       </td>
                     </tr>
                   ))
+                : filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={canEdit ? 7 : 6} className="py-14 px-4 text-center">
+                        <div className="text-sm font-bold text-wellq-dark dark:text-white">{t('common.noResults', 'Sin resultados')}</div>
+                        <div className="mt-1 text-xs font-medium text-wellq-gray">{t('common.tryAnotherSearch', 'Prueba con otra busqueda')}</div>
+                      </td>
+                    </tr>
+                  )
                 : filtered.map((clinic, i) => (
                     <ClinicRow
                       key={clinic.clinic_id ?? clinic.id}

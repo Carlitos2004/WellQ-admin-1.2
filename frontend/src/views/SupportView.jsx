@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LifeBuoy, AlertTriangle, CheckCircle2, Send, Zap, Plus, Settings } from 'lucide-react'; // ← +Settings [plan: SupportView cambio #1]
+import { AlertTriangle, CheckCircle2, Send, Zap, Plus, Settings } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchSupportTickets, fetchTicketCategories } from '../api/client'; // ← +fetchTicketCategories [plan: SupportView cambio #2]
+import { fetchSupportTickets, fetchTicketCategories } from '../api/client';
+import { fetchSupportResponders } from '../api/client';
 import { SupportTicketTable } from '../components/support/SupportTicketTable';
 import { SupportTicketDrawer } from '../components/support/SupportTicketDrawer';
 import { CreateTicketModal } from '../components/support/CreateTicketModal';
-import { SupportConfigPanel } from '../components/support/SupportConfigPanel'; // ← NUEVO componente [plan: SupportView cambio #1]
+import { SupportConfigPanel } from '../components/support/SupportConfigPanel';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Skeleton } from '../components/ui';
 import useHasPermission from '../hooks/useHasPermission';
+import { filterAndSortBySearch } from '../utils/search';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 export const STATUS_META = {
@@ -59,33 +61,31 @@ export const CATEGORY_META = {
 };
 
 // ─── Main view ────────────────────────────────────────────────────────────────
-export const SupportView = ({ apiClinics = [] }) => {
-  const { t } = useLanguage();
+export const SupportView = ({ apiClinics = [], searchQuery = '', onOpenCountChange }) => {
+  const { t, tVal } = useLanguage();
   const canManageTickets = useHasPermission('tickets.manage');
 
   // ── Estado existente ──────────────────────────────────────────────────────
   const [tickets,    setTickets]    = useState([]);
   const [total,      setTotal]      = useState(0);
-  const [counts,     setCounts]     = useState({ open: 0, closed: 0, sent: 0 }); // ← agregados del backend
+  const [counts,     setCounts]     = useState({ open: 0, closed: 0, sent: 0 });
   const [loading,    setLoading]    = useState(true);
   const [filters,    setFilters]    = useState({ page: 1, page_size: 20 });
   const [selected,   setSelected]   = useState(null);
-  const [showCreate, setShowCreate] = useState(false); // ← modal de nuevo ticket
+  const [showCreate, setShowCreate] = useState(false);
 
-  // ── NUEVO: categorías dinámicas + panel de configuración ──────────────────
-  // [plan de acción — SupportView cambio #2: cargar categorías dinámicamente]
+  // ── Categorías dinámicas + panel de configuración ─────────────────────────
   const [categories, setCategories] = useState([]);
-  // [plan de acción — SupportView cambio #1: botón Configurar]
+  const [responders, setResponders] = useState([]);
   const [showConfig, setShowConfig] = useState(false);
 
-  // ── Carga de tickets (existente) ──────────────────────────────────────────
+  // ── Carga de tickets ──────────────────────────────────────────────────────
   const load = useCallback(async (f = filters) => {
     setLoading(true);
     try {
       const res = await fetchSupportTickets(f);
       setTickets(res?.data ?? []);
       setTotal(res?.total ?? 0);
-      // Conteos globales que vienen del backend (no del array paginado)
       setCounts({
         open:   res?.open_count   ?? 0,
         closed: res?.closed_count ?? 0,
@@ -100,27 +100,40 @@ export const SupportView = ({ apiClinics = [] }) => {
 
   useEffect(() => { load(filters); }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── NUEVO: cargar categorías al montar ────────────────────────────────────
-  // [plan de acción — SupportView cambio #2]
-  // i18n keys nuevas: support.category, support.configure, support.configTitle,
-  // support.configSubtitle, support.responderEmail  [plan: cambio #3 — i18n]
+  // ── Cargar categorías al montar ───────────────────────────────────────────
   useEffect(() => {
     fetchTicketCategories()
-      .then((res) => setCategories(res?.details ?? [])) // ← CORRECCIÓN AQUÍ
-      .catch(() => {}); // silencioso; no bloquear la vista si falla
-  }, []); // solo al montar
+      .then((res) => setCategories(res?.details ?? []))
+      .catch(() => {});
+  }, []);
 
-  // ── NUEVO: re-fetch categorías (llamado desde SupportConfigPanel) ─────────
+  // ── Cargar responders al montar ───────────────────────────────────────────
+  useEffect(() => {
+    fetchSupportResponders()
+      .then((res) => setResponders(res?.responders ?? []))
+      .catch(() => {});
+  }, []);
+
+  // ── Notificar al padre cuando cambia el conteo de tickets abiertos ────────
+  useEffect(() => {
+    onOpenCountChange?.(counts.open);
+  }, [counts.open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const reloadCategories = useCallback(() => {
     fetchTicketCategories()
-      .then((res) => setCategories(res?.details ?? [])) // ← CORRECCIÓN AQUÍ
+      .then((res) => setCategories(res?.details ?? []))
+      .catch(() => {});
+  }, []);
+
+  const reloadResponders = useCallback(() => {
+    fetchSupportResponders()
+      .then((res) => setResponders(res?.responders ?? []))
       .catch(() => {});
   }, []);
 
   const handleFilterChange = (newFilters) => setFilters((prev) => ({ ...prev, ...newFilters }));
   const handlePageChange   = (newPage)    => setFilters((prev) => ({ ...prev, page: newPage }));
 
-  // Cuando se cierra el drawer, refrescamos la lista para mostrar el estado actualizado
   const handleDrawerClose = (didUpdate = false) => {
     setSelected(null);
     if (didUpdate) load(filters);
@@ -129,6 +142,27 @@ export const SupportView = ({ apiClinics = [] }) => {
   // Tasa de resolución usando conteos globales del backend
   const totalGlobal  = counts.open + counts.closed + counts.sent;
   const resolveRate  = totalGlobal > 0 ? Math.round((counts.closed / totalGlobal) * 100) : 0;
+
+  const visibleTickets = filterAndSortBySearch(tickets, searchQuery, (ticket) => [
+    ticket.ticket_id,
+    ticket.title,
+    ticket.description,
+    ticket.status,
+    tVal(ticket.status),
+    ticket.category,
+    tVal(ticket.category),
+    ticket.clinic_id,
+    ticket.clinic_name,
+    ticket.reporter_name,
+    ticket.reporter_email,
+    ticket.responder_name,
+    ticket.responder_team,
+    ticket.solution,
+    ticket.created_at,
+    ticket.updated_at,
+  ]);
+
+  const searchActive = searchQuery.trim().length > 0;
 
   const containerVariants = {
     hidden: {},
@@ -146,84 +180,8 @@ export const SupportView = ({ apiClinics = [] }) => {
       initial="hidden"
       animate="show"
     >
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <motion.div variants={itemVariants} className="flex items-center justify-between">
-        <div className="flex items-center gap-3.5">
-          <div className="relative">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-wellq-blue to-wellq-cyan flex items-center justify-center shadow-md shadow-wellq-cyan/20 ring-1 ring-white/10">
-              <LifeBuoy size={20} className="text-wellq-black" strokeWidth={2} />
-            </div>
-            <AnimatePresence>
-              {counts.open > 0 && (
-                <motion.span
-                  key="badge"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white dark:ring-wellq-dark tabular-nums"
-                >
-                  {counts.open > 99 ? '99+' : counts.open}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div>
-            <h1 className="text-lg font-bold text-wellq-dark dark:text-white tracking-tight leading-none">
-              {t('support.title')}
-            </h1>
-            <div className="mt-1">
-              {loading ? (
-                <Skeleton className="w-24 h-3.5 rounded" />
-              ) : (
-                <p className="text-[13px] font-medium text-wellq-gray dark:text-wellq-gray/80">
-                  {total.toLocaleString()} {t('support.totalTickets')}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Botones de acción */}
-        <div className="flex items-center gap-2">
-
-          {/* ── NUEVO: Configurar — abre SupportConfigPanel ────────────────── */}
-          {/* [plan de acción — SupportView cambio #1] */}
-          {canManageTickets && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setShowConfig(true)}
-              className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-[#1e293b] text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all shadow-sm"
-            >
-              <Settings
-                size={13}
-                strokeWidth={2.5}
-                className="transition-transform group-hover:rotate-45 duration-300"
-              />
-              {t('support.configure')}
-            </motion.button>
-          )}
-
-          {/* Nuevo ticket (existente) */}
-          {canManageTickets && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-wellq-blue to-wellq-cyan text-wellq-dark text-[13px] font-bold shadow-sm shadow-wellq-cyan/20 ring-1 ring-white/10 transition-all hover:shadow-md hover:shadow-wellq-cyan/30"
-            >
-              <Plus size={14} strokeWidth={2.5} />
-              {t('support.newTicket')}
-            </motion.button>
-          )}
-
-        </div>
-      </motion.div>
-
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {/* Usando counts.open/closed/sent en lugar del array paginado */}
         <MetricCard
           label={t('support.statusOpen')}
           count={counts.open}
@@ -248,21 +206,58 @@ export const SupportView = ({ apiClinics = [] }) => {
         <ResolutionCard rate={resolveRate} loading={loading} />
       </motion.div>
 
+      {/* ── Botones de acción ───────────────────────────────────────────────── */}
+      <motion.div variants={itemVariants} className="flex items-center justify-start">
+        <div className="flex items-center gap-2">
+
+          {/* Nuevo ticket */}
+          {canManageTickets && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-wellq-blue to-wellq-cyan text-wellq-dark text-[13px] font-bold shadow-sm shadow-wellq-cyan/20 ring-1 ring-white/10 transition-all hover:shadow-md hover:shadow-wellq-cyan/30"
+            >
+              <Plus size={14} strokeWidth={2.5} />
+              {t('support.newTicket')}
+            </motion.button>
+          )}
+
+          {/* Configurar — abre SupportConfigPanel */}
+          {canManageTickets && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setShowConfig(true)}
+              className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-[#1e293b] text-[13px] font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-all shadow-sm"
+            >
+              <Settings
+                size={13}
+                strokeWidth={2.5}
+                className="transition-transform group-hover:rotate-45 duration-300"
+              />
+              {t('support.configure')}
+            </motion.button>
+          )}
+
+        </div>
+      </motion.div>
+
       {/* ── Table ──────────────────────────────────────────────────────────── */}
       <motion.div
         variants={itemVariants}
         className="bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/20 dark:border-[#1e293b] overflow-hidden"
       >
-        {/* [plan: SupportView cambio #2] categories pasado como prop */}
         <SupportTicketTable
-          tickets={tickets}
-          total={total}
-          page={filters.page ?? 1}
+          tickets={visibleTickets}
+          total={searchActive ? visibleTickets.length : total}
+          page={searchActive ? 1 : (filters.page ?? 1)}
           pageSize={filters.page_size ?? 20}
           loading={loading}
           filters={filters}
           clinics={apiClinics}
           categories={categories}
+          responders={responders}
           onFilterChange={handleFilterChange}
           onPageChange={handlePageChange}
           onSelectTicket={(ticket) => setSelected(ticket.ticket_id)}
@@ -278,7 +273,7 @@ export const SupportView = ({ apiClinics = [] }) => {
             onClose={handleDrawerClose}
             onUpdated={() => load(filters)}
             canManageTickets={canManageTickets}
-            categories={categories} // ← NUEVO [plan: Drawer cambio #1 — CATEGORY_TO_GROUP dinámico]
+            categories={categories}
           />
         )}
       </AnimatePresence>
@@ -288,7 +283,7 @@ export const SupportView = ({ apiClinics = [] }) => {
         {canManageTickets && showCreate && (
           <CreateTicketModal
             clinics={apiClinics}
-            categories={categories} // ← NUEVO [plan: CreateTicketModal — categorías dinámicas]
+            categories={categories}
             onClose={() => setShowCreate(false)}
             onCreated={() => {
               setShowCreate(false);
@@ -299,13 +294,13 @@ export const SupportView = ({ apiClinics = [] }) => {
         )}
       </AnimatePresence>
 
-      {/* ── NUEVO: Panel de configuración (categorías + resolutores) ────────── */}
-      {/* [plan de acción — SupportView cambio #1 + SupportConfigPanel nuevo] */}
+      {/* ── Panel de configuración (categorías + resolutores) ────────────────── */}
       <AnimatePresence>
         {canManageTickets && showConfig && (
           <SupportConfigPanel
             onClose={() => setShowConfig(false)}
             onCategoriesChanged={reloadCategories}
+            onRespondersChanged={reloadResponders}
           />
         )}
       </AnimatePresence>

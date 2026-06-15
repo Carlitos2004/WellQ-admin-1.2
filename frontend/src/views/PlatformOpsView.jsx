@@ -8,6 +8,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { Skeleton } from '../components/ui';
 import useHasPermission from '../hooks/useHasPermission'; // ← NUEVO: hook de permisos
+import { filterAndSortBySearch, hasSearchQuery, matchesSearch } from '../utils/search';
 
 // ─── Design Tokens para Platform Ops ───
 const PLATFORM_META = {
@@ -55,6 +56,19 @@ const containerVariants = {
 const itemVariants = {
   hidden: { opacity: 0, y: 15 },
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+};
+
+const SearchEmptyState = ({ query }) => {
+  const { t } = useLanguage();
+  return (
+    <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl p-10 border border-wellq-gray/20 dark:border-white/5 text-center">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-wellq-gray/10 dark:bg-white/5 flex items-center justify-center">
+        <Server size={20} className="text-wellq-gray" />
+      </div>
+      <p className="text-sm font-bold text-wellq-dark dark:text-white">{t('common.noResults')}</p>
+      <p className="mt-1 text-xs font-medium text-wellq-gray">{t('common.noMatchesInSection', { query })}</p>
+    </motion.div>
+  );
 };
 
 const VERSION_COLORS = [
@@ -226,12 +240,23 @@ const ForceUpdateModal = ({ versions, onClose }) => {
 };
 
 // ── App Version Distribution ──────────────────────────────────────────────────
-const AppVersionDistribution = ({ canEdit }) => { 
+const AppVersionDistribution = ({ canEdit, searchQuery = '' }) => { 
   const { t } = useLanguage();
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [forceUpdateOpen, setForceUpdateOpen] = useState(false);
+  const searchActive = hasSearchQuery(searchQuery);
+  const visibleVersions = filterAndSortBySearch(versions, searchQuery, (v) => [
+    t('platform.appVersionDistribution'),
+    v.app_type,
+    v.appType,
+    v.version,
+    v.user_count,
+    v.userCount,
+    v.percentage,
+    t('platform.users'),
+  ]);
 
   useEffect(() => {
     const fetchVersions = async () => {
@@ -284,16 +309,16 @@ const AppVersionDistribution = ({ canEdit }) => {
           </div>
         )}
 
-        {!loading && !error && versions.length === 0 && (
+        {!loading && !error && visibleVersions.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-6">
             <Smartphone size={32} className="text-wellq-gray/30 dark:text-wellq-gray/20 mb-3" />
-            <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/60">{t('platform.noVersionsYet')}</p>
+            <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/60">{searchActive ? t('common.noResults') : t('platform.noVersionsYet')}</p>
           </div>
         )}
 
-        {!loading && !error && versions.length > 0 && (
+        {!loading && !error && visibleVersions.length > 0 && (
           <div className="space-y-5">
-            {versions.map((v, i) => (
+            {visibleVersions.map((v, i) => (
               <div key={i} className="space-y-2 group">
                 <div className="flex justify-between items-end">
                   <div className="flex items-center gap-2">
@@ -341,10 +366,34 @@ const AppVersionDistribution = ({ canEdit }) => {
 };
 
 // ── Main Component ──────────────────────────────────────────────────────────
-export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) => {
+export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers, searchQuery = '' }) => {
   const { t } = useLanguage();
   // 🔥 REGLA 1: Aplicación del permiso para Platform
   const canEdit = useHasPermission('platform.manage');
+
+  const searchActive = hasSearchQuery(searchQuery);
+  const costBreakdown = apiCosts?.breakdown ?? [];
+  const latencyMetrics = apiLatency?.metrics ?? [];
+  const poseFailures = apiPose?.failureReasons ?? [];
+  const servers = apiServers && apiServers.length > 0
+    ? apiServers
+    : [{ name: t('platform.waitingDatabase'), status: 'idle' }];
+  const visibleCardIds = new Set(filterAndSortBySearch([
+    { id: 'cost', values: [t('platform.costPerSession'), 'cost', 'session', apiCosts?.totalCost, ...costBreakdown.flatMap((b) => [b.model, b.cost])] },
+    { id: 'latency', values: [t('platform.aiLatency'), t('platform.liveAvg'), 'latency', 'p99', 'ms', ...latencyMetrics.flatMap((m) => [m.service, m.status, m.averageLatencyMs, m.average_latency_ms])] },
+    { id: 'pose', values: [t('platform.poseAnalysis'), 'pose', 'analysis', 'success', apiPose?.overallSuccessRatePercentage, ...poseFailures.flatMap((r) => [r.reason, r.percentage])] },
+  ], searchQuery, (item) => item.values).map((item) => item.id));
+  const showCard = (id) => !searchActive || visibleCardIds.has(id);
+  const visibleCostBreakdown = filterAndSortBySearch(costBreakdown, searchQuery, (b) => [t('platform.costPerSession'), b.model, b.cost]);
+  const visibleLatencyMetrics = filterAndSortBySearch(latencyMetrics, searchQuery, (m) => [t('platform.aiLatency'), m.service, m.status, m.averageLatencyMs, m.average_latency_ms, 'ms']);
+  const visiblePoseFailures = filterAndSortBySearch(poseFailures, searchQuery, (r) => [t('platform.poseAnalysis'), r.reason, r.percentage]);
+  const visibleServers = filterAndSortBySearch(servers, searchQuery, (s) => [t('platform.infrastructure'), s.name, s.status, t(`values.${s.status}`, s.status)]);
+  const showInfrastructure = !searchActive || visibleServers.length > 0 || matchesSearch(searchQuery, t('platform.infrastructure'), 'server', 'infrastructure');
+  const showVersions = !searchActive || matchesSearch(searchQuery, t('platform.appVersionDistribution'), t('platform.forceUpdateBtn'), t('platform.users'), 'app', 'version', 'force update');
+
+  if (searchActive && visibleCardIds.size === 0 && !showInfrastructure && !showVersions) {
+    return <SearchEmptyState query={searchQuery} />;
+  }
 
   return (
     <motion.div 
@@ -357,6 +406,7 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
         {/* Cost Card */}
+        {showCard('cost') && (
         <motion.div variants={itemVariants} className={`relative bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border ${PLATFORM_META.cost.border} overflow-hidden group`}>
           <div className={`absolute top-0 left-0 right-0 h-24 bg-gradient-to-b ${PLATFORM_META.cost.glow} opacity-50 pointer-events-none`} />
           <div className="relative flex items-center justify-between mb-5">
@@ -373,9 +423,9 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
               {apiCosts?.totalCost != null ? `$${(apiCosts.totalCost / 1000).toFixed(3)}` : '$0.000'}
             </p>
           </div>
-          {apiCosts?.breakdown && apiCosts.breakdown.length > 0 && (
+          {visibleCostBreakdown.length > 0 && (
             <div className="relative mt-5 pt-4 border-t border-wellq-gray/10 dark:border-white/5 space-y-2">
-              {apiCosts.breakdown.map((b, i) => (
+              {visibleCostBreakdown.map((b, i) => (
                 <div key={i} className="flex justify-between items-center text-xs">
                   <span className="font-medium text-wellq-gray dark:text-wellq-gray/80 truncate max-w-[140px]">{b.model}</span>
                   <span className="font-bold text-wellq-dark dark:text-white">${b.cost}</span>
@@ -384,8 +434,10 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
             </div>
           )}
         </motion.div>
+        )}
 
         {/* Latency Card */}
+        {showCard('latency') && (
         <motion.div variants={itemVariants} className={`relative bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border ${PLATFORM_META.latency.border} overflow-hidden group`}>
           <div className={`absolute top-0 left-0 right-0 h-24 bg-gradient-to-b ${PLATFORM_META.latency.glow} opacity-50 pointer-events-none`} />
           <div className="relative flex items-center justify-between mb-5">
@@ -393,14 +445,14 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
               <PLATFORM_META.latency.icon size={18} className={PLATFORM_META.latency.color} strokeWidth={2.2} />
             </div>
             <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-wellq-gray/10 text-wellq-gray">
-              Live Avg
+              {t('platform.liveAvg')}
             </span>
           </div>
           <div className="relative">
             <p className="text-xs font-bold text-wellq-gray uppercase tracking-wider mb-1">{t('platform.aiLatency')}</p>
-            {apiLatency?.metrics && apiLatency.metrics.length > 0 ? (
+            {visibleLatencyMetrics.length > 0 ? (
               <div className="space-y-2.5 mt-3">
-                {apiLatency.metrics.map((m, i) => (
+                {visibleLatencyMetrics.map((m, i) => (
                   <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-wellq-gray/5 dark:bg-white/[0.02] border border-transparent dark:border-white/5">
                     <span className="text-xs font-semibold text-wellq-gray dark:text-wellq-gray/90 truncate max-w-[130px]">{m.service}</span>
                     <div className="flex items-center gap-2">
@@ -420,8 +472,10 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
             )}
           </div>
         </motion.div>
+        )}
 
         {/* Pose Analysis Card */}
+        {showCard('pose') && (
         <motion.div variants={itemVariants} className={`relative bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border ${PLATFORM_META.pose.border} overflow-hidden group`}>
           <div className={`absolute top-0 left-0 right-0 h-24 bg-gradient-to-b ${PLATFORM_META.pose.glow} opacity-50 pointer-events-none`} />
           <div className="relative flex items-center justify-between mb-5">
@@ -438,9 +492,9 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
               {apiPose?.overallSuccessRatePercentage != null ? `${apiPose.overallSuccessRatePercentage}` : '0'}<span className="text-2xl font-bold">%</span>
             </p>
           </div>
-          {apiPose?.failureReasons?.length > 0 && (
+          {visiblePoseFailures.length > 0 && (
             <div className="relative mt-5 pt-4 border-t border-wellq-gray/10 dark:border-white/5 space-y-2">
-              {apiPose.failureReasons.slice(0, 2).map((r, i) => (
+              {visiblePoseFailures.slice(0, 2).map((r, i) => (
                 <div key={i} className="flex justify-between items-center text-xs">
                   <span className="font-medium text-wellq-gray dark:text-wellq-gray/80 truncate flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-wellq-cyan" /> {r.reason}
@@ -451,6 +505,7 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
             </div>
           )}
         </motion.div>
+        )}
 
       </div>
 
@@ -458,6 +513,7 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Infrastructure Servers */}
+        {showInfrastructure && (
         <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-wellq-gray/30 h-full">
           <div className="flex items-center gap-2 mb-6">
             <Server size={18} className="text-wellq-dark dark:text-white" />
@@ -465,10 +521,7 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
           </div>
           
           <div className="space-y-3">
-            {(apiServers && apiServers.length > 0
-              ? apiServers
-              : [{ name: t('platform.waitingDatabase'), status: 'idle' }]
-            ).map((s, i) => (
+            {visibleServers.map((s, i) => (
               <div
                 key={i}
                 className="flex items-center justify-between p-3.5 rounded-xl bg-wellq-gray/3 dark:bg-white/[0.02] border border-wellq-gray/5 dark:border-white/5 hover:border-wellq-gray/20 dark:hover:border-white/10 transition-colors group"
@@ -498,15 +551,16 @@ export const PlatformOpsView = ({ apiCosts, apiLatency, apiPose, apiServers }) =
                         : 'bg-wellq-gray/60'
                     }`}
                   />
-                  {s.status ?? t('common.loading')}
+{t(`values.${s.status}`, s.status ?? t('common.loading'))}
                 </span>
               </div>
             ))}
           </div>
         </motion.div>
+        )}
 
-        {/* App Version Distribution Component – pasamos permiso */}
-        <AppVersionDistribution canEdit={canEdit} />
+        {/* App Version Distribution Component */}
+        {showVersions && <AppVersionDistribution canEdit={canEdit} searchQuery={searchQuery} />}
       </div>
     </motion.div>
   );

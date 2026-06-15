@@ -12,6 +12,7 @@ import { ChurnHeatmap } from '../components/charts/ChurnHeatmap';
 import { useLanguage } from '../contexts/LanguageContext';
 import { OpenTicketsWidget } from '../components/overview/OpenTicketsWidget';
 import { ChurnRegionModal } from '../components/charts/ChurnRegionModal';
+import { filterAndSortBySearch, hasSearchQuery, matchesSearch } from '../utils/search';
 
 // ── Animaciones Base ──
 const containerVariants = {
@@ -142,7 +143,16 @@ export const SERVER_STATUS_META = {
 // ─── App Usage Breakdown ──────────────────────────────────────────────────────
 const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : (n ?? 0).toLocaleString();
 
-const AppUsageBreakdown = ({ appStats }) => {
+const ContextualSearchEmpty = ({ query }) => (
+  <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl p-10 border border-wellq-gray/20 dark:border-white/5 text-center">
+    <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-wellq-gray/10 dark:bg-white/5 flex items-center justify-center">
+      <Info size={20} className="text-wellq-gray" />
+    </div>
+    <p className="text-sm font-bold text-wellq-dark dark:text-white">Sin resultados</p>
+    <p className="mt-1 text-xs font-medium text-wellq-gray">No hay coincidencias para "{query}" en este apartado.</p>
+  </motion.div>
+);
+const AppUsageBreakdown = ({ appStats, searchQuery = '' }) => {
   const { t } = useLanguage();
 
   const patients = appStats?.patients;
@@ -203,6 +213,23 @@ const AppUsageBreakdown = ({ appStats }) => {
     },
   ];
 
+  const visibleApps = filterAndSortBySearch(apps, searchQuery, (app) => [
+    app.label,
+    app.total,
+    app.activeToday,
+    app.active30d,
+    app.inactive,
+    app.ios,
+    app.android,
+    app.registered,
+    app.isWeb ? t('overview.registeredUsers') : t('overview.totalDownloads'),
+    t('overview.activeToday'),
+    t('overview.active30d'),
+    t('overview.inactive'),
+  ]);
+
+  if (hasSearchQuery(searchQuery) && visibleApps.length === 0) return null;
+
   if (!patients && !tablet && !web) {
     return (
       <motion.div variants={itemVariants} className="bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-white/5 h-full">
@@ -231,7 +258,7 @@ const AppUsageBreakdown = ({ appStats }) => {
       </div>
       
       <div className="space-y-4">
-        {apps.map((app, i) => {
+        {visibleApps.map((app, i) => {
           const Icon          = app.icon;
           const base          = app.isWeb ? app.registered : app.total;
           const activeRatio   = base > 0 ? Math.round((app.active30d / base) * 100) : 0;
@@ -306,160 +333,197 @@ const AppUsageBreakdown = ({ appStats }) => {
 const BusinessHealthTab = ({
   loading, kpiArr, kpiClinics, kpiPatients, kpiNrr,
   mrrData, churnRegions, apiAlerts, onAcknowledgeAlert,
-  onRegionClick, fmtArr,
+  onRegionClick, fmtArr, searchQuery = '',
 }) => {
   const { t, tVal } = useLanguage();
   const arrSpark = kpiArr?.trend_graph?.map((t) => t.value) ?? [0, 0, 0, 0, 0, 0];
+  const searchActive = hasSearchQuery(searchQuery);
+  const kpiCards = [
+    {
+      title: t('overview.arr'),
+      value: fmtArr(kpiArr?.current_arr),
+      trend: 'up',
+      trendValue: '+0%',
+      sparkData: arrSpark,
+      subtitle: kpiArr ? `MRR: ${fmtArr(kpiArr.current_arr / 12)}` : t('overview.waitingConnection'),
+    },
+    {
+      title: t('overview.activeClinics'),
+      value: kpiClinics ? String(kpiClinics.total_active) : '0',
+      trend: 'up',
+      trendValue: kpiClinics ? `+${kpiClinics.new_clinics_month}` : '+0',
+      sparkData: [0, 0, 0, 0, 0, kpiClinics?.total_active ?? 0],
+      subtitle: kpiClinics ? `${kpiClinics.new_clinics_month} ${t('overview.onboarded')} - ${kpiClinics.churned_clinics_month} ${t('overview.churned')}` : `0 ${t('overview.onboarded')} - 0 ${t('overview.churned')}`,
+    },
+    {
+      title: t('overview.totalPatients'),
+      value: kpiPatients ? kpiPatients.total_patients.toLocaleString() : '0',
+      trend: 'up',
+      trendValue: kpiPatients ? `+${kpiPatients.new_this_week} ${t('overview.thisWeek')}` : '+0%',
+      sparkData: [0, 0, 0, 0, 0, kpiPatients?.total_patients ?? 0],
+      subtitle: kpiPatients ? `${kpiPatients.active_in_treatment?.toLocaleString()} ${t('overview.inTreatment')}` : t('overview.waitingConnection'),
+    },
+    {
+      title: t('overview.nrr'),
+      value: kpiNrr ? `${kpiNrr.nrr_percentage}%` : '0%',
+      trend: kpiNrr?.nrr_percentage >= 100 ? 'up' : 'down',
+      trendValue: kpiNrr ? `Exp: $${kpiNrr.expansion_mrr?.toLocaleString()}` : '+0%',
+      sparkData: [0, 0, 0, 0, 0, kpiNrr?.nrr_percentage ?? 0],
+      subtitle: kpiNrr ? `Churn MRR: $${kpiNrr.churn_mrr?.toLocaleString()}` : t('overview.waitingDatabase'),
+    },
+  ];
+  const visibleKpiCards = filterAndSortBySearch(kpiCards, searchQuery, (card) => [card.title, card.value, card.trendValue, card.subtitle, tVal(card.trend)]);
+  const chartItems = [
+    { id: 'mrr', matches: matchesSearch(searchQuery, 'mrr', 'arr', 'revenue', 'monthly recurring revenue', t('overview.arr')), render: <MRRChart /> },
+    { id: 'churn', matches: matchesSearch(searchQuery, 'churn', 'retention', 'riesgo', 'heatmap', t('overview.churned')), render: <ChurnHeatmap apiRegions={churnRegions} onRegionClick={onRegionClick} /> },
+  ];
+  const visibleCharts = searchActive ? chartItems.filter((item) => item.matches) : chartItems;
+  const getAlertValues = (alert) => {
+    const params = alert.message_params
+      ? (typeof alert.message_params === 'string' ? JSON.parse(alert.message_params) : alert.message_params)
+      : {};
+    return [
+      alert.title_key ? t(alert.title_key, params) : alert.title,
+      alert.message_key ? t(alert.message_key, params) : alert.message,
+      alert.severity,
+      alert.alert_id,
+    ];
+  };
+  const visibleAlerts = filterAndSortBySearch(apiAlerts, searchQuery, getAlertValues);
+
+  if (searchActive && visibleKpiCards.length === 0 && visibleCharts.length === 0 && visibleAlerts.length === 0) {
+    return <ContextualSearchEmpty query={searchQuery} />;
+  }
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div variants={itemVariants} className="h-full">
-          <KPICard
-            title={t('overview.arr')} value={fmtArr(kpiArr?.current_arr)} trend="up" trendValue="+0%"
-            sparkData={arrSpark} subtitle={kpiArr ? `MRR: ${fmtArr(kpiArr.current_arr / 12)}` : t('overview.waitingConnection')} loading={loading}
-          />
-        </motion.div>
-        <motion.div variants={itemVariants} className="h-full">
-          <KPICard
-            title={t('overview.activeClinics')} value={kpiClinics ? String(kpiClinics.total_active) : '0'} trend="up" trendValue={kpiClinics ? `+${kpiClinics.new_clinics_month}` : '+0'}
-            sparkData={[0, 0, 0, 0, 0, kpiClinics?.total_active ?? 0]}
-            subtitle={kpiClinics ? `${kpiClinics.new_clinics_month} ${t('overview.onboarded')} · ${kpiClinics.churned_clinics_month} ${t('overview.churned')}` : `0 ${t('overview.onboarded')} · 0 ${t('overview.churned')}`}
-            loading={loading}
-          />
-        </motion.div>
-        <motion.div variants={itemVariants} className="h-full">
-          <KPICard
-            title={t('overview.totalPatients')} value={kpiPatients ? kpiPatients.total_patients.toLocaleString() : '0'} trend="up" trendValue={kpiPatients ? `+${kpiPatients.new_this_week} ${t('overview.thisWeek')}` : '+0%'}
-            sparkData={[0, 0, 0, 0, 0, kpiPatients?.total_patients ?? 0]} subtitle={kpiPatients ? `${kpiPatients.active_in_treatment?.toLocaleString()} ${t('overview.inTreatment')}` : t('overview.waitingConnection')} loading={loading}
-          />
-        </motion.div>
-        <motion.div variants={itemVariants} className="h-full">
-          <KPICard
-            title={t('overview.nrr')} value={kpiNrr ? `${kpiNrr.nrr_percentage}%` : '0%'} trend={kpiNrr?.nrr_percentage >= 100 ? 'up' : 'down'} trendValue={kpiNrr ? `Exp: $${kpiNrr.expansion_mrr?.toLocaleString()}` : '+0%'}
-            sparkData={[0, 0, 0, 0, 0, kpiNrr?.nrr_percentage ?? 0]} subtitle={kpiNrr ? `Churn MRR: $${kpiNrr.churn_mrr?.toLocaleString()}` : t('overview.waitingDatabase')} loading={loading}
-          />
-        </motion.div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div variants={itemVariants}>
-          <MRRChart />
-        </motion.div>
-        <motion.div variants={itemVariants}>
-          <ChurnHeatmap apiRegions={churnRegions} onRegionClick={onRegionClick} />
-        </motion.div>
-      </div>
-
-      <motion.div variants={itemVariants} className="relative bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/20 dark:border-white/5 overflow-hidden">
-        {/* Glow estilo PlatformOps */}
-        {apiAlerts.length > 0 && <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-red-500/10 to-transparent opacity-50 pointer-events-none" />}
-        
-        {/* ── Header ── */}
-        <div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center ring-1 ring-red-200 dark:ring-red-500/20 shadow-sm">
-              <Bell size={18} className="text-red-500 dark:text-red-400" strokeWidth={2.2} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h3 className="font-bold text-base text-wellq-dark dark:text-white tracking-tight">{t('overview.needsAttention')}</h3>
-                {apiAlerts.length > 0 && (
-                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="px-2 py-0.5 bg-red-500 text-white text-[11px] font-bold rounded-md flex items-center justify-center tabular-nums shadow-sm shadow-red-500/20">
-                    {apiAlerts.length}
-                  </motion.span>
-                )}
-              </div>
-              <p className="text-xs font-medium text-wellq-gray mt-0.5">{t('overview.updatedRecently')}</p>
-            </div>
-          </div>
-          
-          {apiAlerts.length > 0 && (
-            <div className="flex items-center gap-2">
-              {['critical','high','medium'].map((sev) => {
-                const count = apiAlerts.filter(a => a.severity === sev).length;
-                if (!count) return null;
-                const s = getSeverityStyle(sev);
-                return (
-                  <span key={sev} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${s.badge}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? 'animate-pulse' : ''}`} />
-                    {count} {sev}
-                  </span>
-                );
-              })}
-            </div>
-          )}
+      {visibleKpiCards.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {visibleKpiCards.map((card) => (
+            <motion.div key={card.title} variants={itemVariants} className="h-full">
+              <KPICard {...card} loading={loading} />
+            </motion.div>
+          ))}
         </div>
+      )}
 
-        {/* ── Content ── */}
-        <div className="relative p-6 bg-white dark:bg-wellq-dark">
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="w-full h-20 rounded-xl" />
-              ))}
-            </div>
-          ) : apiAlerts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center ring-1 ring-emerald-200 dark:ring-emerald-500/20 shadow-sm">
-                <CheckCheck size={28} className="text-emerald-500" strokeWidth={2} />
+      {visibleCharts.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {visibleCharts.map((chart) => (
+            <motion.div key={chart.id} variants={itemVariants}>
+              {chart.render}
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {(!searchActive || visibleAlerts.length > 0) && (
+        <motion.div variants={itemVariants} className="relative bg-white dark:bg-wellq-dark rounded-2xl shadow-sm border border-wellq-gray/20 dark:border-white/5 overflow-hidden">
+          {visibleAlerts.length > 0 && <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-red-500/10 to-transparent opacity-50 pointer-events-none" />}
+
+          <div className="relative flex items-center justify-between px-6 py-5 border-b border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/3 dark:bg-white/[0.02]">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center ring-1 ring-red-200 dark:ring-red-500/20 shadow-sm">
+                <Bell size={18} className="text-red-500 dark:text-red-400" strokeWidth={2.2} />
               </div>
-              <div className="text-center">
-                <p className="text-base font-bold text-wellq-dark dark:text-white mt-1">{t('overview.allInOrder')}</p>
-                <p className="text-sm font-medium text-wellq-gray mt-0.5">{t('overview.noAlerts')}</p>
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h3 className="font-bold text-base text-wellq-dark dark:text-white tracking-tight">{t('overview.needsAttention')}</h3>
+                  {visibleAlerts.length > 0 && (
+                    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="px-2 py-0.5 bg-red-500 text-white text-[11px] font-bold rounded-md flex items-center justify-center tabular-nums shadow-sm shadow-red-500/20">
+                      {visibleAlerts.length}
+                    </motion.span>
+                  )}
+                </div>
+                <p className="text-xs font-medium text-wellq-gray mt-0.5">{t('overview.updatedRecently')}</p>
               </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {apiAlerts.map((alert, idx) => {
-                const style = getSeverityStyle(alert.severity);
-                const params = alert.message_params
-                  ? (typeof alert.message_params === 'string' ? JSON.parse(alert.message_params) : alert.message_params)
-                  : {};
-                const resolvedTitle   = alert.title_key   ? t(alert.title_key, params)   : alert.title;
-                const resolvedMessage = alert.message_key ? t(alert.message_key, params) : alert.message;
-                return (
-                  <motion.div
-                    key={alert.alert_id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05, type: 'spring', stiffness: 300, damping: 25 }}
-                    className={`flex items-center gap-4 p-4 rounded-xl border ${style.border} ${style.bg} transition-all duration-200 hover:shadow-md group`}
-                  >
-                    <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${style.bar}`} />
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ring-1 shadow-sm ${
-                      alert.severity === 'critical' ? 'bg-red-50 dark:bg-red-500/10 ring-red-200 dark:ring-red-500/20'
-                      : alert.severity === 'high'   ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/20'
-                      : 'bg-wellq-gray/5 dark:bg-white/5 ring-wellq-gray/20 dark:ring-white/10'
-                    }`}>
-                      <AlertTriangle size={18} className={`${style.icon} flex-shrink-0`} strokeWidth={2.2} />
-                    </div>
 
-                    <div className="flex-1 min-w-0 pr-4">
-                      <p className="text-sm font-bold text-wellq-dark dark:text-white truncate leading-tight tracking-tight">{resolvedTitle}</p>
-                      <p className="text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 truncate mt-1">{resolvedMessage}</p>
-                    </div>
-
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${style.badge}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${style.dot} ${style.pulse ? 'animate-pulse' : ''}`} />
-                      {tVal(alert.severity)}
+            {visibleAlerts.length > 0 && (
+              <div className="flex items-center gap-2">
+                {['critical','high','medium'].map((sev) => {
+                  const count = visibleAlerts.filter(a => a.severity === sev).length;
+                  if (!count) return null;
+                  const s = getSeverityStyle(sev);
+                  return (
+                    <span key={sev} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${s.badge}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? 'animate-pulse' : ''}`} />
+                      {count} {sev}
                     </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                    <button
-                      onClick={() => onAcknowledgeAlert(alert.alert_id)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-lg text-xs font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:border-wellq-gray/40 dark:hover:border-white/20 transition-all flex-shrink-0 cursor-pointer opacity-0 group-hover:opacity-100 shadow-sm active:scale-95"
+          <div className="relative p-6 bg-white dark:bg-wellq-dark">
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="w-full h-20 rounded-xl" />
+                ))}
+              </div>
+            ) : visibleAlerts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center ring-1 ring-emerald-200 dark:ring-emerald-500/20 shadow-sm">
+                  <CheckCheck size={28} className="text-emerald-500" strokeWidth={2} />
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-wellq-dark dark:text-white mt-1">{t('overview.allInOrder')}</p>
+                  <p className="text-sm font-medium text-wellq-gray mt-0.5">{t('overview.noAlerts')}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {visibleAlerts.map((alert, idx) => {
+                  const style = getSeverityStyle(alert.severity);
+                  const params = alert.message_params
+                    ? (typeof alert.message_params === 'string' ? JSON.parse(alert.message_params) : alert.message_params)
+                    : {};
+                  const resolvedTitle = alert.title_key ? t(alert.title_key, params) : alert.title;
+                  const resolvedMessage = alert.message_key ? t(alert.message_key, params) : alert.message;
+                  return (
+                    <motion.div
+                      key={alert.alert_id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05, type: 'spring', stiffness: 300, damping: 25 }}
+                      className={`flex items-center gap-4 p-4 rounded-xl border ${style.border} ${style.bg} transition-all duration-200 hover:shadow-md group`}
                     >
-                      <CheckCheck size={14} />
-                      {t('overview.markRead')}
-                    </button>
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </motion.div>
+                      <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${style.bar}`} />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ring-1 shadow-sm ${
+                        alert.severity === 'critical' ? 'bg-red-50 dark:bg-red-500/10 ring-red-200 dark:ring-red-500/20'
+                        : alert.severity === 'high' ? 'bg-amber-50 dark:bg-amber-500/10 ring-amber-200 dark:ring-amber-500/20'
+                        : 'bg-wellq-gray/5 dark:bg-white/5 ring-wellq-gray/20 dark:ring-white/10'
+                      }`}>
+                        <AlertTriangle size={18} className={`${style.icon} flex-shrink-0`} strokeWidth={2.2} />
+                      </div>
+
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p className="text-sm font-bold text-wellq-dark dark:text-white truncate leading-tight tracking-tight">{resolvedTitle}</p>
+                        <p className="text-xs font-medium text-wellq-gray dark:text-wellq-gray/80 truncate mt-1">{resolvedMessage}</p>
+                      </div>
+
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${style.badge}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${style.dot} ${style.pulse ? 'animate-pulse' : ''}`} />
+                        {tVal(alert.severity)}
+                      </span>
+
+                      <button
+                        onClick={() => onAcknowledgeAlert(alert.alert_id)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-wellq-dark border border-wellq-gray/20 dark:border-white/10 rounded-lg text-xs font-bold text-wellq-gray hover:text-wellq-dark dark:hover:text-white hover:border-wellq-gray/40 dark:hover:border-white/20 transition-all flex-shrink-0 cursor-pointer opacity-0 group-hover:opacity-100 shadow-sm active:scale-95"
+                      >
+                        <CheckCheck size={14} />
+                        {t('overview.markRead')}
+                      </button>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 };
@@ -664,7 +728,7 @@ const OperationalStatusTab = ({
   apiServers, apiProcesses,
   kpiSystemHealth, kpiActiveNow, kpiDownloads, kpiDormant,
   appStats,
-  onGoSupport,
+  onGoSupport, searchQuery = '',
 }) => {
   const { t, tVal } = useLanguage();
   const [selectedServer, setSelectedServer] = useState(null);
@@ -688,6 +752,7 @@ const OperationalStatusTab = ({
     updated_at: s.updated_at,
   });
 
+  const searchActive = hasSearchQuery(searchQuery);
   const cards = [
     { 
       label: t('overview.systemHealth'), 
@@ -719,6 +784,41 @@ const OperationalStatusTab = ({
     },
   ];
 
+  const visibleCards = filterAndSortBySearch(cards, searchQuery, (card) => [card.label, card.value, card.sub]);
+  const normalizedServers = servers.map(normalizeServer);
+  const visibleServers = filterAndSortBySearch(normalizedServers, searchQuery, (server) => [
+    server.name,
+    server.status,
+    server.uptime,
+    server.cpu,
+    server.memory,
+    server.region,
+    server.server_id,
+    server.type,
+  ]);
+  const visibleProcesses = filterAndSortBySearch(processes, searchQuery, (proc) => [
+    proc.name,
+    proc.status,
+    proc.queued_items,
+    proc.queuedItems,
+  ]);
+  const showAppUsage = !searchActive || matchesSearch(
+    searchQuery,
+    t('overview.appUsageBreakdown'),
+    t('overview.patientApp'),
+    t('overview.clinicianTablet'),
+    t('overview.webDashboard'),
+    t('overview.totalDownloads'),
+    t('overview.activeToday'),
+    t('overview.active30d'),
+    t('overview.inactive')
+  );
+  const showTickets = !searchActive || matchesSearch(searchQuery, 'tickets', 'support', 'soporte', t('support.title'));
+
+  if (searchActive && visibleCards.length === 0 && visibleServers.length === 0 && visibleProcesses.length === 0 && !showAppUsage && !showTickets) {
+    return <ContextualSearchEmpty query={searchQuery} />;
+  }
+
   const getColorClasses = (colorName) => {
     switch(colorName) {
       case 'emerald': return { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-500', ring: 'ring-emerald-500/20', glow: 'from-emerald-500/10' };
@@ -734,7 +834,7 @@ const OperationalStatusTab = ({
       
       {/* ── Top 4 KPI Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {cards.map(({ label, value, icon: Icon, metaColor, sub }, i) => {
+        {visibleCards.map(({ label, value, icon: Icon, metaColor, sub }, i) => {
           const styles = getColorClasses(metaColor);
           return (
             <motion.div key={i} variants={itemVariants} className={`relative bg-white dark:bg-wellq-dark rounded-2xl p-6 shadow-sm border border-wellq-gray/20 dark:border-white/5 overflow-hidden group h-full`}>
@@ -770,7 +870,7 @@ const OperationalStatusTab = ({
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {servers.map(normalizeServer).map((server, i) => {
+          {visibleServers.map((server, i) => {
             const meta = SERVER_STATUS_META[server.status] ?? SERVER_STATUS_META.idle;
             return (
               <motion.div
@@ -842,7 +942,7 @@ const OperationalStatusTab = ({
             </div>
           </div>
           <div className="flex-1 space-y-2.5">
-            {processes.map((proc, i) => (
+            {visibleProcesses.map((proc, i) => (
               <div
                 key={i}
                 className="flex items-center gap-4 p-3.5 rounded-xl border border-transparent bg-wellq-gray/5 dark:bg-white/[0.02] hover:border-wellq-gray/20 dark:hover:border-white/10 transition-colors group"
@@ -862,12 +962,14 @@ const OperationalStatusTab = ({
           </div>
         </motion.div>
 
-        <AppUsageBreakdown appStats={appStats} />
+        {showAppUsage && <AppUsageBreakdown appStats={appStats} searchQuery={searchQuery} />}
       </div>
 
-      <motion.div variants={itemVariants}>
-        <OpenTicketsWidget onGoSupport={onGoSupport} />
-      </motion.div>
+      {showTickets && (
+        <motion.div variants={itemVariants}>
+          <OpenTicketsWidget onGoSupport={onGoSupport} />
+        </motion.div>
+      )}
 
       {/* Uso de createPortal para envolver AnimatePresence e inyectar el drawer en el body */}
       {typeof document !== 'undefined' && createPortal(
@@ -889,7 +991,7 @@ export const OverviewView = ({
   apiServers, apiProcesses, fmtArr,
   kpiSystemHealth, kpiActiveNow, kpiDownloads, kpiDormant,
   appStats,
-  onGoSupport,
+  onGoSupport, searchQuery = '',
 }) => {
   const [tab, setTab] = useState('business');
   const { t } = useLanguage();
@@ -930,7 +1032,7 @@ export const OverviewView = ({
             <BusinessHealthTab
               loading={loading} kpiArr={kpiArr} kpiClinics={kpiClinics} kpiPatients={kpiPatients} kpiNrr={kpiNrr}
               mrrData={mrrData} churnRegions={churnRegions} apiAlerts={apiAlerts} onAcknowledgeAlert={onAcknowledgeAlert}
-              onRegionClick={setSelectedRegion} fmtArr={fmtArr}
+              onRegionClick={setSelectedRegion} fmtArr={fmtArr} searchQuery={searchQuery}
             />
           </motion.div>
         )}
@@ -938,7 +1040,7 @@ export const OverviewView = ({
           <motion.div key="operational" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <OperationalStatusTab
               apiServers={apiServers} apiProcesses={apiProcesses} kpiSystemHealth={kpiSystemHealth} kpiActiveNow={kpiActiveNow}
-              kpiDownloads={kpiDownloads} kpiDormant={kpiDormant} appStats={appStats} onGoSupport={onGoSupport}
+              kpiDownloads={kpiDownloads} kpiDormant={kpiDormant} appStats={appStats} onGoSupport={onGoSupport} searchQuery={searchQuery}
             />
           </motion.div>
         )}

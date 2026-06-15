@@ -22,8 +22,18 @@ import {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const normalizeTeamOptions = (responders = []) => Array.from(
+  new Set(responders.map((responder) => responder.team || responder.group).filter(Boolean))
+).sort((a, b) => a.localeCompare(b));
+
+const canonicalTeamValue = (team, teamOptions = []) => {
+  const clean = team.trim();
+  if (!clean) return '';
+  return teamOptions.find((option) => option.toLowerCase() === clean.toLowerCase()) || clean;
+};
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
-export const SupportConfigPanel = ({ onClose, onCategoriesChanged }) => {
+export const SupportConfigPanel = ({ onClose, onCategoriesChanged, onRespondersChanged }) => {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('categories'); // 'categories' | 'responders'
 
@@ -60,6 +70,7 @@ export const SupportConfigPanel = ({ onClose, onCategoriesChanged }) => {
 
   const handleClose = () => {
     if (onCategoriesChanged) onCategoriesChanged();
+    if (onRespondersChanged) onRespondersChanged();
     onClose();
   };
 
@@ -83,6 +94,7 @@ export const SupportConfigPanel = ({ onClose, onCategoriesChanged }) => {
     hidden: { opacity: 0, x: -10 },
     show: { opacity: 1, x: 0 },
   };
+  const teamOptions = normalizeTeamOptions(responders);
 
   return createPortal(
     <>
@@ -221,6 +233,7 @@ export const SupportConfigPanel = ({ onClose, onCategoriesChanged }) => {
                                 try {
                                   await deleteResponder(resp.id);
                                   toast.success(t('support.responderDeleted'));
+                                  onRespondersChanged?.();
                                   loadData();
                                 } catch (error) {
                                   // Capturar específicamente el 409 (Conflict) del backend
@@ -250,9 +263,11 @@ export const SupportConfigPanel = ({ onClose, onCategoriesChanged }) => {
           <CategoryFormModal
             mode={formModal.mode}
             initialData={formModal.data}
+            teamOptions={teamOptions}
             onClose={() => setFormModal({ isOpen: false })}
             onSaved={() => {
               setFormModal({ isOpen: false });
+              onCategoriesChanged?.();
               loadData();
             }}
           />
@@ -261,9 +276,11 @@ export const SupportConfigPanel = ({ onClose, onCategoriesChanged }) => {
           <ResponderFormModal
             mode={formModal.mode}
             initialData={formModal.data}
+            teamOptions={teamOptions}
             onClose={() => setFormModal({ isOpen: false })}
             onSaved={() => {
               setFormModal({ isOpen: false });
+              onRespondersChanged?.();
               loadData();
             }}
           />
@@ -362,7 +379,7 @@ const ResponderRow = ({ responder, onEdit, onDelete, t }) => (
       </div>
     </div>
     <div className="px-3 py-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold rounded-md uppercase tracking-widest border border-indigo-200 dark:border-indigo-500/20">
-      {responder.group || t('common.general')}
+      {responder.team || responder.group || t('common.general')}
     </div>
     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-4">
       <button onClick={onEdit} className="p-2 text-wellq-gray hover:text-wellq-blue transition-colors rounded-lg"><Edit2 size={16} strokeWidth={2.5}/></button>
@@ -407,7 +424,7 @@ const FormModalBase = ({ title, icon: Icon, onClose, children, onSave, saving })
   );
 };
 
-const CategoryFormModal = ({ mode, initialData, onClose, onSaved }) => {
+const CategoryFormModal = ({ mode, initialData, teamOptions = [], onClose, onSaved }) => {
   const { t } = useLanguage();
   const [form, setForm] = useState({ name: '', team: '', emails: [] });
   const [saving, setSaving] = useState(false);
@@ -440,7 +457,7 @@ const CategoryFormModal = ({ mode, initialData, onClose, onSaved }) => {
     if (!form.name.trim()) return toast.error(t('support.validationNameRequired'));
     setSaving(true);
     try {
-      const payload = { name: form.name.trim(), team: form.team.trim() || undefined, emails: JSON.stringify(form.emails) };
+      const payload = { name: form.name.trim(), team: canonicalTeamValue(form.team, teamOptions) || undefined, emails: JSON.stringify(form.emails) };
       if (mode === 'create') await createTicketCategory(payload);
       else await updateTicketCategory(initialData.category_id, payload);
       toast.success(t('support.categorySaved'));
@@ -455,7 +472,7 @@ const CategoryFormModal = ({ mode, initialData, onClose, onSaved }) => {
   return (
     <FormModalBase title={mode === 'create' ? t('support.newCategory') : t('support.editCategory')} icon={Tags} onClose={onClose} onSave={handleSave} saving={saving}>
       <Input label={t('support.categoryNameRequired')} value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder={t('support.categoryNamePlaceholder')} />
-      <Input label={t('support.ownerTeamOptional')} value={form.team} onChange={e => setForm({...form, team: e.target.value})} placeholder={t('support.ownerTeamPlaceholder')} />
+      <TeamCombobox label={t('support.ownerTeamOptional')} value={form.team} onChange={team => setForm({...form, team})} options={teamOptions} placeholder={t('support.ownerTeamPlaceholder')} />
       
       <div className="space-y-1.5">
         <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray">{t('support.notificationEmails')}</label>
@@ -481,14 +498,14 @@ const CategoryFormModal = ({ mode, initialData, onClose, onSaved }) => {
   );
 };
 
-const ResponderFormModal = ({ mode, initialData, onClose, onSaved }) => {
+const ResponderFormModal = ({ mode, initialData, teamOptions = [], onClose, onSaved }) => {
   const { t } = useLanguage();
   const [form, setForm] = useState({ name: '', username: '', team: '', email: '', password: '' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (mode === 'edit' && initialData) {
-      setForm({ name: initialData.name || '', username: initialData.user || initialData.username || '', team: initialData.group || '', email: initialData.email || '', password: '' });
+      setForm({ name: initialData.name || '', username: initialData.user || initialData.username || '', team: initialData.team || initialData.group || '', email: initialData.email || '', password: '' });
     }
   }, [mode, initialData]);
 
@@ -501,7 +518,7 @@ const ResponderFormModal = ({ mode, initialData, onClose, onSaved }) => {
     
     setSaving(true);
     try {
-      const payload = { name: form.name.trim(), username: form.username.trim(), team: form.team.trim() || undefined, email: form.email.trim() || undefined };
+      const payload = { name: form.name.trim(), username: form.username.trim(), team: canonicalTeamValue(form.team, teamOptions) || undefined, email: form.email.trim() || undefined };
       if (mode === 'create') await createResponder({ ...payload, password: form.password });
       else await updateResponder(initialData.id, payload);
       toast.success(t('support.responderSaved'));
@@ -518,13 +535,72 @@ const ResponderFormModal = ({ mode, initialData, onClose, onSaved }) => {
       <Input label={t('support.fullNameRequired')} value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder={t('support.responderNamePlaceholder')} />
       <div className="grid grid-cols-2 gap-3">
         <Input label={t('support.usernameRequired')} value={form.username} onChange={e => setForm({...form, username: e.target.value})} placeholder={t('support.usernamePlaceholder')} />
-        <Input label={t('support.teamRequired')} value={form.team} onChange={e => setForm({...form, team: e.target.value})} placeholder={t('support.teamPlaceholder')} />
+        <TeamCombobox label={t('support.teamRequired')} value={form.team} onChange={team => setForm({...form, team})} options={teamOptions} placeholder={t('support.teamPlaceholder')} />
       </div>
       <Input label={t('support.notificationEmail')} type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder={t('support.notificationEmailExample')} />
       {mode === 'create' && (
         <Input label={t('support.temporaryPasswordRequired')} type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="••••••••" />
       )}
     </FormModalBase>
+  );
+};
+
+const TeamCombobox = ({ label, value, onChange, options = [], placeholder }) => {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const cleanValue = value.trim();
+  const normalizedValue = cleanValue.toLowerCase();
+  const filteredOptions = options.filter((option) =>
+    !normalizedValue || option.toLowerCase().includes(normalizedValue)
+  );
+  const exactMatch = options.some((option) => option.toLowerCase() === normalizedValue);
+
+  const selectTeam = (team) => {
+    onChange(team);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative space-y-1.5">
+      <label className="text-[10px] font-bold uppercase tracking-widest text-wellq-gray">{label}</label>
+      <input
+        value={value}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        placeholder={placeholder}
+        className="w-full px-4 py-2.5 text-sm font-medium rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-black/20 text-wellq-dark dark:text-white placeholder:text-wellq-gray/40 focus:outline-none focus:ring-2 focus:ring-wellq-cyan/50 transition-all"
+      />
+      {open && (filteredOptions.length > 0 || (cleanValue && !exactMatch)) && (
+        <div className="absolute z-[160] left-0 right-0 mt-1 rounded-xl border border-wellq-gray/20 dark:border-white/10 bg-white dark:bg-[#0B1120] shadow-xl overflow-hidden">
+          <div className="max-h-44 overflow-y-auto p-1.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-wellq-gray/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/10">
+            {filteredOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectTeam(option)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-xs font-bold text-wellq-dark dark:text-white hover:bg-wellq-gray/5 dark:hover:bg-white/5 transition-colors"
+              >
+                <span className="truncate">{option}</span>
+                {option.toLowerCase() === normalizedValue && <CheckCircle2 size={12} className="text-wellq-cyan flex-shrink-0" />}
+              </button>
+            ))}
+            {cleanValue && !exactMatch && (
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectTeam(cleanValue)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs font-bold text-wellq-cyan hover:bg-wellq-cyan/10 transition-colors"
+              >
+                <Plus size={12} strokeWidth={2.5} />
+                {t('support.createTeamOption', { name: cleanValue })}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

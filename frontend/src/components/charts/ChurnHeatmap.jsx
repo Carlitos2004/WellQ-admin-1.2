@@ -45,18 +45,32 @@ export const ChurnHeatmap = ({ apiRegions, onRegionClick }) => {
     }
   };
 
+  const getRegionLabel = (region) => {
+    const raw = String(region ?? t('regions.unknown'));
+    const key = raw
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return t(`regions.${key}`, raw);
+  };
+
   const hardcoded = [
     { name: t('overview.waitingConnection'), clinics: 0, risk: 'low', mrrLoss: 0 },
   ];
 
   const regions = apiRegions && apiRegions.length > 0
-    ? apiRegions.map((r) => ({
-        name:    r.region ?? r.name ?? 'Sin nombre',
-        clinics: r.clinics_at_risk ?? r.clinics ?? 0,
-        risk:    (r.risk_level ?? r.risk ?? 'low').toLowerCase(),
-        mrrLoss: r.potential_mrr_loss ?? 0,
-        raw: r,
-      }))
+    ? apiRegions.map((r) => {
+        const rawName = r.region ?? r.name ?? t('regions.unknown');
+        return {
+          name:    getRegionLabel(rawName),
+          rawName,
+          clinics: r.clinics_at_risk ?? r.clinics ?? 0,
+          risk:    (r.risk_level ?? r.risk ?? 'low').toLowerCase(),
+          mrrLoss: r.potential_mrr_loss ?? 0,
+          raw: r,
+        };
+      })
     : hardcoded;
 
   return (

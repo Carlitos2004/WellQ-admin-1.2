@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { apiFetch } from '../api/client';
 import useHasPermission from '../hooks/useHasPermission';
+import { filterAndSortBySearch, hasSearchQuery } from '../utils/search';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -66,6 +67,48 @@ const CATEGORY_COLORS = {
 };
 const catColors = (cat) => CATEGORY_COLORS[cat] || CATEGORY_COLORS['Support & Integrations'];
 
+const getFeatureSearchValues = (feature, tVal = (value) => value) => [
+  feature.name,
+  feature.description,
+  feature.category,
+  tVal(feature.category),
+  feature.unit,
+  tVal(feature.unit),
+  feature.unitType,
+  tVal(feature.unitType),
+  feature.defaultLimit,
+  feature.icon,
+];
+
+const getPlanSearchValues = (plan, featuresById = {}, tVal = (value) => value) => [
+  plan.name,
+  plan.description,
+  plan.status,
+  tVal(plan.status),
+  plan.tagColor,
+  plan.setupPrice,
+  plan.monthlyPrice,
+  plan.effectiveDate,
+  plan.metrics?.activeClinics,
+  plan.metrics?.historicalClinics,
+  plan.metrics?.arrAtRisk,
+  plan.features?.length,
+  ...(plan.features ?? []).flatMap((planFeature) => {
+    const feature = featuresById[planFeature.featureId];
+    return [
+      planFeature.featureId,
+      planFeature.limit,
+      feature?.name,
+      feature?.description,
+      feature?.category,
+      tVal(feature?.category),
+      feature?.unit,
+      tVal(feature?.unit),
+      feature?.unitType,
+      tVal(feature?.unitType),
+    ];
+  }),
+];
 const PLAN_TAG_COLORS = {
   purple: 'bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20',
   blue:   'bg-wellq-blue/10 text-wellq-blue border border-wellq-blue/20',
@@ -283,7 +326,7 @@ const PlanActionOverlay = ({ open, type, plan, onConfirm, onCancel }) => {
                       {arrAtRisk > 0 && (
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold text-wellq-dark dark:text-white">
-                            ARR en riesgo
+                            {t('plans.arrAtRisk')}
                           </span>
                           <span className="text-sm font-black tabular-nums text-red-500 dark:text-red-400">
                             ${arrAtRisk.toLocaleString()}
@@ -451,6 +494,7 @@ const PlanFeatureRow = ({ feature, limit, onChangeLimit, onRemove }) => {
 
 // ─── ArchivedPlanCard (NUEVO) ─────────────────────────────────────────────────
 const ArchivedPlanCard = ({ plan, onRestore }) => {
+  const { t } = useLanguage();
   const activeClinics = plan.metrics?.activeClinics ?? 0;
   const arrAtRisk     = plan.metrics?.arrAtRisk ?? 0;
   const hasActive     = activeClinics > 0;
@@ -479,7 +523,7 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
             )}
           </div>
           <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-wellq-gray/10 dark:bg-white/[0.05] text-wellq-gray/60 dark:text-white/30 border border-wellq-gray/10 dark:border-white/5">
-            Archived
+            {t('plans.archived')}
           </span>
         </div>
 
@@ -489,10 +533,10 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
             <span className="text-2xl font-black text-wellq-dark dark:text-white/50 tabular-nums">
               ${(plan.monthlyPrice || 0).toLocaleString()}
             </span>
-            <span className="text-xs font-bold text-wellq-gray">/mo</span>
+            <span className="text-xs font-bold text-wellq-gray">/{t('plans.mo')}</span>
           </div>
           <div className="text-right">
-            <div className="text-[9px] font-bold text-wellq-gray uppercase tracking-wider">Archived el</div>
+            <div className="text-[9px] font-bold text-wellq-gray uppercase tracking-wider">{t('plans.archivedOn')}</div>
             <div className="text-xs font-bold text-wellq-gray dark:text-white/40 mt-0.5">{archivedDate}</div>
           </div>
         </div>
@@ -510,7 +554,7 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
               <span className={`text-xs font-bold ${
                 hasActive ? 'text-amber-700 dark:text-amber-400' : 'text-wellq-gray'
               }`}>
-                Clínicas aún en este plan
+                {t('plans.clinicsStillOnPlan')}
               </span>
             </div>
             <span className={`text-sm font-black tabular-nums ${
@@ -523,14 +567,14 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
           {/* ARR en riesgo */}
           {arrAtRisk > 0 ? (
             <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/15">
-              <span className="text-xs font-bold text-red-700 dark:text-red-400">ARR en riesgo</span>
+              <span className="text-xs font-bold text-red-700 dark:text-red-400">{t('plans.arrAtRisk')}</span>
               <span className="text-sm font-black tabular-nums text-red-600 dark:text-red-400">
                 ${arrAtRisk.toLocaleString()}
               </span>
             </div>
           ) : (
             <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-wellq-gray/5 dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5">
-              <span className="text-xs font-bold text-wellq-gray">ARR en riesgo</span>
+              <span className="text-xs font-bold text-wellq-gray">{t('plans.arrAtRisk')}</span>
               <span className="text-sm font-black tabular-nums text-wellq-gray">$0</span>
             </div>
           )}
@@ -542,7 +586,7 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-wellq-gray/5 dark:bg-white/[0.03] hover:bg-wellq-green/10 dark:hover:bg-wellq-green/10 text-wellq-gray hover:text-wellq-green dark:hover:text-wellq-green rounded-xl text-sm font-bold transition-all active:scale-[0.98] border border-wellq-gray/10 dark:border-white/5"
         >
           <RotateCcw size={14} strokeWidth={2.5} />
-          Restaurar plan
+          {t('plans.restorePlan')}
         </button>
       </div>
     </motion.div>
@@ -551,14 +595,16 @@ const ArchivedPlanCard = ({ plan, onRestore }) => {
 
 
 // ─── ArchivedPlansView (NUEVO) ────────────────────────────────────────────────
-const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
-  const totalArchived     = plans.length;
-  const totalActiveClinics = plans.reduce((s, p) => s + (p.metrics?.activeClinics ?? 0), 0);
-  const totalArrAtRisk    = plans.reduce((s, p) => s + (p.metrics?.arrAtRisk ?? 0), 0);
+const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore, searchQuery = '' }) => {
+  const { t, tVal } = useLanguage();
+  const filteredPlans = filterAndSortBySearch(plans, searchQuery, (plan) => getPlanSearchValues(plan, {}, tVal));
+  const totalArchived     = filteredPlans.length;
+  const totalActiveClinics = filteredPlans.reduce((s, p) => s + (p.metrics?.activeClinics ?? 0), 0);
+  const totalArrAtRisk    = filteredPlans.reduce((s, p) => s + (p.metrics?.arrAtRisk ?? 0), 0);
 
   if (loading) return (
     <motion.div variants={tabVariants} initial="hidden" animate="enter" exit="exit">
-      <LoadingSpinner text="Cargando planes archivados…" />
+      <LoadingSpinner text={t('plans.loadingArchivedPlans')} />
     </motion.div>
   );
   if (error) return <ErrorBanner message={error} onRetry={onReload} />;
@@ -567,9 +613,9 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
     <motion.div key="archivados" variants={tabVariants} initial="hidden" animate="enter" exit="exit" className="space-y-6">
       {/* Section header */}
       <div>
-        <h2 className="text-lg font-bold text-wellq-dark dark:text-white">Planes en desuso</h2>
+        <h2 className="text-lg font-bold text-wellq-dark dark:text-white">{t('plans.obsoletePlans')}</h2>
         <p className="text-sm font-medium text-wellq-gray dark:text-wellq-gray/80">
-          Planes archivados — visibilidad del impacto operativo y financiero
+          {t('plans.archivedPlansSub')}
         </p>
       </div>
 
@@ -578,7 +624,7 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
         {/* Total archivados */}
         <div className="bg-white dark:bg-wellq-dark rounded-2xl p-5 border border-wellq-gray/15 dark:border-white/[0.06]">
           <div className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray mb-2">
-            Planes archivados
+            {t('plans.archivedPlans')}
           </div>
           <div className="text-3xl font-black text-wellq-dark dark:text-white tabular-nums">{totalArchived}</div>
         </div>
@@ -592,7 +638,7 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
           <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
             totalActiveClinics > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-wellq-gray'
           }`}>
-            Clínicas con plan obsoleto
+            {t('plans.clinicsWithObsoletePlan')}
           </div>
           <div className={`text-3xl font-black tabular-nums ${
             totalActiveClinics > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-wellq-dark dark:text-white'
@@ -621,13 +667,13 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
       </div>
 
       {/* Grid de planes archivados / Empty state */}
-      {plans.length === 0 ? (
+      {filteredPlans.length === 0 ? (
         <div className="py-28 flex flex-col items-center justify-center text-center">
           <div className="w-16 h-16 rounded-2xl bg-wellq-gray/10 dark:bg-white/[0.04] flex items-center justify-center mb-4">
             <Archive size={26} className="text-wellq-gray/30 dark:text-white/15" />
           </div>
-          <p className="text-base font-bold text-wellq-dark dark:text-white">Sin planes archivados</p>
-          <p className="text-sm font-medium text-wellq-gray mt-1">Los planes que archives aparecerán aquí</p>
+          <p className="text-base font-bold text-wellq-dark dark:text-white">{searchQuery ? t('common.noResults') : t('plans.noArchivedPlans')}</p>
+          <p className="text-sm font-medium text-wellq-gray mt-1">{searchQuery ? t('common.tryAnotherSearch') : t('plans.archivedPlansHint')}</p>
         </div>
       ) : (
         <motion.div
@@ -636,7 +682,7 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
           animate="show"
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
         >
-          {plans.map((plan) => (
+          {filteredPlans.map((plan) => (
             <ArchivedPlanCard key={plan.id} plan={plan} onRestore={onRestore} />
           ))}
         </motion.div>
@@ -647,10 +693,11 @@ const ArchivedPlansView = ({ plans, loading, error, onReload, onRestore }) => {
 
 
 // ─── PlanBuilder ──────────────────────────────────────────────────────────────
-const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
+const PlanBuilder = ({ plan, features, onSave, onCancel, saving, searchQuery = '' }) => {
   const { t, tVal } = useLanguage();
   const [draft, setDraft] = useState(plan);
   const [search, setSearch] = useState('');
+  const activeSearch = searchQuery || search;
   const [dragOver, setDragOver] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState({});
 
@@ -662,11 +709,7 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
   const featuresById = Object.fromEntries(features.map((f) => [f.id, f]));
   const addedIds = new Set(draft.features.map((f) => f.featureId));
 
-  const grouped = features
-    .filter((f) =>
-      f.name.toLowerCase().includes(search.toLowerCase()) ||
-      f.category.toLowerCase().includes(search.toLowerCase())
-    )
+  const grouped = filterAndSortBySearch(features, activeSearch, (feature) => getFeatureSearchValues(feature, tVal))
     .reduce((acc, f) => {
       acc[f.category] = acc[f.category] || [];
       acc[f.category].push(f);
@@ -763,7 +806,7 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
                     <span className="text-xs font-bold text-wellq-gray flex-1">{items.length}</span>
                     {addedCount > 0 && (
                       <span className="text-[10px] font-bold text-wellq-cyan bg-wellq-cyan/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                        {addedCount} added
+                        {addedCount} {t('plans.added')}
                       </span>
                     )}
                     <ChevronDown
@@ -783,6 +826,9 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
                 </div>
               );
             })}
+            {Object.keys(grouped).length === 0 && features.length > 0 && (
+              <p className="text-xs font-medium text-wellq-gray text-center py-8">{t('common.noResults', 'Sin resultados')}</p>
+            )}
             {features.length === 0 && (
               <p className="text-xs font-medium text-wellq-gray text-center py-8">{t('plans.noFeaturesAvailable')}</p>
             )}
@@ -918,9 +964,11 @@ const PlanBuilder = ({ plan, features, onSave, onCancel, saving }) => {
 
 
 // ─── PlansLibrary ─────────────────────────────────────────────────────────────
-const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelete, onNew, loading, error, onReload, canManagePlans }) => {
+const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelete, onNew, loading, error, onReload, canManagePlans, searchQuery = '' }) => {
   const { t, tVal } = useLanguage();
   const featuresById = Object.fromEntries(features.map((f) => [f.id, f]));
+  const filteredPlans = filterAndSortBySearch(plans, searchQuery, (plan) => getPlanSearchValues(plan, featuresById, tVal));
+  const searchActive = hasSearchQuery(searchQuery);
 
   if (loading) return <motion.div variants={tabVariants} initial="hidden" animate="enter" exit="exit"><LoadingSpinner text={t('plans.loadingPlans')} /></motion.div>;
   if (error) return <ErrorBanner message={error} onRetry={onReload} errorLabel={t('common.error')} retryLabel={t('common.retry')} />;
@@ -942,9 +990,15 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
       {plans.length === 0 && (
         <div className="py-24 text-center text-wellq-gray text-sm font-medium">{t('plans.noPlans')}</div>
       )}
+      {plans.length > 0 && filteredPlans.length === 0 && (
+        <div className="py-24 text-center">
+          <p className="text-sm font-bold text-wellq-dark dark:text-white">{t('common.noResults', 'Sin resultados')}</p>
+          <p className="mt-1 text-xs font-medium text-wellq-gray">{t('common.tryAnotherSearch', 'Prueba con otra busqueda')}</p>
+        </div>
+      )}
 
       <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {plans.map((plan) => {
+        {filteredPlans.map((plan) => {
           const tagColor = PLAN_TAG_COLORS[plan.tagColor] || PLAN_TAG_COLORS.slate;
           return (
             <motion.div variants={itemVariants} key={plan.id} className="bg-white dark:bg-wellq-dark rounded-[24px] p-6 shadow-sm border border-wellq-gray/20 dark:border-white/10 hover:shadow-lg dark:hover:border-white/20 transition-all duration-300 flex flex-col group relative overflow-hidden">
@@ -1029,7 +1083,7 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
             </motion.div>
           );
         })}
-        {canManagePlans && (
+        {canManagePlans && !searchActive && (
           <motion.button
             variants={itemVariants}
             onClick={onNew}
@@ -1049,7 +1103,7 @@ const PlansLibrary = ({ plans, features, onEdit, onDuplicate, onArchive, onDelet
 
 
 // ─── FeatureCatalog ───────────────────────────────────────────────────────────
-const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature }) => {
+const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature, searchQuery = '' }) => {
   const { t, tVal } = useLanguage();
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('All');
@@ -1064,12 +1118,12 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
   const translateCategory = (c) => CATEGORY_MAP[c] ?? c;
   const categories = ['All', ...new Set(features.map((f) => f.category))];
   const categoriesLabels = categories.map((c) => CATEGORY_MAP[c] ?? c);
+  const activeSearch = searchQuery || search;
 
-  const filtered = features.filter(
-    (f) =>
-      (cat === 'All' || f.category === cat) &&
-      (f.name.toLowerCase().includes(search.toLowerCase()) ||
-        f.description.toLowerCase().includes(search.toLowerCase()))
+  const filtered = filterAndSortBySearch(
+    features.filter((f) => cat === 'All' || f.category === cat),
+    activeSearch,
+    (feature) => getFeatureSearchValues(feature, tVal)
   );
 
   if (loading) return <motion.div variants={tabVariants} initial="hidden" animate="enter" exit="exit"><LoadingSpinner text={t('plans.loadingFeatures')} /></motion.div>;
@@ -1167,7 +1221,7 @@ const FeatureCatalog = ({ features, loading, error, onReload, onDeleteFeature })
 
 
 // ─── PlansView ─────────────────────────────────────────────────────────────────
-export const PlansView = () => {
+export const PlansView = ({ searchQuery = '' }) => {
   const { t } = useLanguage();
   const canManagePlans = useHasPermission('plans.manage');
   const [tab, setTab] = useState('library');
@@ -1359,7 +1413,7 @@ export const PlansView = () => {
           { id: 'library',    label: t('plans.library'),  icon: Layers },
           { id: 'builder',    label: t('plans.builder'),  icon: Box    },
           { id: 'catalog',    label: t('plans.catalog'),  icon: Tag    },
-          { id: 'archivados', label: 'Archived',        icon: Archive },
+          { id: 'archivados', label: t('plans.archived'), icon: Archive },
         ].filter(({ id }) => canManagePlans || id === 'library').map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -1401,6 +1455,7 @@ export const PlansView = () => {
             error={plansError || featError}
             onReload={() => { reloadPlans(); reloadFeatures(); }}
             canManagePlans={canManagePlans}
+            searchQuery={searchQuery}
           />
         )}
         {canManagePlans && tab === 'builder' && editingPlan && (
@@ -1410,6 +1465,7 @@ export const PlansView = () => {
             onSave={savePlan}
             onCancel={() => { setEditingPlan(null); setTab('library'); }}
             saving={saving}
+            searchQuery={searchQuery}
           />
         )}
         {canManagePlans && tab === 'catalog' && (
@@ -1419,6 +1475,7 @@ export const PlansView = () => {
             error={featError}
             onReload={reloadFeatures}
             onDeleteFeature={deleteFeature}
+            searchQuery={searchQuery}
           />
         )}
         {canManagePlans && tab === 'archivados' && (
@@ -1428,6 +1485,7 @@ export const PlansView = () => {
             error={archivedError}
             onReload={reloadArchivedPlans}
             onRestore={doRestorePlan}
+            searchQuery={searchQuery}
           />
         )}
       </AnimatePresence>

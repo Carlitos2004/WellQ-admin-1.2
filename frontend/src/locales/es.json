@@ -31,7 +31,17 @@
     "profile": "Perfil",
     "lightMode": "Modo claro",
     "darkMode": "Modo oscuro",
-    "logOut": "Cerrar sesión"
+    "logOut": "Cerrar sesión",
+    "searchPlaceholders": {
+      "overview": "Buscar en resumen...",
+      "clinics": "Buscar en gestión de clínicas...",
+      "plans": "Buscar en esta pestaña de planes...",
+      "financials": "Buscar en finanzas...",
+      "platform": "Buscar en operaciones...",
+      "analytics": "Buscar en analíticas...",
+      "support": "Buscar tickets...",
+      "settings": "Buscar en configuración..."
+    }
   },
   "overview": {
     "businessHealth": "Salud del Negocio",
@@ -141,7 +151,9 @@
       "health": "Salud",
       "lastLogin": "Último Acceso",
       "actions": "Acciones"
-    }
+    },
+    "createClinic": "Crear Clínica",
+    "creatingClinic": "Creando clínica..."
   },
   "common": {
     "loading": "Cargando...",
@@ -160,7 +172,11 @@
     "general": "General",
     "user": "Usuario",
     "optional": "opcional",
-    "errorSaving": "Error al guardar"
+    "errorSaving": "Error al guardar",
+    "noResults": "Sin resultados",
+    "noMatchesInSection": "No hay coincidencias para \"{{query}}\" en este apartado.",
+    "tryAnotherSearch": "Prueba con otra búsqueda",
+    "apply": "Aplicar"
   },
   "settings": {
     "general": "Configuración General",
@@ -227,6 +243,11 @@
     "teamSubtitle": "Roles, permisos y usuarios de la plataforma",
     "accessConfiguration": "Configuración de acceso",
     "selectRole": "Selecciona un rol",
+    "userValidationUserIdRequired": "Ingresa el ID de usuario.",
+    "userValidationNameRequired": "Ingresa el nombre completo.",
+    "userValidationEmailRequired": "Ingresa un email valido.",
+    "userValidationRoleRequired": "Selecciona un rol antes de guardar.",
+    "userSaveFailed": "No se pudo guardar el usuario. Revisa los campos e intenta nuevamente.",
     "newRole": "Nuevo Rol",
     "editRole": "Editar Rol",
     "editingRole": "Editando: {{name}}",
@@ -251,7 +272,9 @@
     "noPendingChanges": "Sin cambios pendientes",
     "savePermissions": "Guardar permisos",
     "noRole": "Sin rol",
-    "permissionCardHint": "Arrastra para mover - doble click para mover rápido"
+    "permissionCardHint": "Arrastra para mover - doble click para mover rápido",
+    "readOnly": "Solo lectura",
+    "technicalContact": "Contacto técnico"
   },
   "support": {
     "title": "Tickets de soporte",
@@ -291,9 +314,17 @@
     "categories": "Categorías",
     "responders": "Resolutores",
     "teamResponders": "Equipo de Resolutores",
+    "responderTeam": "Equipo responder",
+    "allResponderTeams": "Todos los equipos",
+    "responderFilter": "Responder",
+    "allResponders": "Todos los responders",
+    "filterByResponder": "Filtrar por responder",
+    "teamMember": "integrante",
+    "teamMembers": "integrantes",
     "categoriesAndEmails": "Categorías y Correos",
     "addCategory": "Agregar categoría",
     "filterByCategory": "Filtrar por categoría",
+    "filterByResponderTeam": "Filtrar por equipo responder",
     "category": "Categoría",
     "configTitle": "Configuración de Soporte",
     "configSubtitle": "Gestiona las categorías dinámicas y los resolutores del sistema",
@@ -341,6 +372,7 @@
     "chooseCategoryFirst": "Elige una categoría primero",
     "noRespondersForTeam": "Sin responders para este equipo",
     "unassigned": "Sin asignar",
+    "unassignedTicketsHint": "Tickets enviados sin responder asignado",
     "fieldDescriptionRequired": "Descripción *",
     "descriptionPlaceholder": "Describe el problema con el mayor detalle posible...",
     "reporterName": "Nombre del reportador",
@@ -374,6 +406,7 @@
     "multiEmailHint": "Presiona Enter o Espacio para agregar múltiples correos.",
     "validationResponderNameUser": "Nombre y username son obligatorios",
     "validationTeamRequired": "El equipo es obligatorio",
+    "createTeamOption": "Crear \"{{name}}\"",
     "validationPasswordRequired": "La contraseña es obligatoria para nuevos usuarios",
     "invalidEmail": "Formato de correo inválido",
     "responderSaved": "Resolutor guardado",
@@ -431,7 +464,8 @@
     "errorVersions": "Error al cargar versiones",
     "noVersionsYet": "Sin datos de versiones aún.",
     "users": "usuarios",
-    "waitingDatabase": "Esperando base de datos"
+    "waitingDatabase": "Esperando base de datos",
+    "liveAvg": "Promedio en vivo"
   },
   "analytics": {
     "appUsage": "Uso de App por Plataforma",
@@ -450,7 +484,9 @@
     "avgSessionTablet": "Sesión promedio (tablet)",
     "crashFreePatient": "Sin fallos (paciente)",
     "crashFreeTablet": "Sin fallos (tablet)",
-    "topDropOff": "Mayor abandono"
+    "topDropOff": "Mayor abandono",
+    "live": "En vivo",
+    "weekLabel": "Semana {{number}}"
   },
   "plans": {
     "library": "Biblioteca de Planes",
@@ -514,7 +550,20 @@
     "archiveTitle": "Archivar plan",
     "archiveMessage": "¿Estás seguro de que quieres archivar el plan \"{{name}}\"? Los clientes existentes no se verán afectados.",
     "deleteFeatureTitle": "Eliminar funcionalidad",
-    "deleteFeatureMessage": "¿Estás seguro de que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer."
+    "deleteFeatureMessage": "¿Estás seguro de que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+    "archived": "Archivado",
+    "archivedOn": "Archivado el",
+    "clinicsStillOnPlan": "Clínicas aún en este plan",
+    "arrAtRisk": "ARR en riesgo",
+    "restorePlan": "Restaurar plan",
+    "loadingArchivedPlans": "Cargando planes archivados...",
+    "obsoletePlans": "Planes en desuso",
+    "archivedPlansSub": "Planes archivados con visibilidad del impacto operativo y financiero",
+    "archivedPlans": "Planes archivados",
+    "clinicsWithObsoletePlan": "Clínicas con plan obsoleto",
+    "noArchivedPlans": "Sin planes archivados",
+    "archivedPlansHint": "Los planes que archives aparecerán aquí",
+    "added": "agregadas"
   },
   "values": {
     "support_integrations": "Soporte e Integraciones",
@@ -550,7 +599,12 @@
     "medium": "Medio",
     "high": "Alto",
     "critical": "Crítico",
-    "low": "Bajo"
+    "low": "Bajo",
+    "checking": "Revisando...",
+    "enterprise": "Enterprise",
+    "pro": "Pro",
+    "basic": "Básico",
+    "churned": "Perdido"
   },
   "churn": {
     "riskLow": "Riesgo bajo",
@@ -633,6 +687,7 @@
       "emailInvalid": "Ingresa un correo válido.",
       "nameRequired": "Ingresa tu nombre.",
       "nameMinLength": "Mínimo 3 caracteres.",
+      "roleRequired": "Selecciona un rol.",
       "passwordRequired": "Ingresa una contraseña.",
       "passwordMinLength": "Mínimo 8 caracteres.",
       "codeRequired": "Ingresa el código.",
@@ -665,5 +720,21 @@
       "hidePassword": "Ocultar contraseña",
       "showPassword": "Mostrar contraseña"
     }
+  },
+  "auth": {
+    "logoutSuccess": "Sesión cerrada correctamente",
+    "impersonateSuccess": "Sesión iniciada en {{clinic}}"
+  },
+  "access": {
+    "deniedTitle": "Acceso denegado",
+    "deniedMessage": "No tienes los permisos necesarios para ver esta sección. Contacta a tu administrador si crees que esto es un error.",
+    "backHome": "Volver al inicio"
+  },
+  "regions": {
+    "north_america": "Norteamérica",
+    "latam": "LATAM",
+    "europe": "Europa",
+    "asia_pacific": "Asia Pacífico",
+    "unknown": "Región desconocida"
   }
 }
