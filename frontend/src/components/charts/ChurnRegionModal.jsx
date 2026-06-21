@@ -24,6 +24,12 @@ const riskStyles = {
     glow: 'from-wellq-green/20 via-wellq-green/5 to-transparent',
     bgIcon: 'bg-wellq-green/10 ring-wellq-green/20'
   },
+  insufficient_data: {
+    badge: 'bg-wellq-gray/10 text-wellq-gray border-wellq-gray/20 dark:border-white/5',
+    icon: 'text-wellq-gray dark:text-wellq-gray/80',
+    glow: 'from-wellq-gray/20 via-wellq-gray/5 to-transparent',
+    bgIcon: 'bg-wellq-gray/10 dark:bg-white/5 ring-wellq-gray/20 dark:ring-white/10'
+  },
   default: {
     badge: 'bg-wellq-gray/10 text-wellq-dark dark:text-white border-wellq-gray/20 dark:border-white/5',
     icon: 'text-wellq-gray dark:text-wellq-gray/80',
@@ -61,10 +67,17 @@ export const ChurnRegionModal = ({ region, onClose }) => {
   };
 
   const currentRisk = region ? (riskStyles[region.risk] || riskStyles.default) : riskStyles.default;
+  const riskScore = region?.raw?.risk_score ?? region?.riskScore ?? null;
+  const confidence = region?.raw?.confidence != null ? Math.round(Number(region.raw.confidence) * 100) : null;
+  const modelVersion = region?.raw?.model_version;
+  const computedAt = region?.raw?.computed_at ?? region?.raw?.recorded_at;
+  const isInsufficientData = region?.risk === 'insufficient_data';
+  const displayedClinicCount = isInsufficientData ? (region?.raw?.clinic_count ?? 0) : (region?.clinics ?? 0);
 
   const riskLabel = region ? (
     region.risk === 'high'   ? t('churn.riskHigh')   :
     region.risk === 'medium' ? t('churn.riskMedium') :
+    region.risk === 'insufficient_data' ? tSafe('common.noData', 'No data') :
                                t('churn.riskLow')
   ) : '';
 
@@ -139,18 +152,45 @@ export const ChurnRegionModal = ({ region, onClose }) => {
                 <div className="flex items-center gap-3">
                   <Building2 size={18} className="text-wellq-gray dark:text-wellq-gray/70" />
                   <span className="text-xs font-bold text-wellq-gray uppercase tracking-wider">
-                    {tSafe('financials.clinicsAtRisk', 'Clinics at Risk')}
+                    {isInsufficientData ? tSafe('financials.totalClinics', 'Total Clinics') : tSafe('financials.clinicsAtRisk', 'Clinics at Risk')}
                   </span>
                 </div>
                 <div className="text-right">
                   <span className="text-lg font-black text-wellq-dark dark:text-white tabular-nums">
-                    {region.clinics}
+                    {displayedClinicCount}
                   </span>
                   <span className="text-xs font-semibold text-wellq-gray ml-1.5">
-                    {region.clinics === 1 ? t('clinics.clinic') : t('clinics.clinics')}
+                    {displayedClinicCount === 1 ? t('clinics.clinic') : t('clinics.clinics')}
                   </span>
                 </div>
               </div>
+
+              {/* Risk score */}
+              {riskScore !== null && (
+                <div className="p-4 rounded-xl bg-wellq-gray/3 dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-wellq-gray uppercase tracking-wider">
+                      {tSafe('financials.riskScore', 'AI Risk Score')}
+                    </span>
+                    <span className={`text-lg font-black tabular-nums ${currentRisk.icon}`}>
+                      {riskScore}/100
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-wellq-gray/10 dark:bg-white/5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${region.risk === 'high' ? 'bg-red-500' : region.risk === 'medium' ? 'bg-amber-500' : 'bg-wellq-green'}`}
+                      style={{ width: `${Math.max(0, Math.min(100, Number(riskScore)))}%` }}
+                    />
+                  </div>
+                  {(confidence !== null || modelVersion) && (
+                    <p className="text-[10px] font-semibold text-wellq-gray">
+                      {confidence !== null ? `Confidence ${confidence}%` : ''}
+                      {confidence !== null && modelVersion ? ' · ' : ''}
+                      {modelVersion ?? ''}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* MRR at risk */}
               <div className="flex items-center justify-between p-4 rounded-xl bg-red-50/80 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 relative overflow-hidden">
@@ -167,7 +207,7 @@ export const ChurnRegionModal = ({ region, onClose }) => {
               </div>
 
               {/* Recorded at */}
-              {region.raw?.recorded_at && (
+              {computedAt && (
                 <div className="flex items-center justify-between p-4 rounded-xl bg-wellq-gray/3 dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5">
                   <div className="flex items-center gap-3">
                     <Calendar size={18} className="text-wellq-gray dark:text-wellq-gray/70" />
@@ -176,7 +216,7 @@ export const ChurnRegionModal = ({ region, onClose }) => {
                     </span>
                   </div>
                   <span className="text-sm font-semibold text-wellq-dark dark:text-white">
-                    {new Date(region.raw.recorded_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    {new Date(computedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                   </span>
                 </div>
               )}

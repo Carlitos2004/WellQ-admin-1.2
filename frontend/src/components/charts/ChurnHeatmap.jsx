@@ -22,6 +22,8 @@ const getRiskBadgeStyle = (risk) => {
       return 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-500/20';
     case 'low':    
       return 'bg-wellq-green/10 text-wellq-green border border-wellq-green/20';
+    case 'insufficient_data':
+      return 'bg-wellq-gray/10 text-wellq-gray border border-wellq-gray/20 dark:border-white/5';
     default:       
       return 'bg-wellq-gray/10 text-wellq-dark dark:text-white border border-wellq-gray/20 dark:border-white/5';
   }
@@ -31,6 +33,7 @@ const riskDotColors = {
   low:    'bg-wellq-green shadow-[0_0_8px_rgba(31,237,146,0.4)]',
   medium: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]',
   high:   'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse',
+  insufficient_data: 'bg-wellq-gray/40',
 };
 
 export const ChurnHeatmap = ({ apiRegions, onRegionClick }) => {
@@ -41,6 +44,7 @@ export const ChurnHeatmap = ({ apiRegions, onRegionClick }) => {
       case 'high':   return t('churn.riskHigh');
       case 'medium': return t('churn.riskMedium');
       case 'low':    return t('churn.riskLow');
+      case 'insufficient_data': return t('common.noData', 'No data');
       default:       return risk ?? t('churn.riskUnknown');
     }
   };
@@ -66,6 +70,8 @@ export const ChurnHeatmap = ({ apiRegions, onRegionClick }) => {
           name:    getRegionLabel(rawName),
           rawName,
           clinics: r.clinics_at_risk ?? r.clinics ?? 0,
+          totalClinics: r.clinic_count ?? r.clinics ?? 0,
+          evaluatedClinics: r.evaluated_clinic_count ?? r.clinics_at_risk ?? 0,
           risk:    (r.risk_level ?? r.risk ?? 'low').toLowerCase(),
           mrrLoss: r.potential_mrr_loss ?? 0,
           raw: r,
@@ -117,7 +123,11 @@ export const ChurnHeatmap = ({ apiRegions, onRegionClick }) => {
                 {r.name}
               </div>
               <div className="text-[11px] font-semibold text-wellq-gray mt-0.5 flex items-center gap-1.5 truncate">
-                <span>{r.clinics} {r.clinics === 1 ? t('clinics.clinic') : t('clinics.clinics')}</span>
+                <span>
+                  {r.risk === 'insufficient_data'
+                    ? `${r.totalClinics} ${r.totalClinics === 1 ? t('clinics.clinic') : t('clinics.clinics')} - ${t('common.noData', 'No data')}`
+                    : `${r.clinics} ${r.clinics === 1 ? t('clinics.clinic') : t('clinics.clinics')}`}
+                </span>
                 {r.mrrLoss > 0 && (
                   <>
                     <span className="w-1 h-1 rounded-full bg-wellq-gray/40" />

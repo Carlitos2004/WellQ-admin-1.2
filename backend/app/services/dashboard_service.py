@@ -11,7 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime, timezone, timedelta
 import structlog
 
-from app.models.dashboard import (
+from app.schemas.dashboard import (
     BusinessHealthKPIs, KPICard, MRRChartResponse, MRRDataPoint,
     NeedsAttentionItem, OperationalStatusResponse, ServerStatus,
     ProcessStatus, AppUsageMetric

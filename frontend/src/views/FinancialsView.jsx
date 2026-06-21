@@ -8,6 +8,7 @@ import {
 import { MRRChart } from '../components/charts/MRRChart';
 import { ChurnHeatmap } from '../components/charts/ChurnHeatmap';
 import { ChurnRegionModal } from '../components/charts/ChurnRegionModal';
+import { Skeleton } from '../components/ui';
 import { useLanguage } from '../contexts/LanguageContext';
 import { filterAndSortBySearch, hasSearchQuery, matchesSearch } from '../utils/search';
 
@@ -210,11 +211,14 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false, searchQ
 
           <div className="p-6 space-y-5">
             {breakdownEntries.map(([key, value], idx) => {
-              const isNeg = value < 0;
+              const isChurn = key === 'churn';
+              const isRetained = key === 'retained';
+              const isNeg = isChurn || value < 0;
               const safeTotal = totalMrr > 0 ? totalMrr : 1;
               const pct = Math.min((Math.abs(value) / safeTotal) * 100, 100);
               const config = getBreakdownConfig(key);
               const Icon = config.icon;
+              const prefix = isNeg ? '-' : isRetained ? '' : '+';
 
               return (
                 <div key={key} className="flex items-center gap-4 group">
@@ -236,7 +240,7 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false, searchQ
 
                   <div className="w-24 text-right flex flex-col justify-center">
                     <span className={`text-sm font-black ${config.text}`}>
-                      {isNeg ? '-' : '+'}${Math.abs(value).toLocaleString()}
+                      {prefix}${Math.abs(value).toLocaleString()}
                     </span>
                     <span className="text-[10px] font-bold text-wellq-gray uppercase tracking-wider">{pct.toFixed(1)}%</span>
                   </div>

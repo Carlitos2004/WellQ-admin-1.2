@@ -661,9 +661,25 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
   const [deleting,       setDeleting]       = useState(false);
 
   const clinics  = apiClinics.length > 0 ? apiClinics : HARDCODED_CLINICS;
+  const getClinicChurnPrediction = (clinic) => clinic.churnPrediction ?? clinic.churn_prediction ?? null;
+  const getClinicChurnScore = (clinic) => {
+    const prediction = getClinicChurnPrediction(clinic);
+    if (prediction?.risk_score != null) return Number(prediction.risk_score);
+    const health = Number(clinic.healthScore ?? 0);
+    return health > 0 ? 100 - health : 0;
+  };
+  const getClinicChurnLevel = (clinic) => {
+    const prediction = getClinicChurnPrediction(clinic);
+    if (prediction?.risk_level) return String(prediction.risk_level).toLowerCase();
+    const score = getClinicChurnScore(clinic);
+    if (score >= 70) return 'high';
+    if (score >= 45) return 'medium';
+    return 'low';
+  };
+  const isClinicAtChurnRisk = (clinic) => ['medium', 'high'].includes(getClinicChurnLevel(clinic)) || getClinicChurnScore(clinic) >= 45;
   const filteredByStatus = clinics.filter((c) => {
     if (filter === 'active'  && !(c.status === 'Active'  || c.status === 'active'))  return false;
-    if (filter === 'at_risk' && !((c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0)) return false;
+    if (filter === 'at_risk' && !isClinicAtChurnRisk(c)) return false;
     if (filter === 'churned' && !(c.status === 'churned' || c.status === 'Churned')) return false;
     if (filterTier   && c.tier   !== filterTier)   return false;
     if (filterStatus && c.status !== filterStatus) return false;
@@ -691,6 +707,9 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
     c.patient_count,
     c.patientsLimit,
     c.healthScore,
+    getClinicChurnScore(c),
+    getClinicChurnLevel(c),
+    getClinicChurnPrediction(c)?.summary,
   ]);
 
   const closeAll     = () => { setSelected(null); setSettingsClinic(null); setInvoiceClinic(null); };
@@ -717,8 +736,9 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
 
   const totalClinics  = clinics.length;
   const activeClinics = clinics.filter((c) => c.status === 'Active' || c.status === 'active').length;
-  const atRiskClinics = clinics.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0).length;
+  const atRiskClinics = clinics.filter(isClinicAtChurnRisk).length;
   const totalPatients = clinics.reduce((acc, c) => acc + (c.patientsUsed ?? c.patient_count ?? 0), 0);
+  const tableColumnCount = canEdit ? 8 : 7;
 
   const handleExportExcel = async () => {
     if (!filtered.length) return;
@@ -864,6 +884,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
         { header: 'Pacientes Usados', key: 'used',      width: 20 },
         { header: 'Límite Pacientes', key: 'limit',     width: 20 },
         { header: 'Health Score',     key: 'health',    width: 16 },
+        { header: 'Churn Risk',       key: 'churnRisk', width: 18 },
         { header: 'Último Login',     key: 'lastLogin', width: 24 },
       ];
 
@@ -903,6 +924,8 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             const statusRaw = clinic.status ?? '';
             const tierRaw   = clinic.tier   ?? '';
             const healthNum = clinic.healthScore ?? 0;
+            const churnScore = getClinicChurnScore(clinic);
+            const churnLevel = getClinicChurnLevel(clinic);
             const used      = clinic.patientsUsed ?? clinic.patient_count ?? 0;
             const limit     = clinic.patientsLimit ?? '—';
 
@@ -914,6 +937,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               used,
               limit,
               health:    healthNum > 0 ? `${healthNum}%` : '—',
+              churnRisk: churnLevel === 'insufficient_data' ? 'SIN DATOS' : `${churnLevel.toUpperCase()} ${churnScore}/100`,
               lastLogin: clinic.lastLogin ?? '—',
             });
             row.height = 20;
@@ -925,6 +949,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
             Object.assign(row.getCell('status'), statusStyle(statusRaw));
             Object.assign(row.getCell('tier'),   tierStyle(tierRaw));
             Object.assign(row.getCell('health'), healthStyle(healthNum));
+            Object.assign(row.getCell('churnRisk'), healthStyle(100 - churnScore));
 
             ['used', 'limit'].forEach((key) => {
               const c = row.getCell(key);
@@ -956,7 +981,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
       });
 
       const activeClinicsExp  = filtered.filter((c) => (c.status ?? '').toLowerCase() === 'active').length;
-      const atRiskClinicsExp  = filtered.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0).length;
+      const atRiskClinicsExp  = filtered.filter(isClinicAtChurnRisk).length;
       const churnedClinicsExp = filtered.filter((c) => (c.status ?? '').toLowerCase() === 'churned').length;
       const totalPatientsExp  = filtered.reduce((acc, c) => acc + (c.patientsUsed ?? c.patient_count ?? 0), 0);
       const avgHealthExp      = filtered.length
@@ -1011,7 +1036,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
 
       buildClinicSheet(wb, 'Todas',     filtered, C.cyan);
       buildClinicSheet(wb, 'Activas',   filtered.filter((c) => (c.status ?? '').toLowerCase() === 'active'),  C.green);
-      buildClinicSheet(wb, 'En Riesgo', filtered.filter((c) => (c.healthScore ?? 0) < 70 && (c.healthScore ?? 0) > 0), C.amber);
+      buildClinicSheet(wb, 'En Riesgo', filtered.filter(isClinicAtChurnRisk), C.amber);
       buildClinicSheet(wb, 'Churned',   filtered.filter((c) => (c.status ?? '').toLowerCase() === 'churned'), C.red);
 
       const buffer = await wb.xlsx.writeBuffer();
@@ -1241,6 +1266,7 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                   t('clinics.columns.status'),
                   t('clinics.columns.licenseUsage'),
                   t('clinics.columns.health'),
+                  t('clinics.columns.churnRisk', 'Churn Risk'),
                   t('clinics.columns.lastLogin'),
                   canEdit ? t('clinics.columns.actions') : null, // Mágico filtro visual
                 ].filter(Boolean).map((h) => (
@@ -1254,14 +1280,14 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
               {clinicsLoading
                 ? [...Array(4)].map((_, i) => (
                     <tr key={i} className="border-b border-wellq-gray/10 dark:border-wellq-gray/30">
-                      <td colSpan={7} className="py-3 px-4">
+                      <td colSpan={tableColumnCount} className="py-3 px-4">
                         <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
                   ))
                 : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={canEdit ? 7 : 6} className="py-14 px-4 text-center">
+                      <td colSpan={tableColumnCount} className="py-14 px-4 text-center">
                         <div className="text-sm font-bold text-wellq-dark dark:text-white">{t('common.noResults', 'Sin resultados')}</div>
                         <div className="mt-1 text-xs font-medium text-wellq-gray">{t('common.tryAnotherSearch', 'Prueba con otra busqueda')}</div>
                       </td>

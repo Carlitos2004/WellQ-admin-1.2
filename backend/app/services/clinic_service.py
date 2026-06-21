@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import uuid
 import structlog
 
-from app.models.clinic import (
+from app.schemas.clinic import (
     ClinicSummary, ClinicDetail, ClinicListResponse, ClinicFilters,
     UpdateClinicRequest, ImpersonateResponse, ClinicStatus, ClinicTier
 )

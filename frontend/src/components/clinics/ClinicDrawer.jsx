@@ -236,6 +236,7 @@ export const ClinicDrawer = ({
   const [license,      setLicense]      = useState(null);
   const [usage,        setUsage]        = useState(null);
   const [contact,      setContact]      = useState(null);
+  const [churnPrediction, setChurnPrediction] = useState(clinic?.churn_prediction ?? null);
 
   const [clinicName,   setClinicName]   = useState('');
   const [clinicPlan,   setClinicPlan]   = useState('');
@@ -267,6 +268,7 @@ export const ClinicDrawer = ({
     setClinicName(clinic.name ?? '');
     setClinicPlan(clinic.tier ?? 'Enterprise');
     setClinicStatus(clinic.status ?? 'Active');
+    setChurnPrediction(clinic.churn_prediction ?? null);
     setSaveOk(false);
     setSaveError(null);
 
@@ -275,6 +277,7 @@ export const ClinicDrawer = ({
     apiFetch(`/api/clinics/${id}/license`).then((d) => setLicense(d.licenses)).catch(() => {});
     apiFetch(`/api/clinics/${id}/usage`).then((d) => setUsage(d.metrics)).catch(() => {});
     apiFetch(`/api/clinics/${id}/contact`).then((d) => setContact(d)).catch(() => {});
+    apiFetch(`/api/clinics/${id}/churn-prediction`).then((d) => setChurnPrediction(d.data)).catch(() => {});
   }, [clinic]);
 
   // ── Fetch de invoices cuando se activa la pestaña ─────────────────────────
@@ -293,6 +296,74 @@ export const ClinicDrawer = ({
   }, [activeTab, clinic]);
 
   if (!clinic) return null;
+
+  const churnRisk = (churnPrediction?.risk_level ?? 'low').toLowerCase();
+  const churnTone = {
+    high: {
+      label: 'High Risk',
+      text: 'text-red-500',
+      border: 'border-red-500/25',
+      bg: 'bg-red-500/10 dark:bg-red-500/10',
+      pill: 'bg-red-500/10 text-red-500 border-red-500/20',
+    },
+    medium: {
+      label: 'Medium Risk',
+      text: 'text-amber-500',
+      border: 'border-amber-500/25',
+      bg: 'bg-amber-500/10 dark:bg-amber-500/10',
+      pill: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+    },
+    low: {
+      label: 'Low Risk',
+      text: 'text-wellq-green',
+      border: 'border-wellq-green/25',
+      bg: 'bg-wellq-green/10 dark:bg-wellq-green/10',
+      pill: 'bg-wellq-green/10 text-wellq-green border-wellq-green/20',
+    },
+    insufficient_data: {
+      label: 'Insufficient Data',
+      text: 'text-wellq-gray',
+      border: 'border-wellq-gray/20',
+      bg: 'bg-wellq-gray/5 dark:bg-white/5',
+      pill: 'bg-wellq-gray/10 text-wellq-gray border-wellq-gray/20',
+    },
+  }[churnRisk] ?? {
+    label: 'Unknown',
+    text: 'text-wellq-gray',
+    border: 'border-wellq-gray/20',
+    bg: 'bg-wellq-gray/5 dark:bg-white/5',
+    pill: 'bg-wellq-gray/10 text-wellq-gray border-wellq-gray/20',
+  };
+  const churnScore = Math.max(0, Math.min(100, Number(churnPrediction?.risk_score ?? 0)));
+  const churnConfidence = Math.round(Number(churnPrediction?.confidence ?? 0) * 100);
+  const churnComputedAt = churnPrediction?.computed_at
+    ? new Date(churnPrediction.computed_at).toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' })
+    : 'N/A';
+  const licenseUsed = Number(license?.currently_active ?? clinic.patientsUsed ?? clinic.patient_count ?? 0);
+  const licenseTotal = Number(license?.total_limit ?? clinic.patientsLimit ?? 0);
+  const licensePct = license?.utilization_percentage != null
+    ? Math.round(Number(license.utilization_percentage))
+    : licenseTotal > 0
+      ? Math.round((licenseUsed / licenseTotal) * 100)
+      : Math.round(Number(churnPrediction?.license_utilization ?? 0) * 100);
+  const _licenseUsageLabel = null; /*
+    ? `${licensePct}% · ${licenseUsed.toLocaleString()}/${licenseTotal.toLocaleString()}`
+    */
+  const activityPct = Math.round(Number(churnPrediction?.activity_score ?? 0) * 100);
+  const licenseUsageDisplay = licenseTotal > 0
+    ? `${licensePct}% - ${licenseUsed.toLocaleString()}/${licenseTotal.toLocaleString()}`
+    : `${licensePct}%`;
+  const hasChurnScore = churnRisk !== 'insufficient_data' && churnPrediction?.risk_score != null;
+  const churnScoreLabel = hasChurnScore ? churnScore : 'N/A';
+  const churnConfidenceLabel = churnRisk === 'insufficient_data' ? 'N/A' : `${churnConfidence}%`;
+  const activityLabel = churnRisk === 'insufficient_data' ? 'N/A' : `${activityPct}%`;
+  const churnBarClass = churnRisk === 'high'
+    ? 'bg-red-500'
+    : churnRisk === 'medium'
+      ? 'bg-amber-500'
+      : churnRisk === 'insufficient_data'
+        ? 'bg-wellq-gray/40'
+        : 'bg-wellq-green';
 
   const handleSave = async () => {
     const id = clinic.clinic_id ?? clinic.id;
@@ -969,6 +1040,91 @@ export const ClinicDrawer = ({
                       borderClass="border-wellq-green/20 dark:border-wellq-green/20"
                       bgClass="bg-wellq-green/5 dark:bg-wellq-green/10"
                     />
+                  </div>
+                </motion.section>
+
+                {/* Churn Prediction */}
+                <motion.section variants={itemVariants}>
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <TrendingUp size={14} className={churnTone.text} />
+                    <h3 className="text-xs font-bold text-wellq-dark dark:text-white uppercase tracking-wider">Churn Prediction</h3>
+                  </div>
+                  <div className={`bg-white dark:bg-wellq-dark border ${churnTone.border} rounded-2xl p-5 shadow-sm space-y-4`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-wellq-gray">AI Risk Score</p>
+                        <div className="flex items-baseline gap-2 mt-1">
+                          <span className={`text-4xl font-black tracking-tight tabular-nums ${churnTone.text}`}>
+                            {churnScoreLabel}
+                          </span>
+                          {hasChurnScore && <span className="text-sm font-bold text-wellq-gray">/100</span>}
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${churnTone.pill}`}>
+                        {churnTone.label}
+                      </span>
+                    </div>
+
+                    <div className="h-2 rounded-full bg-wellq-gray/10 dark:bg-white/10 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${churnBarClass}`}
+                        style={{ width: `${churnScore}%` }}
+                      />
+                    </div>
+
+                    <p className="text-xs font-medium text-wellq-gray leading-relaxed">
+                      {churnPrediction?.summary ?? 'Waiting for churn prediction signals.'}
+                    </p>
+
+                    <div className="rounded-xl border border-wellq-gray/10 dark:border-white/5 bg-wellq-gray/5 dark:bg-white/[0.02] p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">License Usage Signal</p>
+                        <p className={`text-xs font-black tabular-nums ${churnTone.text}`}>{licenseUsageDisplay}</p>
+                      </div>
+                      <UtilizationBar
+                        used={licenseTotal > 0 ? licenseUsed : licensePct}
+                        total={licenseTotal > 0 ? licenseTotal : 100}
+                      />
+                      <p className="text-[10px] font-medium text-wellq-gray/80">
+                        Esta misma utilizacion alimenta el score de churn junto con login, health score y actividad clinica.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className={`${churnTone.bg} rounded-xl px-3 py-2 border ${churnTone.border}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">Confidence</p>
+                        <p className={`text-lg font-black tabular-nums ${churnTone.text}`}>{churnConfidenceLabel}</p>
+                      </div>
+                      <div className="bg-wellq-gray/5 dark:bg-white/5 rounded-xl px-3 py-2 border border-wellq-gray/10 dark:border-white/5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">Model</p>
+                        <p className="text-xs font-black text-wellq-dark dark:text-white truncate">{churnPrediction?.model_version ?? 'N/A'}</p>
+                      </div>
+                      <div className="bg-wellq-gray/5 dark:bg-white/5 rounded-xl px-3 py-2 border border-wellq-gray/10 dark:border-white/5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">Activity Signal</p>
+                        <p className="text-lg font-black tabular-nums text-wellq-cyan">{activityLabel}</p>
+                      </div>
+                      <div className="bg-wellq-gray/5 dark:bg-white/5 rounded-xl px-3 py-2 border border-wellq-gray/10 dark:border-white/5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">Health Score</p>
+                        <p className="text-lg font-black tabular-nums text-wellq-dark dark:text-white">{churnPrediction?.health_score ?? clinic.healthScore ?? 0}</p>
+                      </div>
+                    </div>
+
+                    {churnPrediction?.signals?.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-wellq-gray">Signals</p>
+                        <div className="flex flex-wrap gap-2">
+                          {churnPrediction.signals.map((signal) => (
+                            <span key={signal} className="px-2.5 py-1 rounded-lg bg-wellq-gray/10 dark:bg-white/5 border border-wellq-gray/10 dark:border-white/5 text-[11px] font-semibold text-wellq-gray">
+                              {signal}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] font-semibold text-wellq-gray/80">
+                      Computed at {churnComputedAt}
+                    </p>
                   </div>
                 </motion.section>
 
