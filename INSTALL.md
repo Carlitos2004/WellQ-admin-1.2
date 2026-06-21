@@ -1,11 +1,17 @@
 # Manual de instalacion local - WellQ Admin 1.2
 
-Este manual permite instalar y ejecutar el proyecto localmente desde una copia limpia del repositorio. El objetivo es que la empresa pueda compilar, levantar y revisar el sistema en un computador local.
+Este manual permite instalar y ejecutar el proyecto desde una copia limpia del repositorio.
 
-El proyecto tiene dos partes:
+Arquitectura actual del proyecto:
 
-- `backend`: API en Python con FastAPI.
-- `frontend`: interfaz en React con Vite.
+- Base de datos: Neon/PostgreSQL.
+- Backend: FastAPI desplegado en Google Cloud Run.
+- Frontend: React/Vite desplegado en Vercel.
+
+Para pruebas locales se pueden usar dos modos:
+
+- Modo completo local: ejecutar backend y frontend en el computador.
+- Modo frontend local: ejecutar solo frontend local conectado al backend desplegado en Google Cloud Run.
 
 ## 1. Requisitos previos
 
@@ -15,7 +21,7 @@ Instalar antes de comenzar:
 - Python 3.11 o 3.12. Recomendado: Python 3.12.
 - Node.js compatible con Vite: `^20.19.0` o `>=22.12.0`.
 - npm incluido con Node.js.
-- Acceso a las credenciales privadas del proyecto.
+- Acceso a las variables privadas del proyecto.
 
 Verificar versiones:
 
@@ -47,22 +53,24 @@ Solicitar al responsable tecnico estos archivos por un canal privado autorizado 
 - WhatsApp empresarial o canal interno autorizado.
 - Gestor de secretos como 1Password, Bitwarden o similar.
 
-Archivos privados requeridos:
+Para ejecutar backend y frontend localmente:
 
 ```txt
 backend/.env
 frontend/.env
-backend/serviceAccountKey.json
 ```
 
-`backend/serviceAccountKey.json` solo es necesario si se van a usar credenciales reales de Google Cloud / Firebase / Firestore. Si el ambiente de pruebas no usa Firestore, el responsable tecnico debe confirmarlo.
+Para ejecutar solo el frontend local conectado al backend de Google Cloud Run:
+
+```txt
+frontend/.env
+```
 
 No subir estos archivos a Git:
 
 ```txt
 backend/.env
 frontend/.env
-backend/serviceAccountKey.json
 ```
 
 En el repositorio si pueden quedar estos archivos de ejemplo:
@@ -74,7 +82,7 @@ frontend/.env.example
 
 ## 4. Variables de entorno del backend
 
-Crear el archivo:
+Crear el archivo solo si se va a ejecutar el backend localmente:
 
 ```txt
 backend/.env
@@ -86,7 +94,7 @@ Puede copiarse desde:
 backend/.env.example
 ```
 
-Contenido esperado:
+Plantilla de variables necesarias, sin credenciales reales:
 
 ```env
 APP_ENV=development
@@ -105,9 +113,7 @@ KEYCLOAK_CLIENT_ID=
 KEYCLOAK_CLIENT_SECRET=
 KEYCLOAK_ADMIN_ROLE=wellq-admin
 
-GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json
 GCP_PROJECT_ID=
-FIRESTORE_DATABASE=(default)
 
 MONGODB_URI=
 MONGODB_DB_NAME=wellq_analytics
@@ -125,10 +131,10 @@ RESEND_FROM_EMAIL=WellQ Admin <onboarding@resend.dev>
 
 Notas:
 
-- `DATABASE_URL` debe ser la conexion de Neon/PostgreSQL en formato compatible con SQLAlchemy async, por ejemplo `postgresql+asyncpg://...`.
-- `JWT_SECRET` debe ser una cadena larga y privada. No usar valores de ejemplo en ambientes reales.
+- `DATABASE_URL` es la conexion a Neon/PostgreSQL. Debe usar formato compatible con SQLAlchemy async, por ejemplo `postgresql+asyncpg://...`.
+- `JWT_SECRET` debe ser una cadena larga y privada.
 - `KEYCLOAK_*` corresponde a la configuracion de autenticacion.
-- `GOOGLE_APPLICATION_CREDENTIALS` normalmente apunta a `./serviceAccountKey.json` dentro de `backend`.
+- `GCP_PROJECT_ID` identifica el proyecto de Google Cloud donde se despliega o relaciona el backend.
 - `MONGODB_URI` corresponde a MongoDB Atlas si el ambiente lo usa.
 - `SMTP_*` se usa para recuperacion de contrasena por correo.
 
@@ -146,13 +152,23 @@ Puede copiarse desde:
 frontend/.env.example
 ```
 
-Contenido esperado para ejecucion local:
+Si el frontend local debe usar backend local:
 
 ```env
 VITE_API_URL=http://localhost:8000
 ```
 
-## 6. Instalar backend
+Si el frontend local debe usar el backend desplegado en Google Cloud Run:
+
+```env
+VITE_API_URL=https://URL-DEL-BACKEND-EN-GOOGLE-CLOUD-RUN
+```
+
+Usar la URL real entregada por el responsable tecnico.
+
+## 6. Instalar backend local
+
+Este paso solo es necesario si se quiere ejecutar el backend localmente. Si se usara el backend ya desplegado en Google Cloud Run, se puede saltar a la instalacion del frontend.
 
 Abrir una terminal en la raiz del proyecto y ejecutar:
 
@@ -164,16 +180,15 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Antes de ejecutar el backend, confirmar que existen:
+Antes de ejecutar el backend local, confirmar que existe:
 
 ```txt
 backend/.env
-backend/serviceAccountKey.json
 ```
 
-Si el ambiente entregado no usa Google Cloud / Firestore, confirmar con el responsable tecnico si `serviceAccountKey.json` puede quedar como archivo vacio de pruebas.
-
 ## 7. Preparar datos iniciales
+
+Ejecutar este paso solo si se esta usando una base de datos de desarrollo o pruebas.
 
 Con el entorno virtual activo y dentro de `backend`, ejecutar:
 
@@ -188,7 +203,7 @@ Importante:
 - Ejecutarlos solo contra una base de datos de desarrollo o pruebas, salvo autorizacion expresa.
 - No ejecutarlos contra produccion sin confirmacion de la empresa.
 
-## 8. Ejecutar backend
+## 8. Ejecutar backend local
 
 Con el entorno virtual activo y dentro de `backend`, ejecutar:
 
@@ -239,64 +254,49 @@ Abrir en el navegador:
 http://localhost:5173
 ```
 
-El frontend debe apuntar al backend local:
-
-```txt
-VITE_API_URL=http://localhost:8000
-```
-
 ## 11. Verificacion final
 
 La instalacion queda correcta si:
 
-- El backend responde en `http://localhost:8000/health`.
 - El frontend carga en `http://localhost:5173`.
+- Si se usa backend local, el backend responde en `http://localhost:8000/health`.
+- Si se usa backend de Google Cloud Run, `VITE_API_URL` apunta a la URL real del backend desplegado.
 - La app permite iniciar sesion con un usuario de prueba entregado por la empresa.
 - Las pantallas principales cargan datos sin errores de CORS ni errores 500.
 
 ## 12. Problemas comunes
 
-### El backend no arranca por variables faltantes
+### El backend local no arranca por variables faltantes
 
-Revisar que exista `backend/.env` y que tenga todas las variables del archivo `backend/.env.example`.
+Revisar que exista `backend/.env` y que tenga todas las variables necesarias del archivo `backend/.env.example`.
 
 ### Error de base de datos
 
 Revisar `DATABASE_URL`. Debe ser una conexion valida a Neon/PostgreSQL y debe usar el formato `postgresql+asyncpg://...`.
 
-### Error de credenciales de Google
-
-Revisar:
-
-```txt
-backend/serviceAccountKey.json
-GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json
-GCP_PROJECT_ID
-FIRESTORE_DATABASE
-```
-
 ### El frontend no conecta con el backend
 
-Revisar que el backend este corriendo en:
+Revisar `frontend/.env`.
 
-```txt
-http://localhost:8000
-```
-
-Y que `frontend/.env` tenga:
+Para backend local:
 
 ```env
 VITE_API_URL=http://localhost:8000
 ```
 
+Para backend desplegado en Google Cloud Run:
+
+```env
+VITE_API_URL=https://URL-DEL-BACKEND-EN-GOOGLE-CLOUD-RUN
+```
+
 ### Puerto ocupado
 
-Si `8000` esta ocupado, cerrar el proceso que lo usa o levantar Uvicorn en otro puerto. Si se cambia el puerto del backend, actualizar tambien `frontend/.env`.
+Si `8000` esta ocupado, cerrar el proceso que lo usa o levantar Uvicorn en otro puerto. Si se cambia el puerto del backend local, actualizar tambien `frontend/.env`.
 
 ## 13. Seguridad
 
 - No subir `.env` a Git.
-- No subir `serviceAccountKey.json` real a Git.
 - No pegar claves reales en `README.md`, `INSTALL.md` ni capturas de pantalla.
 - Entregar credenciales solo por Drive privado, WhatsApp empresarial autorizado o gestor de secretos.
 - Usar ambiente de pruebas para demostraciones locales. Evitar apuntar a produccion salvo autorizacion expresa.

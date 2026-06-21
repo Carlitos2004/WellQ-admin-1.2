@@ -89,7 +89,7 @@ VITE_API_URL=http://localhost:8000
 
 Usar estos comandos cuando quieras subir cambios al repositorio.
 
-Importante: no subir archivos privados como `.env` o `serviceAccountKey.json`.
+Importante: no subir archivos privados como `.env`.
 
 ```bash
 # 1. Revisa qué archivos cambiaron
@@ -104,4 +104,3 @@ git commit -m "Explica brevemente qué cambiaste"
 # 4. Sube los cambios al repositorio
 git push
 ```
-
