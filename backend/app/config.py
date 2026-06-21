@@ -1,60 +1,37 @@
 """
-config.py — Configuración centralizada de la aplicación
-=======================================================
-Utiliza pydantic-settings para leer y validar automáticamente las variables
-de entorno definidas en el archivo .env. Todas las partes de la aplicación
-importan la instancia singleton `settings` desde este módulo.
+Configuracion centralizada de WellQ Admin.
+
+Lee variables desde backend/.env cuando el backend se ejecuta localmente.
+Los valores sensibles no deben subirse a Git.
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
-class Settings(BaseSettings):
-    """
-    Clase de configuración principal.
-    Cada campo se mapea directamente a una variable de entorno.
-    Los tipos y valores por defecto sirven como documentación y validación.
-    """
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-    # ── Neon PostgreSQL ────────────────────────────────────────────────────────────
-    database_url: str 
-    
-    # ── Configuración general ──────────────────────────────────────────────────
-    app_env: str = "development"       # Entorno de ejecución
-    app_port: int = 8000               # Puerto del servidor
-    debug: bool = False                # Modo debug (habilita docs automáticos en /docs)
-    allowed_origins: str = "http://localhost:5173"  # CORS: orígenes permitidos
-    
-    # Local JWT
+
+class Settings(BaseSettings):
+    # Base de datos principal: Neon/PostgreSQL
+    database_url: str
+
+    # Configuracion general del servidor
+    app_env: str = "development"
+    app_port: int = 8000
+    debug: bool = False
+    allowed_origins: str = "http://localhost:5173"
+
+    # JWT local
     jwt_secret: str
     jwt_algorithm: str = "HS256"
 
-    resend_api_key: str = ""
-    resend_from_email: str = "WellQ Admin <onboarding@resend.dev>"
-    
-    # ── Keycloak (Autenticación OIDC) ──────────────────────────────────────────
-    keycloak_url: str                  # URL base del servidor Keycloak
-    keycloak_realm: str = "wellq"      # Realm donde están registrados los clientes
-    keycloak_client_id: str            # ID del cliente backend en Keycloak
-    keycloak_client_secret: str = ""   # Secret del cliente (para flujos confidenciales)
-    keycloak_admin_role: str = "wellq-admin"  # Rol mínimo requerido para usar la API
+    # Keycloak / autenticacion OIDC
+    keycloak_url: str
+    keycloak_realm: str = "wellq"
+    keycloak_client_id: str
+    keycloak_client_secret: str = ""
+    keycloak_admin_role: str = "wellq-admin"
 
-    # ── Google Cloud / Firestore ───────────────────────────────────────────────
-    google_application_credentials: str = "./serviceAccountKey.json"
-    gcp_project_id: str                # ID del proyecto en Google Cloud
-    firestore_database: str = "(default)"  # Nombre de la BD en Firestore
-
-    # ── MongoDB (Motor) ────────────────────────────────────────────────────────
-    mongodb_uri: str                   # Cadena de conexión de MongoDB Atlas
-    mongodb_db_name: str = "wellq_analytics"  # Base de datos para analíticas
-
-    # ── Configuración de lectura de variables de entorno ──────────────────────
-    model_config = SettingsConfigDict(
-        env_file=".env",           # Archivo .env a leer (relativo al directorio de ejecución)
-        env_file_encoding="utf-8",
-        case_sensitive=False,      # Variables de entorno son case-insensitive
-    )
-        
+    # Email transaccional
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str = ""
@@ -62,33 +39,38 @@ class Settings(BaseSettings):
     smtp_from_name: str = "WellQ Admin"
     smtp_from_email: str = ""
 
+    # Configuraciones opcionales heredadas. No son necesarias para el flujo
+    # actual, pero quedan con defaults para no romper imports antiguos.
+    resend_api_key: str = ""
+    resend_from_email: str = "WellQ Admin <onboarding@resend.dev>"
+    google_application_credentials: str = ""
+    gcp_project_id: str = ""
+    firestore_database: str = ""
+    mongodb_uri: str = ""
+    mongodb_db_name: str = ""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
     @property
     def cors_origins(self) -> list[str]:
-        """Convierte la cadena de orígenes CORS separada por comas en una lista."""
         return [origin.strip() for origin in self.allowed_origins.split(",")]
 
     @property
     def keycloak_jwks_url(self) -> str:
-        """URL del endpoint JWKS de Keycloak para obtener las claves públicas de firma."""
         return f"{self.keycloak_url}/realms/{self.keycloak_realm}/protocol/openid-connect/certs"
 
     @property
     def keycloak_issuer(self) -> str:
-        """Issuer esperado en los tokens JWT emitidos por Keycloak."""
         return f"{self.keycloak_url}/realms/{self.keycloak_realm}"
+
 
 @lru_cache()
 def get_settings() -> Settings:
-    """
-    Retorna la instancia singleton de Settings.
-    El decorador @lru_cache garantiza que solo se construya una vez,
-    evitando releer el archivo .env en cada request.
-
-    Uso:
-        from app.config import get_settings
-        settings = get_settings()
-    """
     return Settings()
 
-# Instancia global para uso directo en módulos
+
 settings = get_settings()

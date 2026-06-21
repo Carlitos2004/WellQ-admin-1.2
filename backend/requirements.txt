@@ -1,26 +1,23 @@
 # =============================================================================
-# WELLQ ADMIN — Dependencias del Backend
+# WELLQ ADMIN - Dependencias del Backend
 # =============================================================================
 
-# ── Framework principal ────────────────────────────────────────────────────────
+# Framework principal
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 
-# ── Validación y configuración ────────────────────────────────────────────────
+# Validacion y configuracion
 pydantic==2.7.1
 pydantic-settings==2.2.1
 python-dotenv==1.0.1
 email-validator==2.1.1
 
-# ── Base de datos: Neon (PostgreSQL async) ────────────────────────────────────
-# SQLModel = SQLAlchemy + Pydantic en un solo modelo
+# Base de datos: Neon/PostgreSQL async
 sqlmodel==0.0.19
-# asyncpg = driver async para PostgreSQL (requerido por SQLAlchemy async)
 asyncpg==0.29.0
-# SQLAlchemy async engine (incluido con sqlmodel, pero lo fijamos)
 sqlalchemy==2.0.30
 
-# ── Autenticación (Local JWT) ─────────────────────────────────────────────────
+# Autenticacion local JWT
 PyJWT==2.8.0
 cryptography==42.0.7
 passlib[bcrypt]==1.7.4
@@ -28,19 +25,19 @@ bcrypt==4.1.3
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 
-# ── Base de datos: Google Firestore (opcional) ────────────────────────────────
+# Google Cloud / Firebase Admin SDK
 firebase-admin==6.5.0
 
-# ── Base de datos: MongoDB async (opcional) ───────────────────────────────────
+# MongoDB async
 motor==3.4.0
 pymongo==4.7.2
 
-# ── Utilidades HTTP y fecha/hora ──────────────────────────────────────────────
+# Utilidades HTTP y fecha/hora
 httpx==0.27.0
 python-dateutil==2.9.0
 
-# ── Logging estructurado ──────────────────────────────────────────────────────
+# Logging estructurado
 structlog==24.1.0
 
-# ── Email transaccional ───────────────────────────────────────────────────────
+# Email transaccional
 resend==2.13.0

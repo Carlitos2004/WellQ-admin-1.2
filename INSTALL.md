@@ -113,20 +113,12 @@ KEYCLOAK_CLIENT_ID=
 KEYCLOAK_CLIENT_SECRET=
 KEYCLOAK_ADMIN_ROLE=wellq-admin
 
-GCP_PROJECT_ID=
-
-MONGODB_URI=
-MONGODB_DB_NAME=wellq_analytics
-
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=
 SMTP_APP_PASSWORD=
 SMTP_FROM_NAME=WellQ Admin
 SMTP_FROM_EMAIL=
-
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=WellQ Admin <onboarding@resend.dev>
 ```
 
 Notas:
@@ -134,8 +126,6 @@ Notas:
 - `DATABASE_URL` es la conexion a Neon/PostgreSQL. Debe usar formato compatible con SQLAlchemy async, por ejemplo `postgresql+asyncpg://...`.
 - `JWT_SECRET` debe ser una cadena larga y privada.
 - `KEYCLOAK_*` corresponde a la configuracion de autenticacion.
-- `GCP_PROJECT_ID` identifica el proyecto de Google Cloud donde se despliega o relaciona el backend.
-- `MONGODB_URI` corresponde a MongoDB Atlas si el ambiente lo usa.
 - `SMTP_*` se usa para recuperacion de contrasena por correo.
 
 ## 5. Variables de entorno del frontend
