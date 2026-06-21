@@ -105,8 +105,3 @@ git commit -m "Explica brevemente qué cambiaste"
 git push
 ```
 
-Si estás subiendo el manual de instalación y las plantillas de entorno, puedes usar un `git add` más específico:
-
-```bash
-git add .gitignore README.md INSTALL.md backend/.env.example frontend/.env.example backend/requirements.txt backend/seed.py backend/cleanup_duplicates.py backend/app/config.py backend/app/routers/auth.py
-```
