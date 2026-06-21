@@ -8,14 +8,14 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.config import settings
 from app.db.neon import get_db
 from app.models_db import AdminUser, Permission, RolePermission, Role   # ← Role añadido
 
 # ── Configuración ──────────────────────────────────────────────────────────────
-# Cambia JWT_SECRET por una cadena larga y aleatoria en tu .env
-# Ejemplo: openssl rand -hex 32
-JWT_SECRET      = "CAMBIA_ESTO_POR_UN_SECRET_LARGO_Y_SEGURO"
-JWT_ALGORITHM   = "HS256"
+# JWT_SECRET se lee desde backend/.env. No usar valores de ejemplo en ambientes reales.
+JWT_SECRET      = settings.jwt_secret
+JWT_ALGORITHM   = settings.jwt_algorithm
 ACCESS_EXPIRES  = timedelta(hours=1)
 REFRESH_EXPIRES = timedelta(days=7)
 

@@ -16,13 +16,19 @@ SEGURO para ejecutar en cualquier momento:
 """
 
 import asyncio
+import os
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 
-DATABASE_URL = (
-    "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM"
-    "@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
-)
+BACKEND_DIR = os.path.dirname(__file__)
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL no esta configurada. Crea backend/.env usando backend/.env.example."
+    )
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 

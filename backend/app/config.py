@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     debug: bool = False                # Modo debug (habilita docs automáticos en /docs)
     allowed_origins: str = "http://localhost:5173"  # CORS: orígenes permitidos
     
+    # Local JWT
+    jwt_secret: str
+    jwt_algorithm: str = "HS256"
+
     resend_api_key: str = ""
     resend_from_email: str = "WellQ Admin <onboarding@resend.dev>"
     

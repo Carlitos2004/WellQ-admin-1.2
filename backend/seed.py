@@ -38,7 +38,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, text
 
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+from dotenv import load_dotenv
+
+BACKEND_DIR = os.path.dirname(__file__)
+sys.path.insert(0, BACKEND_DIR)
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 from app.models_db import (
     Clinic, Feature, Plan, PlanFeature,
@@ -57,7 +61,11 @@ from app.models_db import (
     Role, Permission, RolePermission,
 )
 
-DATABASE_URL = "postgresql+asyncpg://neondb_owner:npg_bENZm4lgO6XM@ep-delicate-sunset-ac8h03br-pooler.sa-east-1.aws.neon.tech/neondb"
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL no esta configurada. Crea backend/.env usando backend/.env.example."
+    )
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
