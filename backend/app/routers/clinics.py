@@ -25,7 +25,6 @@ from app.models_db import (
     ActionLog                                                         # ← NUEVO
 )
 from app.db.neon import get_db
-from app.services.churn_prediction_service import compute_churn_prediction
 from .dependencies import require_super_admin
 
 router = APIRouter(prefix="/api/clinics", tags=["Gestión de Clínicas"])
@@ -127,8 +126,6 @@ async def list_clinics(
 
     data = []
     for c in clinics:
-        usage = await _get_latest_usage_metric(db, c.clinic_id)
-        churn_prediction = compute_churn_prediction(c, usage).to_dict()
         data.append({
             "_id": str(c.id),
             "clinic_id": c.clinic_id,
@@ -144,8 +141,8 @@ async def list_clinics(
             "patientsLimit":  getattr(c, 'patients_limit', 500),
             "healthScore":    getattr(c, 'health_score', 100),
             "lastLogin":      c.last_login.isoformat() if getattr(c, 'last_login', None) else None,
-            "churnPrediction": churn_prediction,
-            "churn_prediction": churn_prediction,
+            "churnPrediction": None,
+            "churn_prediction": None,
         })
 
     return {"total": total, "page": page, "page_size": page_size, "data": data}
@@ -411,9 +408,6 @@ async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_
     if not clinic:
         raise HTTPException(status_code=404, detail="Clínica no encontrada")
 
-    usage = await _get_latest_usage_metric(db, clinic_id)
-    churn_prediction = compute_churn_prediction(clinic, usage).to_dict()
-
     return {
         "_id":           str(clinic.id),
         "clinic_id":     clinic.clinic_id,
@@ -427,7 +421,7 @@ async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_
         "location":       clinic.location,
         "internal_notes":getattr(clinic, 'internal_notes', None),
         "created_at":    clinic.created_at.isoformat() if clinic.created_at else None,
-        "churn_prediction": churn_prediction,
+        "churn_prediction": None,
     }
 
 
@@ -661,28 +655,6 @@ async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depe
         "warning_threshold_reached": utilization >= 90.0
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 22. GET /clinics/{clinic_id}/churn-prediction — Prediccion IA de churn
-# ─────────────────────────────────────────────────────────────────────────────
-@router.get("/{clinic_id}/churn-prediction", summary="Prediccion IA de churn por clinica")
-async def get_clinic_churn_prediction(
-    clinic_id: str = Path(...),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
-    clinic = result.scalar_one_or_none()
-
-    if not clinic:
-        raise HTTPException(status_code=404, detail="Clinica no encontrada")
-
-    usage = await _get_latest_usage_metric(db, clinic_id)
-    prediction = compute_churn_prediction(clinic, usage)
-
-    return {
-        "status": "success",
-        "data": prediction.to_dict(),
-    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

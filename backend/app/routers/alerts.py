@@ -14,7 +14,11 @@ router = APIRouter(prefix="/api/alerts", tags=["Alertas"])
     description="Retorna las alertas globales para el administrador."
 )
 async def get_alerts(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Alert).order_by(desc(Alert.created_at)))
+    result = await db.execute(
+        select(Alert)
+        .where(Alert.acknowledged_at.is_(None))
+        .order_by(desc(Alert.created_at))
+    )
     alerts = result.scalars().all()
  
     unread_count = sum(1 for a in alerts if not getattr(a, "acknowledged_at", None))
@@ -46,12 +50,7 @@ async def get_alerts(db: AsyncSession = Depends(get_db)):
     summary="Marcar alerta como gestionada/leída"
 )
 async def acknowledge_alert(alert_id: str = Path(...), db: AsyncSession = Depends(get_db)):
-    try:
-        aid = int(alert_id)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=422, detail="ID inválido")
- 
-    result = await db.execute(select(Alert).where(Alert.id == aid))
+    result = await db.execute(select(Alert).where(Alert.alert_id == alert_id))
     alert = result.scalars().first()
  
     if not alert:

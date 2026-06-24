@@ -50,7 +50,7 @@ from app.models_db import (
     Notification, Job, AdminUser,
     KpiSnapshot, AppMetric,
     Invoice, ClinicUsageMetric, Server, BackgroundProcess,
-    MrrSnapshot, ChurnRiskRegion, AppUsageStat, FeatureAdoption,
+    MrrSnapshot, AppUsageStat, FeatureAdoption,
     AdherenceSnapshot, CohortRetention, SoapQualityMetric, AiCostSnapshot,
     AiLatencyMetric, PoseAnalysisSnapshot, AppVersion, PlatformSetting,
     ImpersonateAuditLog, NeedsAttentionItem,
@@ -191,7 +191,6 @@ FEATURES_DATA = [
     {"feature_id": "feat-locations",  "name": "Clinic Locations",     "category": "Patients & Licenses",    "unit": "locations",   "unit_type": "number", "default_limit": "1",    "description": "Number of physical locations under one account",       "icon": "building2"},
     {"feature_id": "feat-pose",       "name": "Pose Analysis",        "category": "AI Capabilities",        "unit": "sessions/mo", "unit_type": "number", "default_limit": "1000", "description": "AI-powered movement & pose analysis sessions",         "icon": "activity"},
     {"feature_id": "feat-soap",       "name": "SOAP Note Generation", "category": "AI Capabilities",        "unit": "notes/mo",    "unit_type": "number", "default_limit": "500",  "description": "Auto-generated clinical SOAP notes",                    "icon": "fileText"},
-    {"feature_id": "feat-churn",      "name": "Churn Prediction",     "category": "AI Capabilities",        "unit": "enabled",     "unit_type": "toggle", "default_limit": "1",    "description": "AI-driven patient/clinic churn risk insights",         "icon": "trendingUp"},
     {"feature_id": "feat-video",      "name": "Video Processing",     "category": "AI Capabilities",        "unit": "minutes/mo",  "unit_type": "number", "default_limit": "600",  "description": "Cloud video session processing minutes",               "icon": "zap"},
     {"feature_id": "feat-storage",    "name": "Cloud Storage",        "category": "Storage & Data",         "unit": "GB",          "unit_type": "number", "default_limit": "100",  "description": "Patient records and media storage",                    "icon": "hardDrive"},
     {"feature_id": "feat-retention",  "name": "Data Retention",       "category": "Storage & Data",         "unit": "months",      "unit_type": "number", "default_limit": "24",   "description": "How long historical records are kept",                 "icon": "calendar"},
@@ -237,7 +236,7 @@ PLAN_FEATURES_DATA = {
     "plan-enterprise": [
         ("feat-patients", "5000"), ("feat-clinicians", "50"), ("feat-tablets", "30"),
         ("feat-locations", "10"), ("feat-pose", "20000"), ("feat-soap", "10000"),
-        ("feat-churn", "1"), ("feat-video", "12000"), ("feat-storage", "2000"),
+        ("feat-video", "12000"), ("feat-storage", "2000"),
         ("feat-retention", "84"), ("feat-exports", "200"), ("feat-backup", "1"),
         ("feat-support", "24/7 Priority"), ("feat-ehr", "5"), ("feat-api", "600"),
         ("feat-webhooks", "1"),
@@ -423,7 +422,7 @@ ADMIN_USERS_DATA = [
         "user_id": "USR-WELLQ-001", "full_name": "WellQ Admin",
         "email": "admin@wellq.com",
         "role": "super_admin", "status": "active",
-        "password_hash": "$2b$12$0vC24ewJ9UTWRDXVkm9p8eVq2Wnt/AArq0gloESsA2po.3GO6D44G",
+        "password_hash": "$2b$12$17thIUY51pl1g7hXcQR5PODw.XyYrpgjoEUl0JYEv2otSydVxY8ky",
     },
 ]
 
@@ -539,26 +538,20 @@ BACKGROUND_PROCESSES_DATA = [
 ]
 
 MRR_SNAPSHOTS_DATA = [
-    {"period_month": "Jun", "period_year": 2025, "total_mrr": 36500.0, "new_business": 900.0,  "expansion": 5500.0,  "contraction": 400.0, "churn": 2100.0, "retained": 34400.0, "monthly_growth_percentage": 1.2},
-    {"period_month": "Jul", "period_year": 2025, "total_mrr": 37800.0, "new_business": 1000.0, "expansion": 6200.0,  "contraction": 350.0, "churn": 2000.0, "retained": 35800.0, "monthly_growth_percentage": 3.6},
-    {"period_month": "Ago", "period_year": 2025, "total_mrr": 38900.0, "new_business": 850.0,  "expansion": 7000.0,  "contraction": 300.0, "churn": 1950.0, "retained": 36950.0, "monthly_growth_percentage": 2.9},
-    {"period_month": "Sep", "period_year": 2025, "total_mrr": 39800.0, "new_business": 950.0,  "expansion": 7500.0,  "contraction": 320.0, "churn": 1900.0, "retained": 37900.0, "monthly_growth_percentage": 2.3},
-    {"period_month": "Oct", "period_year": 2025, "total_mrr": 40600.0, "new_business": 1100.0, "expansion": 7800.0,  "contraction": 280.0, "churn": 2050.0, "retained": 38550.0, "monthly_growth_percentage": 2.0},
-    {"period_month": "Nov", "period_year": 2025, "total_mrr": 41000.0, "new_business": 800.0,  "expansion": 8000.0,  "contraction": 260.0, "churn": 2100.0, "retained": 38900.0, "monthly_growth_percentage": 1.0},
-    {"period_month": "Dic", "period_year": 2025, "total_mrr": 42000.0, "new_business": 1300.0, "expansion": 9500.0,  "contraction": 240.0, "churn": 1900.0, "retained": 40100.0, "monthly_growth_percentage": 2.4},
-    {"period_month": "Ene", "period_year": 2026, "total_mrr": 43950.0, "new_business": 1500.0, "expansion": 11000.0, "contraction": 310.0, "churn": 1750.0, "retained": 42200.0, "monthly_growth_percentage": 4.6},
-    {"period_month": "Feb", "period_year": 2026, "total_mrr": 44750.0, "new_business": 1200.0, "expansion": 12500.0, "contraction": 290.0, "churn": 1700.0, "retained": 43050.0, "monthly_growth_percentage": 1.8},
-    {"period_month": "Mar", "period_year": 2026, "total_mrr": 46300.0, "new_business": 1200.0, "expansion": 14000.0, "contraction": 500.0, "churn": 1650.0, "retained": 44650.0, "monthly_growth_percentage": 3.4},
-    {"period_month": "Abr", "period_year": 2026, "total_mrr": 45200.0, "new_business": 1500.0, "expansion": 15000.0, "contraction": 800.0, "churn": 1600.0, "retained": 43600.0, "monthly_growth_percentage": 2.1},
-    {"period_month": "May", "period_year": 2026, "total_mrr": 46400.0, "new_business": 1800.0, "expansion": 15500.0, "contraction": 600.0, "churn": 1580.0, "retained": 44820.0, "monthly_growth_percentage": 2.7},
+    {"period_month": "Jun", "period_year": 2025, "total_mrr": 36500.0, "new_business": 900.0,  "expansion": 1200.0,  "contraction": 400.0, "churn": 2100.0, "retained": 34400.0, "monthly_growth_percentage": 1.2},
+    {"period_month": "Jul", "period_year": 2025, "total_mrr": 37800.0, "new_business": 1000.0, "expansion": 2650.0,  "contraction": 350.0, "churn": 2000.0, "retained": 34150.0, "monthly_growth_percentage": 3.6},
+    {"period_month": "Ago", "period_year": 2025, "total_mrr": 38900.0, "new_business": 850.0,  "expansion": 2500.0,  "contraction": 300.0, "churn": 1950.0, "retained": 35550.0, "monthly_growth_percentage": 2.9},
+    {"period_month": "Sep", "period_year": 2025, "total_mrr": 39800.0, "new_business": 950.0,  "expansion": 2170.0,  "contraction": 320.0, "churn": 1900.0, "retained": 36680.0, "monthly_growth_percentage": 2.3},
+    {"period_month": "Oct", "period_year": 2025, "total_mrr": 40600.0, "new_business": 1100.0, "expansion": 2030.0,  "contraction": 280.0, "churn": 2050.0, "retained": 37470.0, "monthly_growth_percentage": 2.0},
+    {"period_month": "Nov", "period_year": 2025, "total_mrr": 41000.0, "new_business": 800.0,  "expansion": 1960.0,  "contraction": 260.0, "churn": 2100.0, "retained": 38240.0, "monthly_growth_percentage": 1.0},
+    {"period_month": "Dic", "period_year": 2025, "total_mrr": 42000.0, "new_business": 1300.0, "expansion": 1840.0,  "contraction": 240.0, "churn": 1900.0, "retained": 38860.0, "monthly_growth_percentage": 2.4},
+    {"period_month": "Ene", "period_year": 2026, "total_mrr": 43950.0, "new_business": 1500.0, "expansion": 2510.0,  "contraction": 310.0, "churn": 1750.0, "retained": 39940.0, "monthly_growth_percentage": 4.6},
+    {"period_month": "Feb", "period_year": 2026, "total_mrr": 44750.0, "new_business": 1200.0, "expansion": 1590.0,  "contraction": 290.0, "churn": 1700.0, "retained": 41960.0, "monthly_growth_percentage": 1.8},
+    {"period_month": "Mar", "period_year": 2026, "total_mrr": 46300.0, "new_business": 1200.0, "expansion": 2500.0,  "contraction": 500.0, "churn": 1650.0, "retained": 42600.0, "monthly_growth_percentage": 3.4},
+    {"period_month": "Abr", "period_year": 2026, "total_mrr": 45200.0, "new_business": 1500.0, "expansion": 1400.0,  "contraction": 800.0, "churn": 1600.0, "retained": 42300.0, "monthly_growth_percentage": -2.4},
+    {"period_month": "May", "period_year": 2026, "total_mrr": 46400.0, "new_business": 1800.0, "expansion": 1580.0,  "contraction": 600.0, "churn": 1580.0, "retained": 43020.0, "monthly_growth_percentage": 2.7},
 ]
 
-CHURN_RISK_REGIONS_DATA = [
-    {"region": "North America", "clinics_at_risk": 2, "potential_mrr_loss": 598.0,  "risk_level": "Low"},
-    {"region": "LATAM",         "clinics_at_risk": 5, "potential_mrr_loss": 1495.0, "risk_level": "Medium"},
-    {"region": "Europe",        "clinics_at_risk": 1, "potential_mrr_loss": 299.0,  "risk_level": "Low"},
-    {"region": "Asia Pacific",  "clinics_at_risk": 3, "potential_mrr_loss": 897.0,  "risk_level": "Medium"},
-]
 
 APP_USAGE_STATS_DATA = [
     {
@@ -824,8 +817,12 @@ ROLE_PERMISSIONS_MAP = {
 # SETUP DE TABLAS
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def create_tables():
+async def create_tables(reset=False):
     async with engine.begin() as conn:
+        if reset:
+            print("  → Dropping all existing tables...")
+            await conn.run_sync(SQLModel.metadata.drop_all)
+            print("  → Recreating all tables...")
         await conn.run_sync(SQLModel.metadata.create_all)
 
         await conn.execute(text("ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS password_hash varchar DEFAULT NULL"))
@@ -1008,10 +1005,6 @@ async def seed_mrr_snapshots(session):
     count = await insert_if_not_exists(session, MrrSnapshot, MRR_SNAPSHOTS_DATA, ["period_month", "period_year"])
     print(f"  → {count}/{len(MRR_SNAPSHOTS_DATA)} mrr_snapshots")
 
-async def seed_churn_risk_regions(session):
-    count = await insert_if_not_exists(session, ChurnRiskRegion, CHURN_RISK_REGIONS_DATA, ["region"])
-    print(f"  → {count}/{len(CHURN_RISK_REGIONS_DATA)} churn_risk_regions")
-
 async def seed_app_usage_stats(session):
     count = await insert_if_not_exists(session, AppUsageStat, APP_USAGE_STATS_DATA, ["app_type", "period"])
     print(f"  → {count}/{len(APP_USAGE_STATS_DATA)} app_usage_stats")
@@ -1166,12 +1159,34 @@ async def seed_role_permissions(session):
 # RUNNER
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def run_seed():
-    print("\n🌱 Iniciando seed NO DESTRUCTIVO de WellQ Admin...\n")
+async def run_seed(reset=False):
+    print(f"\n[WellQ Seed] Iniciando seed {'DESTRUCTIVO' if reset else 'NO DESTRUCTIVO'} de WellQ Admin...\n")
 
-    await create_tables()
+    await create_tables(reset=reset)
 
     async with AsyncSessionLocal() as session:
+        if reset:
+            print("\n[WellQ Seed] Limpiando datos de todas las tablas (TRUNCATE CASCADE)...")
+            tables = [
+                "clinic_plans", "scheduled_changes", "alerts", "notifications", "jobs",
+                "admin_users", "kpi_snapshots", "app_metrics", "invoices", "clinic_usage_metrics",
+                "servers", "background_processes", "mrr_snapshots", "app_usage_stats",
+                "feature_adoption", "adherence_snapshots", "cohort_retention", "soap_quality_metrics",
+                "ai_cost_snapshots", "ai_latency_metrics", "pose_analysis_snapshots", "app_versions",
+                "platform_settings", "impersonate_audit_logs", "needs_attention_items",
+                "infrastructure_cost_snapshots", "infra_nodes", "clinician_summaries",
+                "patient_health_summaries", "support_tickets", "responders", "ticket_categories",
+                "role_permissions", "roles", "permissions", "plan_features", "plans", "features",
+                "clinics"
+            ]
+            for table in tables:
+                try:
+                    await session.execute(text(f"TRUNCATE TABLE {table} CASCADE;"))
+                except Exception as e:
+                    pass
+            await session.commit()
+            print("  → Base de datos limpiada correctamente.")
+
         print("\n📥 Insertando datos (se omiten duplicados):")
         await seed_clinics(session)
         await seed_features(session)
@@ -1198,7 +1213,6 @@ async def run_seed():
         await seed_servers(session)
         await seed_background_processes(session)
         await seed_mrr_snapshots(session)
-        await seed_churn_risk_regions(session)
         await seed_app_usage_stats(session)
         await seed_feature_adoption(session)
         await seed_adherence_snapshots(session)
@@ -1219,9 +1233,13 @@ async def run_seed():
         await seed_support_tickets(session)
         await seed_ticket_categories(session)
 
-    print("\n✅ Seed completado de forma segura.\n")
+    print("\n[WellQ Seed] Seed completado de forma segura.\n")
     await engine.dispose()
 
 
 if __name__ == "__main__":
-    asyncio.run(run_seed())
+    import argparse
+    parser = argparse.ArgumentParser(description="Seed database")
+    parser.add_argument("--reset", action="store_true", help="Reset all tables before seeding")
+    args = parser.parse_args()
+    asyncio.run(run_seed(reset=args.reset))

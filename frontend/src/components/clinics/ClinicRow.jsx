@@ -99,15 +99,6 @@ export const ClinicRow = ({
         <HealthBadge score={clinic.healthScore ?? 0} />
       </td>
 
-      <td className="py-4 px-4">
-        <div className="flex flex-col gap-1">
-          <span className={`w-fit px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider ${riskClass}`}>
-            {riskLabels[riskLevel] ?? 'Unknown'}
-          </span>
-          <span className="text-[10px] font-bold text-wellq-gray tabular-nums">{riskScoreLabel}</span>
-        </div>
-      </td>
-
       <td className="py-4 px-4 text-xs text-wellq-gray font-semibold tabular-nums">
         {clinic.lastLogin ?? '-'}
       </td>

@@ -87,15 +87,6 @@ class MrrSnapshot(SQLModel, table=True):
     monthly_growth_percentage: float   = Field(default=0.0)
     created_at: datetime               = Field(default_factory=datetime.utcnow)
 
-class ChurnRiskRegion(SQLModel, table=True):
-    __tablename__ = "churn_risk_regions"
-
-    id: Optional[int]          = Field(default=None, primary_key=True)
-    region: str                = Field()
-    clinics_at_risk: int       = Field(default=0)
-    potential_mrr_loss: float  = Field(default=0.0)
-    risk_level: str            = Field(default="Low")
-    recorded_at: datetime      = Field(default_factory=datetime.utcnow)
 
 class AppUsageStat(SQLModel, table=True):
     __tablename__ = "app_usage_stats"

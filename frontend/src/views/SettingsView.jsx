@@ -106,15 +106,22 @@ export const SettingsView = ({
   const { theme, toggleTheme } = useTheme();
   const { t, tVal } = useLanguage();
   const canManageSettings = useHasPermission('settings.manage');
+  const canManageUsers = useHasPermission('users.manage');
+  const canManageRoles = useHasPermission('roles.manage');
+
+  const canViewApiKeys = canManageSettings;
+  const canViewTeam = canManageSettings || canManageUsers || canManageRoles;
 
   const [localSettings, setLocalSettings] = useState({});
   const hasChanges = Object.keys(localSettings).length > 0;
 
   useEffect(() => {
-    if (!canManageSettings && activeTab !== 'general') {
+    if (activeTab === 'api_keys' && !canViewApiKeys) {
+      setActiveTab('general');
+    } else if (activeTab === 'team' && !canViewTeam) {
       setActiveTab('general');
     }
-  }, [activeTab, canManageSettings]);
+  }, [activeTab, canViewApiKeys, canViewTeam]);
 
   const [serverStatus, setServerStatus] = useState({
     status: 'checking',
@@ -312,7 +319,16 @@ export const SettingsView = ({
   useEffect(() => { loadSync(); }, []);
 
   // ── Team sub-tabs state (nuevo) ─────────────────────────────────────────────
-  const [teamSubTab, setTeamSubTab] = useState('roles');
+  const defaultSubTab = canManageSettings || canManageRoles ? 'roles' : 'users';
+  const [teamSubTab, setTeamSubTab] = useState(defaultSubTab);
+
+  useEffect(() => {
+    if (teamSubTab === 'roles' && !(canManageSettings || canManageRoles)) {
+      setTeamSubTab('users');
+    } else if (teamSubTab === 'users' && !(canManageSettings || canManageUsers)) {
+      setTeamSubTab('roles');
+    }
+  }, [canManageSettings, canManageRoles, canManageUsers, teamSubTab]);
 
   // ── Roles & Permissions state (nuevo) ──────────────────────────────────────
   const [roles, setRoles] = useState([]);
@@ -355,11 +371,11 @@ export const SettingsView = ({
   };
 
   useEffect(() => {
-    if (canManageSettings && activeTab === 'team') {
+    if (canViewTeam && activeTab === 'team') {
       loadRoles();
       loadPermissions();
     }
-  }, [activeTab, canManageSettings]);
+  }, [activeTab, canViewTeam]);
 
   const handleSelectRole = (role) => {
     if (permsDirty && selectedRoleId !== role.id) {
@@ -533,7 +549,13 @@ export const SettingsView = ({
 
   // ── Render Tabs ────────────────────────────────────────────────────────────
   const renderTabContent = () => {
-    const currentTab = canManageSettings ? activeTab : 'general';
+    let currentTab = activeTab;
+    if (currentTab === 'api_keys' && !canViewApiKeys) {
+      currentTab = 'general';
+    }
+    if (currentTab === 'team' && !canViewTeam) {
+      currentTab = 'general';
+    }
 
     if (currentTab === 'api_keys') {
       if (!showApiKeys) return <SearchEmptyState query={searchQuery} />;
@@ -612,7 +634,7 @@ export const SettingsView = ({
                 <p className="text-xs text-wellq-gray dark:text-wellq-gray/80 mt-0.5">{t('settings.teamSubtitle')}</p>
               </div>
             </div>
-            {teamSubTab === 'users' && (
+            {teamSubTab === 'users' && (canManageSettings || canManageUsers) && (
               <button
                 onClick={openNew}
                 className="flex items-center gap-2 px-5 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 transition-all shadow-sm active:scale-95"
@@ -620,7 +642,7 @@ export const SettingsView = ({
                 <UserPlus size={16} /> {t('settings.newUser')}
               </button>
             )}
-            {teamSubTab === 'roles' && (
+            {teamSubTab === 'roles' && (canManageSettings || canManageRoles) && (
               <button
                 onClick={openNewRole}
                 className="flex items-center gap-2 px-5 py-2.5 bg-wellq-cyan text-wellq-black rounded-xl text-sm font-bold hover:bg-wellq-cyan/90 transition-all shadow-sm active:scale-95"
@@ -632,7 +654,10 @@ export const SettingsView = ({
 
           {/* Sub-tabs — mismo estilo que los tabs principales */}
           <div className="flex gap-1.5 bg-wellq-gray/5 dark:bg-white/[0.03] p-1.5 rounded-xl mb-6 border border-wellq-gray/10 dark:border-white/5 shadow-inner w-fit">
-            {[{ id: 'roles', label: t('settings.rolesAndPermissions') }, { id: 'users', label: t('settings.users') }].map((tab) => (
+            {[
+              ...((canManageSettings || canManageRoles) ? [{ id: 'roles', label: t('settings.rolesAndPermissions') }] : []),
+              ...((canManageSettings || canManageUsers) ? [{ id: 'users', label: t('settings.users') }] : []),
+            ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setTeamSubTab(tab.id)}
@@ -694,18 +719,22 @@ export const SettingsView = ({
                                 </span>
                                 {/* Edit / delete appear on hover */}
                                 <div className={`flex items-center gap-0.5 flex-shrink-0 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); openEditRole(role); }}
-                                    className="p-1 hover:bg-white/40 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                  >
-                                    <Pencil size={11} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteRole(role); }}
-                                    className="p-1 hover:bg-red-500/10 rounded-lg transition-colors"
-                                  >
-                                    <Trash2 size={11} className="text-red-400" />
-                                  </button>
+                                  {(canManageSettings || canManageRoles) && (
+                                    <>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); openEditRole(role); }}
+                                        className="p-1 hover:bg-white/40 dark:hover:bg-white/10 rounded-lg transition-colors"
+                                      >
+                                        <Pencil size={11} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteRole(role); }}
+                                        className="p-1 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      >
+                                        <Trash2 size={11} className="text-red-400" />
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -731,9 +760,9 @@ export const SettingsView = ({
                           className={`flex-1 p-3 min-h-[240px] transition-colors ${
                             dragOverPanel === 'assigned' ? 'bg-wellq-cyan/5 dark:bg-wellq-cyan/10' : ''
                           }`}
-                          onDragOver={(e) => { e.preventDefault(); setDragOverPanel('assigned'); }}
+                          onDragOver={(e) => { if (canManageSettings || canManageRoles) { e.preventDefault(); setDragOverPanel('assigned'); } }}
                           onDragLeave={() => setDragOverPanel(null)}
-                          onDrop={() => { handleDrop('assigned'); setDragOverPanel(null); }}
+                          onDrop={() => { if (canManageSettings || canManageRoles) { handleDrop('assigned'); setDragOverPanel(null); } }}
                         >
                           {!selectedRoleId ? (
                             <div className="flex flex-col items-center justify-center h-full gap-2 py-8">
@@ -752,8 +781,8 @@ export const SettingsView = ({
                                 <PermCard
                                   key={perm.id}
                                   perm={perm}
-                                  onDragStart={() => handleDragStart(perm.id, 'assigned')}
-                                  onDoubleClick={() => moveToAvailable(perm.id)}
+                                  onDragStart={(canManageSettings || canManageRoles) ? () => handleDragStart(perm.id, 'assigned') : undefined}
+                                  onDoubleClick={(canManageSettings || canManageRoles) ? () => moveToAvailable(perm.id) : undefined}
                                 />
                               ))}
                             </div>
@@ -771,9 +800,9 @@ export const SettingsView = ({
                           className={`flex-1 p-3 min-h-[240px] transition-colors ${
                             dragOverPanel === 'available' ? 'bg-wellq-gray/5 dark:bg-white/[0.03]' : ''
                           }`}
-                          onDragOver={(e) => { e.preventDefault(); setDragOverPanel('available'); }}
+                          onDragOver={(e) => { if (canManageSettings || canManageRoles) { e.preventDefault(); setDragOverPanel('available'); } }}
                           onDragLeave={() => setDragOverPanel(null)}
-                          onDrop={() => { handleDrop('available'); setDragOverPanel(null); }}
+                          onDrop={() => { if (canManageSettings || canManageRoles) { handleDrop('available'); setDragOverPanel(null); } }}
                         >
                           {!selectedRoleId ? (
                             <div className="flex flex-col items-center justify-center h-full py-8">
@@ -791,8 +820,8 @@ export const SettingsView = ({
                                 <PermCard
                                   key={perm.id}
                                   perm={perm}
-                                  onDragStart={() => handleDragStart(perm.id, 'available')}
-                                  onDoubleClick={() => moveToAssigned(perm.id)}
+                                  onDragStart={(canManageSettings || canManageRoles) ? () => handleDragStart(perm.id, 'available') : undefined}
+                                  onDoubleClick={(canManageSettings || canManageRoles) ? () => moveToAssigned(perm.id) : undefined}
                                   muted
                                 />
                               ))}
@@ -874,12 +903,16 @@ export const SettingsView = ({
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-wellq-gray/10 dark:hover:bg-white/10 rounded-lg transition-colors">
-                                <Pencil size={15} className="text-wellq-gray dark:text-white" />
-                              </button>
-                              <button onClick={() => handleDeleteUser(u.user_id)} className="p-1.5 hover:bg-red-500/10 rounded-lg transition-colors">
-                                <Trash2 size={15} className="text-red-500" />
-                              </button>
+                              {(canManageSettings || canManageUsers) && (
+                                <>
+                                  <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-wellq-gray/10 dark:hover:bg-white/10 rounded-lg transition-colors">
+                                    <Pencil size={15} className="text-wellq-gray dark:text-white" />
+                                  </button>
+                                  <button onClick={() => handleDeleteUser(u.user_id)} className="p-1.5 hover:bg-red-500/10 rounded-lg transition-colors">
+                                    <Trash2 size={15} className="text-red-500" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </motion.tr>
@@ -1301,11 +1334,13 @@ export const SettingsView = ({
 
   const settingsTabs = [
     { id: 'general', label: t('settings.general') },
-    ...(canManageSettings ? [
-      { id: 'api_keys', label: t('settings.apiKeys') },
-      { id: 'team', label: t('settings.team') },
-    ] : []),
+    ...(canViewApiKeys ? [{ id: 'api_keys', label: t('settings.apiKeys') }] : []),
+    ...(canViewTeam ? [{ id: 'team', label: t('settings.team') }] : []),
   ];
+
+  const currentActiveTab = activeTab === 'api_keys' && !canViewApiKeys
+    ? 'general'
+    : (activeTab === 'team' && !canViewTeam ? 'general' : activeTab);
 
   return (
     <div className="space-y-6 font-sans overflow-x-hidden" style={{ scrollbarGutter: 'stable' }}>
@@ -1316,7 +1351,7 @@ export const SettingsView = ({
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-5 py-2 text-sm font-bold rounded-lg transition-all duration-200 ${
-              (canManageSettings ? activeTab : 'general') === tab.id
+              currentActiveTab === tab.id
                 ? 'bg-white text-wellq-dark shadow-sm dark:bg-wellq-dark dark:text-white ring-1 ring-wellq-gray/10 dark:ring-white/10'
                 : 'text-wellq-gray hover:text-wellq-dark dark:text-wellq-gray/70 dark:hover:text-white'
             }`}

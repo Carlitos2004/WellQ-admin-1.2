@@ -4,7 +4,7 @@ from app.models.organization import Clinic
 from app.models.plans import Feature, Plan, PlanFeature, ClinicPlan, ScheduledChange
 from app.models.operations import Alert, Notification, Job, AppVersion, PlatformSetting, ForceUpdateConfig
 from app.models.identity import Role, Permission, RolePermission, AdminUser, PasswordResetToken
-from app.models.analytics import KpiSnapshot, AppMetric, Invoice, ClinicUsageMetric, MrrSnapshot, ChurnRiskRegion, AppUsageStat, FeatureAdoption, AdherenceSnapshot, CohortRetention, SoapQualityMetric, AiCostSnapshot, AiLatencyMetric, PoseAnalysisSnapshot, NeedsAttentionItem, InfrastructureCostSnapshot
+from app.models.analytics import KpiSnapshot, AppMetric, Invoice, ClinicUsageMetric, MrrSnapshot, AppUsageStat, FeatureAdoption, AdherenceSnapshot, CohortRetention, SoapQualityMetric, AiCostSnapshot, AiLatencyMetric, PoseAnalysisSnapshot, NeedsAttentionItem, InfrastructureCostSnapshot
 from app.models.infrastructure import Server, BackgroundProcess, InfraNode
 from app.models.sync import ClinicianSummary, PatientHealthSummary
 from app.models.support import SupportTicket, Responder, TicketCategory
@@ -33,7 +33,6 @@ __all__ = [
     "Invoice",
     "ClinicUsageMetric",
     "MrrSnapshot",
-    "ChurnRiskRegion",
     "AppUsageStat",
     "FeatureAdoption",
     "AdherenceSnapshot",

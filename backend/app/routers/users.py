@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from app.db.neon import get_db
 from app.models_db import AdminUser, Role        # ← Role añadido
+from app.routers.auth import get_current_user, require_permission
 
 router = APIRouter(prefix="/api/users", tags=["Usuarios Admin"])
 
@@ -47,31 +48,30 @@ def _legacy_role_from_rbac(role: Role) -> str:
 
 # 44. GET /users/me
 @router.get("/me", summary="Perfil del administrador logueado (legacy)")
-async def get_my_profile(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(AdminUser).where(AdminUser.email == "admin@wellq.co")
-    )
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(status_code=404, detail="No encontrado")
-
+async def get_my_profile(
+    current_user: AdminUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     return {
         "status": "success",
         "data": {
-            "user_id":    user.user_id,
-            "full_name":  user.full_name,
-            "email":      user.email,
-            "role_id":    user.role_id,
-            "role":       user.role,        # backward compat
-            "status":     user.status,
-            "last_login": user.last_login.isoformat() + "Z" if user.last_login else None,
+            "user_id":    current_user.user_id,
+            "full_name":  current_user.full_name,
+            "email":      current_user.email,
+            "role_id":    current_user.role_id,
+            "role":       current_user.role,        # backward compat
+            "status":     current_user.status,
+            "last_login": current_user.last_login.isoformat() + "Z" if current_user.last_login else None,
         }
     }
 
 
 # 45. GET /users
 @router.get("", summary="Lista de todos los usuarios admin")
-async def list_users(db: AsyncSession = Depends(get_db)):
+async def list_users(
+    current_user: AdminUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(AdminUser).order_by(AdminUser.created_at))
     users = result.scalars().all()
 
@@ -92,8 +92,17 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 
 
 # 46. POST /users
-@router.post("", summary="Crear nuevo administrador", status_code=status.HTTP_201_CREATED)
-async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+@router.post(
+    "",
+    summary="Crear nuevo administrador",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("users.manage"))],
+)
+async def create_user(
+    payload: UserCreate,
+    current_user: AdminUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     # 1) Validar que el rol existe antes de cualquier otra cosa
     role = await _assert_role_exists(payload.role_id, db)
 
@@ -131,10 +140,15 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 # 47. PUT /users/{user_id}
-@router.put("/{user_id}", summary="Actualizar usuario completo")
+@router.put(
+    "/{user_id}",
+    summary="Actualizar usuario completo",
+    dependencies=[Depends(require_permission("users.manage"))],
+)
 async def update_user(
     user_id: str = Path(...),
     payload: UserUpdate = Body(...),
+    current_user: AdminUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(AdminUser).where(AdminUser.user_id == user_id))
@@ -171,10 +185,15 @@ async def update_user(
 # 47b. PATCH /users/{user_id}/role
 # IMPORTANTE: esta ruta va ANTES de PATCH /{user_id} para que FastAPI
 # no interprete "role" como un user_id
-@router.patch("/{user_id}/role", summary="Actualizar solo el rol (por role_id)")
+@router.patch(
+    "/{user_id}/role",
+    summary="Actualizar solo el rol (por role_id)",
+    dependencies=[Depends(require_permission("users.manage"))],
+)
 async def update_user_role(
     user_id: str = Path(...),
     body: dict = Body(...),
+    current_user: AdminUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(AdminUser).where(AdminUser.user_id == user_id))
@@ -201,10 +220,15 @@ async def update_user_role(
 
 
 # 47c. PATCH /users/{user_id} — actualización parcial
-@router.patch("/{user_id}", summary="Actualizar usuario (parcial)")
+@router.patch(
+    "/{user_id}",
+    summary="Actualizar usuario (parcial)",
+    dependencies=[Depends(require_permission("users.manage"))],
+)
 async def patch_user(
     user_id: str = Path(...),
     payload: UserUpdate = Body(...),
+    current_user: AdminUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(AdminUser).where(AdminUser.user_id == user_id))
@@ -238,8 +262,16 @@ async def patch_user(
 
 
 # 48. DELETE /users/{user_id}
-@router.delete("/{user_id}", summary="Eliminar usuario")
-async def delete_user(user_id: str = Path(...), db: AsyncSession = Depends(get_db)):
+@router.delete(
+    "/{user_id}",
+    summary="Eliminar usuario",
+    dependencies=[Depends(require_permission("users.manage"))],
+)
+async def delete_user(
+    user_id: str = Path(...),
+    current_user: AdminUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(AdminUser).where(AdminUser.user_id == user_id))
     user = result.scalars().first()
     if not user:

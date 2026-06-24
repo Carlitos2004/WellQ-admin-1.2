@@ -170,7 +170,7 @@ export const ChurnRegionModal = ({ region, onClose }) => {
                 <div className="p-4 rounded-xl bg-wellq-gray/3 dark:bg-white/[0.02] border border-wellq-gray/10 dark:border-white/5 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-wellq-gray uppercase tracking-wider">
-                      {tSafe('financials.riskScore', 'AI Risk Score')}
+                      {tSafe('financials.riskScore', 'Risk Score')}
                     </span>
                     <span className={`text-lg font-black tabular-nums ${currentRisk.icon}`}>
                       {riskScore}/100

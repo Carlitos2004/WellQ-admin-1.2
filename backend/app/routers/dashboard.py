@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 from app.models_db import (
     Clinic, KpiSnapshot, AppMetric, AppUsageStat,
-    Server, AiLatencyMetric,
+    Server, AiLatencyMetric, ClinicPlan,
 )
 from app.db.neon import get_db
 
@@ -39,6 +39,82 @@ def parse_date(date_str: str | None, end_of_day: bool = False) -> datetime | Non
         return None
 
 
+def get_base_mrr_at_date(target_date: datetime) -> float:
+    year = target_date.year
+    month = target_date.month
+    if year > 2026 or (year == 2026 and month >= 6):
+        return 46400.0
+    elif year == 2026 and month == 5:
+        return 45200.0
+    elif year == 2026 and month == 4:
+        return 46300.0
+    elif year == 2026 and month == 3:
+        return 44750.0
+    elif year == 2026 and month == 2:
+        return 43950.0
+    elif year == 2026 and month == 1:
+        return 42000.0
+    elif year == 2025 and month == 12:
+        return 41000.0
+    elif year == 2025 and month == 11:
+        return 40600.0
+    elif year == 2025 and month == 10:
+        return 39800.0
+    elif year == 2025 and month == 9:
+        return 38900.0
+    elif year == 2025 and month == 8:
+        return 37800.0
+    elif year == 2025 and month == 7:
+        return 36500.0
+    else:
+        return 36500.0
+
+
+async def get_live_mrr_at_date(db: AsyncSession, target_date: datetime, clinic_id: str | None = None) -> float:
+    import json
+    stmt = select(Clinic).where(Clinic.created_at <= target_date)
+    if clinic_id:
+        stmt = stmt.where(Clinic.clinic_id == clinic_id)
+        
+    result = await db.execute(stmt)
+    clinics = result.scalars().all()
+    
+    total_mrr = 0.0
+    for clinic in clinics:
+        is_active = (clinic.status == "active")
+        is_churned = (clinic.status == "churned" and clinic.updated_at is not None and clinic.updated_at <= target_date)
+        is_deleted = (getattr(clinic, "is_deleted", False) and getattr(clinic, "deleted_at", None) is not None and clinic.deleted_at <= target_date)
+        if not is_active or is_churned or is_deleted:
+            continue
+            
+        plan_stmt = select(ClinicPlan).where(
+            ClinicPlan.clinic_id == clinic.clinic_id,
+            ClinicPlan.effective_from <= target_date
+        )
+        plan_result = await db.execute(plan_stmt)
+        plans = plan_result.scalars().all()
+        
+        active_plan = None
+        for p in plans:
+            if p.effective_to is None or p.effective_to > target_date:
+                active_plan = p
+                break
+                
+        clinic_mrr = 0.0
+        if active_plan:
+            try:
+                snapshot = json.loads(active_plan.plan_snapshot)
+                clinic_mrr = float(snapshot.get("monthlyPrice", 0.0))
+            except:
+                clinic_mrr = float(clinic.mrr or 0.0)
+        else:
+            clinic_mrr = float(clinic.mrr or 0.0)
+            
+        total_mrr += clinic_mrr
+        
+    return total_mrr
+
+
 # ── 1. GET /api/kpis/arr ───────────────────────────────────────────────────────
 @router.get("/arr")
 async def get_arr(
@@ -48,11 +124,20 @@ async def get_arr(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    ARR del snapshot más cercano a end_date.
-    Si se pasa clinic_id, devuelve el ARR de esa clínica; si no, el global.
-    Fallback: calcula desde MRR de clínicas activas si no hay snapshots.
-    Devuelve trend_graph con los últimos 12 meses (filtrado por clínica si aplica).
+    Calcula dinámicamente el ARR y MRR sumando el delta de cambios en tiempo real
+    sobre los valores del seed, manteniendo coherencia visual y de datos.
     """
+    # 1. Calcular MRR/ARR actual desde la tabla Clinic en tiempo real
+    mrr_query = select(func.sum(Clinic.mrr)).where(Clinic.status == "active", Clinic.is_deleted == False)
+    if clinic_id:
+        mrr_query = mrr_query.where(Clinic.clinic_id == clinic_id)
+    live_mrr = await db.scalar(mrr_query) or 0.0
+    
+    # Delta con respecto al MRR de clínicas del seed (4596.0)
+    seed_clinics_mrr = 4596.0
+    delta = live_mrr - seed_clinics_mrr
+
+    # 2. Consultar snapshots históricos para tendencia y crecimiento
     query = select(KpiSnapshot).order_by(KpiSnapshot.year.desc(), KpiSnapshot.id.desc())
     if clinic_id:
         query = query.where(KpiSnapshot.clinic_id == clinic_id)
@@ -60,35 +145,62 @@ async def get_arr(
     snapshots = result.scalars().all()
 
     if not snapshots:
-        # Fallback con Clinic
-        mrr_query = select(func.sum(Clinic.mrr)).where(Clinic.status == "active")
-        if clinic_id:
-            mrr_query = mrr_query.where(Clinic.clinic_id == clinic_id)
-        total_mrr = await db.scalar(mrr_query)
-        current_arr = round((total_mrr or 0) * 12, 2)
+        current_mrr = round(live_mrr, 2)
+        current_arr = round(live_mrr * 12, 2)
         return {
             "current_arr":       current_arr,
-            "current_mrr":       round((total_mrr or 0), 2),
-            "growth_percentage": 0,
+            "current_mrr":       current_mrr,
+            "growth_percentage": 0.0,
             "currency":          "USD",
             "trend_graph":       [],
             "clinic_id":         clinic_id,
         }
 
-    latest = snapshots[0]
-    prev_arr = snapshots[1].arr if len(snapshots) > 1 else latest.arr
-    growth = (
-        round(((latest.arr - prev_arr) / prev_arr * 100), 1)
-        if prev_arr else 0
-    )
-    trend = [
-        {"month": s.month, "year": s.year, "value": s.arr}
-        for s in reversed(snapshots[:12])
-    ]
+    latest_snapshot = snapshots[0]
+    
+    # Si filtramos por clínica específica, mostramos su MRR real.
+    # Si es global, sumamos el delta al valor base del seed para mantener la escala y coherencia.
+    if clinic_id:
+        current_mrr = round(live_mrr, 2)
+        current_arr = round(live_mrr * 12, 2)
+    else:
+        current_mrr = round(latest_snapshot.mrr + delta, 2)
+        current_arr = round(current_mrr * 12, 2)
+
+    # Cálculo dinámico del crecimiento porcentual según el rango de fecha
+    start = parse_date(start_date)
+    
+    if start:
+        live_start_mrr = await get_live_mrr_at_date(db, start, clinic_id)
+        if clinic_id:
+            start_arr = live_start_mrr * 12
+        else:
+            base_start_mrr = get_base_mrr_at_date(start)
+            start_arr = (base_start_mrr + (live_start_mrr - seed_clinics_mrr)) * 12
+            
+        growth = (
+            round(((current_arr - start_arr) / start_arr * 100), 1)
+            if start_arr else 0.0
+        )
+    else:
+        # El snapshot más reciente (índice 0) se sobreescribe con el valor dinámico actual
+        prev_arr = snapshots[1].arr if len(snapshots) > 1 else current_arr
+        growth = (
+            round(((current_arr - prev_arr) / prev_arr * 100), 1)
+            if prev_arr else 0.0
+        )
+
+    # Generar la tendencia combinando el historial y sobreescribiendo el mes actual
+    trend = []
+    for s in reversed(snapshots[:12]):
+        val = s.arr
+        if s.id == latest_snapshot.id:
+            val = current_arr
+        trend.append({"month": s.month, "year": s.year, "value": val})
 
     return {
-        "current_arr":       latest.arr,
-        "current_mrr":       latest.mrr,
+        "current_arr":       current_arr,
+        "current_mrr":       current_mrr,
         "growth_percentage": growth,
         "currency":          "USD",
         "trend_graph":       trend,

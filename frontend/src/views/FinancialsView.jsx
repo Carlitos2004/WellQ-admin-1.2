@@ -71,6 +71,7 @@ export const FinancialsView = ({ mrrData, churnRegions, loading = false, searchQ
   const { t } = useLanguage();
   const [selectedRegion, setSelectedRegion] = useState(null);
 
+
   const breakdown = mrrData?.breakdown;
   const totalMrr = mrrData?.total_mrr ?? 0;
 

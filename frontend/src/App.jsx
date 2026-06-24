@@ -21,7 +21,7 @@ import ClinicPortalPage    from './views/ClinicPortalPage';
 
 import LoginPage from "./components/login/LoginPage";
 
-import { logout as authLogout, getStoredUser } from './services/auth';
+import { logout as authLogout, getStoredUser, getCurrentUser } from './services/auth';
 
 import { useLanguage } from './contexts/LanguageContext';
 import { useTheme }    from './contexts/ThemeContext';
@@ -1051,6 +1051,22 @@ export default function App() {
   }, [dateRange]);
 
   useEffect(() => {
+    if (isAuthenticated) {
+      getCurrentUser()
+        .then((freshUser) => {
+          if (freshUser) {
+            localStorage.setItem("wellq_user", JSON.stringify(freshUser));
+            setCurrentUser(freshUser);
+          }
+        })
+        .catch((err) => {
+          console.error("Error al sincronizar el perfil del usuario:", err);
+          handleLogout();
+        });
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
     fetchAll(dateRange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1069,7 +1085,7 @@ export default function App() {
   };
 
   const handleAckAlert = (alertId) => {
-    fetch(`${API_BASE}/api/alerts/${alertId}/acknowledge`, { method: 'POST' })
+    apiFetch(`/api/alerts/${alertId}/acknowledge`, { method: 'POST' })
       .then(() => {
         setApiAlerts((prev) => prev.filter((a) => a.alert_id !== alertId));
         setUnreadAlerts((n) => Math.max(0, n - 1));

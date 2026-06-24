@@ -9,9 +9,9 @@ import {
 import { KPICard, AlertItem, SegmentedControl, Skeleton } from '../components/ui';
 import { MRRChart } from '../components/charts/MRRChart';
 import { ChurnHeatmap } from '../components/charts/ChurnHeatmap';
+import { ChurnRegionModal } from '../components/charts/ChurnRegionModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { OpenTicketsWidget } from '../components/overview/OpenTicketsWidget';
-import { ChurnRegionModal } from '../components/charts/ChurnRegionModal';
 import { filterAndSortBySearch, hasSearchQuery, matchesSearch } from '../utils/search';
 
 // ── Animaciones Base ──
@@ -342,16 +342,16 @@ const BusinessHealthTab = ({
     {
       title: t('overview.arr'),
       value: fmtArr(kpiArr?.current_arr),
-      trend: 'up',
-      trendValue: '+0%',
+      trend: kpiArr?.growth_percentage >= 0 ? 'up' : 'down',
+      trendValue: kpiArr ? `${kpiArr.growth_percentage >= 0 ? '+' : ''}${kpiArr.growth_percentage}%` : '+0%',
       sparkData: arrSpark,
       subtitle: kpiArr ? `MRR: ${fmtArr(kpiArr.current_arr / 12)}` : t('overview.waitingConnection'),
     },
     {
       title: t('overview.activeClinics'),
       value: kpiClinics ? String(kpiClinics.total_active) : '0',
-      trend: 'up',
-      trendValue: kpiClinics ? `+${kpiClinics.new_clinics_month}` : '+0',
+      trend: kpiClinics ? (kpiClinics.new_clinics_month >= kpiClinics.churned_clinics_month ? 'up' : 'down') : 'up',
+      trendValue: kpiClinics ? `${(kpiClinics.new_clinics_month - kpiClinics.churned_clinics_month) >= 0 ? '+' : ''}${kpiClinics.new_clinics_month - kpiClinics.churned_clinics_month}` : '+0',
       sparkData: [0, 0, 0, 0, 0, kpiClinics?.total_active ?? 0],
       subtitle: kpiClinics ? `${kpiClinics.new_clinics_month} ${t('overview.onboarded')} - ${kpiClinics.churned_clinics_month} ${t('overview.churned')}` : `0 ${t('overview.onboarded')} - 0 ${t('overview.churned')}`,
     },
@@ -408,7 +408,7 @@ const BusinessHealthTab = ({
       )}
 
       {visibleCharts.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`grid grid-cols-1 ${visibleCharts.length > 1 ? 'lg:grid-cols-2' : ''} gap-6`}>
           {visibleCharts.map((chart) => (
             <motion.div key={chart.id} variants={itemVariants}>
               {chart.render}
@@ -997,6 +997,7 @@ export const OverviewView = ({
   const { t } = useLanguage();
   const [selectedRegion, setSelectedRegion] = useState(null);
 
+
   return (
     <div className="space-y-6 font-sans">
       
@@ -1046,15 +1047,12 @@ export const OverviewView = ({
         )}
       </AnimatePresence>
 
-      {/* Aplicamos la misma técnica al modal de Regions para que su backdrop cubra toda la página */}
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          {selectedRegion && (
-            <ChurnRegionModal key={selectedRegion} region={selectedRegion} onClose={() => setSelectedRegion(null)} />
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+      <AnimatePresence>
+        {selectedRegion && (
+          <ChurnRegionModal region={selectedRegion} onClose={() => setSelectedRegion(null)} />
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

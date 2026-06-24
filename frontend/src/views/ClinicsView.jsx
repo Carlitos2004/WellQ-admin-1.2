@@ -1266,7 +1266,6 @@ export const ClinicsView = ({ apiClinics, clinicsLoading, onImpersonate, onRefre
                   t('clinics.columns.status'),
                   t('clinics.columns.licenseUsage'),
                   t('clinics.columns.health'),
-                  t('clinics.columns.churnRisk', 'Churn Risk'),
                   t('clinics.columns.lastLogin'),
                   canEdit ? t('clinics.columns.actions') : null, // Mágico filtro visual
                 ].filter(Boolean).map((h) => (

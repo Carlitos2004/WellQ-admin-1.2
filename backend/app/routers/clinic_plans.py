@@ -1,10 +1,11 @@
 import uuid
+import json
 from datetime import datetime
 from fastapi import APIRouter, Path, Body, Query, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, asc
 from app.db.neon import get_db
-from app.models_db import ClinicPlan, ScheduledChange, ClinicUsageMetric
+from app.models_db import ClinicPlan, ScheduledChange, ClinicUsageMetric, Clinic, Plan
 
 router = APIRouter(prefix="/api/clinics", tags=["Asignación Plan–Clínica"])
 
@@ -25,10 +26,17 @@ async def get_clinic_plan(clinicId: str = Path(...), db: AsyncSession = Depends(
     if not assignment:
         raise HTTPException(status_code=404, detail="No encontrado")
 
+    plan_snapshot_data = {}
+    if assignment.plan_snapshot:
+        try:
+            plan_snapshot_data = json.loads(assignment.plan_snapshot)
+        except Exception:
+            plan_snapshot_data = {}
+
     return {
         "assignmentId": assignment.id,
         "clinicId": assignment.clinic_id,
-        "planSnapshot": getattr(assignment, "plan_snapshot", {}),
+        "planSnapshot": plan_snapshot_data,
         "effectiveFrom": assignment.effective_from.isoformat() + "Z" if getattr(assignment, "effective_from", None) else None,
         "effectiveTo": assignment.effective_to.isoformat() + "Z" if getattr(assignment, "effective_to", None) else None,
         "assignedBy": getattr(assignment, "assigned_by", {"id": "usr-001", "email": "admin@wellq.co", "name": "Admin WellQ"}),
@@ -52,7 +60,19 @@ async def assign_clinic_plan(
 
     now = datetime.utcnow()
 
-    # Cerrar el plan actual (si existe)
+    # 1. Verificar que el Plan existe y obtener sus detalles
+    plan_result = await db.execute(select(Plan).where(Plan.plan_id == plan_id))
+    plan = plan_result.scalars().first()
+    if not plan:
+        raise HTTPException(status_code=404, detail=f"Plan con ID '{plan_id}' no encontrado")
+
+    # 2. Verificar que la Clínica existe
+    clinic_result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinicId))
+    clinic = clinic_result.scalars().first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail=f"Clínica con ID '{clinicId}' no encontrada")
+
+    # 3. Cerrar el plan actual (si existe)
     current_plan_result = await db.execute(
         select(ClinicPlan)
         .where(ClinicPlan.clinic_id == clinicId)
@@ -63,20 +83,35 @@ async def assign_clinic_plan(
         current_plan.effective_to = now
         db.add(current_plan)
 
-    # Crear nueva asignación
+    # 4. Crear nueva asignación y actualizar el MRR de la clínica
     new_assignment_id = f"asgn-{uuid.uuid4().hex[:8]}"
     effective_from_str = body.get("effectiveFrom")
     effective_from = datetime.fromisoformat(effective_from_str.replace("Z", "")) if effective_from_str else now
+
+    # Actualizar MRR de la clínica
+    clinic.mrr = plan.monthly_price
+    db.add(clinic)
+
+    # Serializar plan para plan_snapshot
+    plan_snapshot_dict = {
+        "plan_id": plan.plan_id,
+        "name": plan.name,
+        "monthlyPrice": plan.monthly_price,
+        "currency": plan.currency
+    }
 
     new_plan = ClinicPlan(
         id=new_assignment_id,
         clinic_id=clinicId,
         plan_id=plan_id,
+        plan_snapshot=json.dumps(plan_snapshot_dict, ensure_ascii=False),
         effective_from=effective_from,
         effective_to=None,
+        assigned_by_id="usr-001",
+        assigned_by_email="admin@wellq.co",
+        assigned_by_name="Admin WellQ",
         reason=body.get("reason", None),
         created_at=now
-        # plan_snapshot y assigned_by deberían setearse según tu auth y tabla de planes
     )
     db.add(new_plan)
     await db.commit()

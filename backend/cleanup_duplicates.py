@@ -40,7 +40,6 @@ DEDUP_TABLES = [
     ("plan_features",                  ["plan_id", "feature_id"]),
     ("clinic_usage_metrics",           ["clinic_id", "period"]),
     ("mrr_snapshots",                  ["period_month", "period_year"]),
-    ("churn_risk_regions",             ["region"]),
     ("app_usage_stats",                ["app_type", "period"]),
     ("feature_adoption",               ["feature_name", "period"]),
     ("adherence_snapshots",            ["period"]),
