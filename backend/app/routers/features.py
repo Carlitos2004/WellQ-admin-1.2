@@ -26,7 +26,10 @@ def _serialize_feature(f):
     }
 
 
-# ─── GET /api/features ────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #46 - GET /api/features
+# Descripción: Listar features con filtros y paginación
+# ==============================================================================
 @router.get(
     "",
     summary="Listar features con filtros y paginación",
@@ -98,7 +101,10 @@ async def list_features(
     }
 
 
-# ─── GET /api/features/{featureId} ───────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #49 - GET /api/features/{featureId}
+# Descripción: Obtener detalle de un feature
+# ==============================================================================
 @router.get(
     "/{featureId}",
     summary="Obtener detalle de un feature",
@@ -116,7 +122,10 @@ async def get_feature(
     return _serialize_feature(feature)
 
 
-# ─── POST /api/features ───────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #47 - POST /api/features
+# Descripción: Crear un nuevo feature en el catálogo
+# ==============================================================================
 @router.post(
     "",
     summary="Crear un nuevo feature en el catálogo",
@@ -164,7 +173,10 @@ async def create_feature(
     return {"status": "success", "data": _serialize_feature(new_feature)}
 
 
-# ─── PUT /api/features/{featureId} ───────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #50 - PUT /api/features/{featureId}
+# Descripción: Actualizar un feature existente
+# ==============================================================================
 @router.put(
     "/{featureId}",
     summary="Actualizar un feature existente",
@@ -212,7 +224,10 @@ async def update_feature(
     return {"status": "success", "data": _serialize_feature(feature)}
 
 
-# ─── DELETE /api/features/{featureId} ────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #48 - DELETE /api/features/{featureId}
+# Descripción: Archivar (soft-delete) un feature
+# ==============================================================================
 @router.delete(
     "/{featureId}",
     summary="Archivar (soft-delete) un feature",
@@ -247,7 +262,10 @@ async def archive_feature(
     }
 
 
-# ─── POST /api/features/{featureId}/restore ───────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #51 - POST /api/features/{featureId}/restore
+# Descripción: Restaurar un feature archivado
+# ==============================================================================
 @router.post(
     "/{featureId}/restore",
     summary="Restaurar un feature archivado",

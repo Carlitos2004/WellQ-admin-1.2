@@ -7,13 +7,17 @@ from app.models_db import Alert
  
 router = APIRouter(prefix="/api/alerts", tags=["Alertas"])
  
-# 26. GET /alerts
+# ==============================================================================
+# ENDPOINT: #1 - GET /api/alerts
+# Descripción: Notificaciones activas del sistema (alertas globales)
+# ==============================================================================
 @router.get(
     "",
     summary="Notificaciones activas del sistema",
     description="Retorna las alertas globales para el administrador."
 )
 async def get_alerts(db: AsyncSession = Depends(get_db)):
+    # Operación: Seleccionar todas las alertas no confirmadas ordenadas por creación
     result = await db.execute(
         select(Alert)
         .where(Alert.acknowledged_at.is_(None))
@@ -21,6 +25,7 @@ async def get_alerts(db: AsyncSession = Depends(get_db)):
     )
     alerts = result.scalars().all()
  
+    # Operación: Contar alertas no leídas
     unread_count = sum(1 for a in alerts if not getattr(a, "acknowledged_at", None))
  
     return {
@@ -44,12 +49,16 @@ async def get_alerts(db: AsyncSession = Depends(get_db)):
         ]
     }
  
-# 27. POST /alerts/{alert_id}/acknowledge
+# ==============================================================================
+# ENDPOINT: #2 - POST /api/alerts/{alert_id}/acknowledge
+# Descripción: Marcar alerta como gestionada/leída
+# ==============================================================================
 @router.post(
     "/{alert_id}/acknowledge",
     summary="Marcar alerta como gestionada/leída"
 )
 async def acknowledge_alert(alert_id: str = Path(...), db: AsyncSession = Depends(get_db)):
+    # Operación: Seleccionar y marcar una alerta como confirmada
     result = await db.execute(select(Alert).where(Alert.alert_id == alert_id))
     alert = result.scalars().first()
  

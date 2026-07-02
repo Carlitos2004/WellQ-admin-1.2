@@ -37,6 +37,10 @@ def _json_list(value: str | None) -> list[str]:
     return ["Kinesiologia"]
 
 
+# ==============================================================================
+# ENDPOINT: #24 - GET /api/clinic-portal/data
+# Descripción: Datos reales para el portal de impersonacion
+# ==============================================================================
 @router.get("/data", summary="Datos reales para el portal de impersonacion")
 async def get_clinic_portal_data(
     token: str = Query(..., min_length=8),

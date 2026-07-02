@@ -46,7 +46,10 @@ def _legacy_role_from_rbac(role: Role) -> str:
     return "admin"
 
 
-# 44. GET /users/me
+# ==============================================================================
+# ENDPOINT: #120 - GET /api/users/me
+# Descripción: Perfil del administrador logueado
+# ==============================================================================
 @router.get("/me", summary="Perfil del administrador logueado (legacy)")
 async def get_my_profile(
     current_user: AdminUser = Depends(get_current_user),
@@ -66,7 +69,10 @@ async def get_my_profile(
     }
 
 
-# 45. GET /users
+# ==============================================================================
+# ENDPOINT: #117 - GET /api/users
+# Descripción: Lista de todos los usuarios admin
+# ==============================================================================
 @router.get("", summary="Lista de todos los usuarios admin")
 async def list_users(
     current_user: AdminUser = Depends(get_current_user),
@@ -91,7 +97,10 @@ async def list_users(
     }
 
 
-# 46. POST /users
+# ==============================================================================
+# ENDPOINT: #118 - POST /api/users
+# Descripción: Crear nuevo administrador
+# ==============================================================================
 @router.post(
     "",
     summary="Crear nuevo administrador",
@@ -139,7 +148,10 @@ async def create_user(
     }
 
 
-# 47. PUT /users/{user_id}
+# ==============================================================================
+# ENDPOINT: #121 - PUT /api/users/{user_id}
+# Descripción: Actualizar usuario completo
+# ==============================================================================
 @router.put(
     "/{user_id}",
     summary="Actualizar usuario completo",
@@ -182,9 +194,10 @@ async def update_user(
     }
 
 
-# 47b. PATCH /users/{user_id}/role
-# IMPORTANTE: esta ruta va ANTES de PATCH /{user_id} para que FastAPI
-# no interprete "role" como un user_id
+# ==============================================================================
+# ENDPOINT: #123 - PATCH /api/users/{user_id}/role
+# Descripción: Actualizar solo el rol (por role_id)
+# ==============================================================================
 @router.patch(
     "/{user_id}/role",
     summary="Actualizar solo el rol (por role_id)",
@@ -219,7 +232,10 @@ async def update_user_role(
     }
 
 
-# 47c. PATCH /users/{user_id} — actualización parcial
+# ==============================================================================
+# ENDPOINT: #122 - PATCH /api/users/{user_id}
+# Descripción: Actualizar usuario (parcial)
+# ==============================================================================
 @router.patch(
     "/{user_id}",
     summary="Actualizar usuario (parcial)",
@@ -261,7 +277,10 @@ async def patch_user(
     }
 
 
-# 48. DELETE /users/{user_id}
+# ==============================================================================
+# ENDPOINT: #119 - DELETE /api/users/{user_id}
+# Descripción: Eliminar usuario
+# ==============================================================================
 @router.delete(
     "/{user_id}",
     summary="Eliminar usuario",

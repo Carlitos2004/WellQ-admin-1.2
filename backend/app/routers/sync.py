@@ -21,7 +21,12 @@ router = APIRouter(prefix="/api", tags=["Sincronización"])
 
 WARNING_THRESHOLD_HOURS = 24  # más de 24h sin sync → warning
 
-
+# ==============================================================================
+# OPERACIÓN: _resolve_status
+# Fórmulas:
+#   - Calcular tiempo transcurrido (age = ahora - última sincronización)
+#   - Si excede 24 horas, retornar warning, sino ok.
+# ==============================================================================
 def _resolve_status(last_sync: datetime | None) -> str:
     if last_sync is None:
         return "error"
@@ -30,17 +35,19 @@ def _resolve_status(last_sync: datetime | None) -> str:
         return "warning"
     return "ok"
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /api/sync-status
-# Devuelve la última sincronización y estado de las 3 tablas sincronizadas
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #116 - GET /api/sync-status
+# Descripción: Estado de sincronización de tablas desde Neon (PostgreSQL)
+# ==============================================================================
 @router.get("/sync-status", summary="Estado de sincronización de tablas desde MongoDB")
 async def get_sync_status(db: AsyncSession = Depends(get_db)):
-
-    # MAX(recorded_at) por tabla
+    # Operación: Obtener fecha de última sincronización (MAX) de ClinicianSummary
     cs_result  = await db.execute(select(func.max(ClinicianSummary.recorded_at)))
+    
+    # Operación: Obtener fecha de última sincronización (MAX) de PatientHealthSummary
     phs_result = await db.execute(select(func.max(PatientHealthSummary.recorded_at)))
+    
+    # Operación: Obtener fecha de última sincronización (MAX) de SupportTicket
     st_result  = await db.execute(select(func.max(SupportTicket.recorded_at)))
 
     cs_last  = cs_result.scalar_one_or_none()

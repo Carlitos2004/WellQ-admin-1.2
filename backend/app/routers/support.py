@@ -111,9 +111,10 @@ async def _notify_responder_by_email(
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. GET /api/support-tickets — Listar tickets con filtros, paginación y conteos
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #103 - GET /api/support-tickets
+# Descripción: Listar tickets de soporte con filtros y paginación
+# ==============================================================================
 @router.get("", summary="Listar tickets de soporte con filtros")
 async def list_support_tickets(
     status_param: str | None = Query(None, alias="status"),
@@ -218,9 +219,10 @@ async def list_support_tickets(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. GET /api/support-tickets/categories — Categorías desde tabla TicketCategory
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #105 - GET /api/support-tickets/categories
+# Descripción: Listar categorías de tickets de soporte
+# ==============================================================================
 @router.get("/categories", summary="Categorías de tickets activas")
 async def list_ticket_categories(db: AsyncSession = Depends(get_db)):
     """
@@ -262,9 +264,10 @@ async def list_ticket_categories(db: AsyncSession = Depends(get_db)):
     return {"categories": categories, "details": []}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. POST /api/support-tickets/categories — Crear categoría dinámica         NUEVO
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #106 - POST /api/support-tickets/categories
+# Descripción: Crear una nueva categoría de ticket
+# ==============================================================================
 class CreateCategoryBody(BaseModel):
     name:      str
     team:      Optional[str] = None   # nombre del equipo de responders (ej: "Financiero")
@@ -315,9 +318,10 @@ async def create_ticket_category(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. PATCH /api/support-tickets/categories/{category_id} — Editar categoría  NUEVO
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #108 - PATCH /api/support-tickets/categories/{category_id}
+# Descripción: Editar una categoría existente
+# ==============================================================================
 class UpdateCategoryBody(BaseModel):
     name:      str | None  = None
     team:      str | None  = None
@@ -371,9 +375,10 @@ async def update_ticket_category(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. DELETE /api/support-tickets/categories/{category_id} — Desactivar        NUEVO
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #107 - DELETE /api/support-tickets/categories/{category_id}
+# Descripción: Desactivar una categoría (soft delete)
+# ==============================================================================
 @router.delete("/categories/{category_id}", summary="Desactivar una categoría (soft delete)")
 async def deactivate_ticket_category(
     category_id: str = Path(...),
@@ -396,9 +401,10 @@ async def deactivate_ticket_category(
     return {"ok": True, "category_id": category_id, "is_active": False}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 6. GET /api/support-tickets/responders — Lista de responders agrupados
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #109 - GET /api/support-tickets/responders
+# Descripción: Listar responders disponibles agrupados por equipo
+# ==============================================================================
 @router.get("/responders", summary="Responders disponibles agrupados por equipo")
 async def list_responders(db: AsyncSession = Depends(get_db)):
     """
@@ -432,9 +438,10 @@ async def list_responders(db: AsyncSession = Depends(get_db)):
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 7. POST /api/support-tickets/responders — Crear responder                   NUEVO
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #110 - POST /api/support-tickets/responders
+# Descripción: Crear un nuevo responder de soporte
+# ==============================================================================
 class CreateResponderBody(BaseModel):
     name:     str
     team:     str
@@ -491,9 +498,10 @@ async def create_responder(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 8. PATCH /api/support-tickets/responders/{responder_id} — Editar responder  NUEVO
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #112 - PATCH /api/support-tickets/responders/{responder_id}
+# Descripción: Editar un responder existente
+# ==============================================================================
 class UpdateResponderBody(BaseModel):
     name:     str | None = None
     team:     str | None = None
@@ -544,9 +552,10 @@ async def update_responder(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 9. DELETE /api/support-tickets/responders/{responder_id} — Eliminar          NUEVO
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #111 - DELETE /api/support-tickets/responders/{responder_id}
+# Descripción: Eliminar un responder
+# ==============================================================================
 @router.delete("/responders/{responder_id}", summary="Eliminar un responder")
 async def delete_responder(
     responder_id: str = Path(...),
@@ -587,9 +596,10 @@ async def delete_responder(
     return {"ok": True, "responder_id": responder_id}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 10. GET /api/support-tickets/{ticket_id} — Detalle de un ticket
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #114 - GET /api/support-tickets/{ticket_id}
+# Descripción: Detalle completo de un ticket de soporte
+# ==============================================================================
 @router.get("/{ticket_id}", summary="Detalle completo de un ticket de soporte")
 async def get_support_ticket(
     ticket_id: str = Path(...),
@@ -635,9 +645,10 @@ async def get_support_ticket(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 11. PATCH /api/support-tickets/{ticket_id} — Ciclo de vida del ticket
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #115 - PATCH /api/support-tickets/{ticket_id}
+# Descripción: Actualizar estado, responder o solución
+# ==============================================================================
 class UpdateTicketBody(BaseModel):
     status:         str | None = None   # 'Open' | 'Closed'
     responder_id:   str | None = None   # FK al responder
@@ -718,9 +729,10 @@ async def update_support_ticket(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 12. POST /api/support-tickets — Crear un ticket desde el backoffice
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #104 - POST /api/support-tickets
+# Descripción: Crear un nuevo ticket de soporte
+# ==============================================================================
 class CreateTicketBody(BaseModel):
     title:          str
     description:    str
@@ -838,9 +850,10 @@ async def create_support_ticket(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 13. DELETE /api/support-tickets/{ticket_id} — Eliminar un ticket           NUEVO
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #113 - DELETE /api/support-tickets/{ticket_id}
+# Descripción: Eliminar un ticket de soporte permanentemente
+# ==============================================================================
 @router.delete("/{ticket_id}", summary="Eliminar un ticket de soporte permanentemente")
 async def delete_support_ticket(
     ticket_id: str = Path(...),

@@ -95,7 +95,10 @@ async def _serialize_plan(db: AsyncSession, p: Plan) -> dict:
     }
 
 
-# ─── GET /api/plans ───────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #71 - GET /api/plans
+# Descripción: Listar planes con filtros y paginación
+# ==============================================================================
 @router.get("", summary="Listar planes con filtros y paginación")
 async def list_plans(
     search: str | None = Query(None),
@@ -155,7 +158,10 @@ async def list_plans(
     }
 
 
-# ─── GET /api/plans/{planId} ──────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #74 - GET /api/plans/{planId}
+# Descripción: Obtener detalle completo de un plan
+# ==============================================================================
 @router.get("/{planId}", summary="Obtener detalle completo de un plan")
 async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Plan).where(Plan.plan_id == planId))
@@ -187,7 +193,10 @@ async def get_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
     return await _serialize_plan(db, plan)
 
 
-# ─── POST /api/plans ──────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #72 - POST /api/plans
+# Descripción: Crear un nuevo plan
+# ==============================================================================
 @router.post("", summary="Crear un nuevo plan", status_code=status.HTTP_201_CREATED)
 async def create_plan(
     body: dict = Body(...),
@@ -241,7 +250,10 @@ async def create_plan(
     return {"status": "success", "data": await _serialize_plan(db, new_plan)}
 
 
-# ─── PUT /api/plans/{planId} ──────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #75 - PUT /api/plans/{planId}
+# Descripción: Actualizar un plan existente
+# ==============================================================================
 @router.put("/{planId}", summary="Actualizar un plan existente")
 async def update_plan(
     planId: str = Path(...),
@@ -294,7 +306,10 @@ async def update_plan(
     return {"status": "success", "data": await _serialize_plan(db, plan)}
 
 
-# ─── POST /api/plans/{planId}/duplicate ───────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #77 - POST /api/plans/{planId}/duplicate
+# Descripción: Duplicar un plan
+# ==============================================================================
 @router.post("/{planId}/duplicate", summary="Duplicar un plan", status_code=status.HTTP_201_CREATED)
 async def duplicate_plan(
     planId: str = Path(...),
@@ -353,7 +368,10 @@ async def duplicate_plan(
     return {"status": "success", "data": await _serialize_plan(db, duplicated)}
 
 
-# ─── POST /api/plans/{planId}/archive ─────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #76 - POST /api/plans/{planId}/archive
+# Descripción: Archivar un plan
+# ==============================================================================
 @router.post("/{planId}/archive", summary="Archivar un plan")
 async def archive_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Plan).where(Plan.plan_id == planId))
@@ -379,7 +397,10 @@ async def archive_plan(planId: str = Path(...), db: AsyncSession = Depends(get_d
     }
 
 
-# ─── POST /api/plans/{planId}/restore ─────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #78 - POST /api/plans/{planId}/restore
+# Descripción: Restaurar un plan archivado
+# ==============================================================================
 @router.post("/{planId}/restore", summary="Restaurar un plan archivado")
 async def restore_plan(planId: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Plan).where(Plan.plan_id == planId))
@@ -403,7 +424,10 @@ async def restore_plan(planId: str = Path(...), db: AsyncSession = Depends(get_d
     }
 
 
-# ─── DELETE /api/plans/{planId} ───────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #73 - DELETE /api/plans/{planId}
+# Descripción: Eliminar un plan permanentemente
+# ==============================================================================
 @router.delete("/{planId}", summary="Eliminar un plan permanentemente")
 async def delete_plan(
     planId: str = Path(...),

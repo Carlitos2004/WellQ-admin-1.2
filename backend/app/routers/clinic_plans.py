@@ -9,7 +9,10 @@ from app.models_db import ClinicPlan, ScheduledChange, ClinicUsageMetric, Clinic
 
 router = APIRouter(prefix="/api/clinics", tags=["Asignación Plan–Clínica"])
 
-# ─── GET /api/clinics/{clinicId}/plan ─────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #17 - GET /api/clinics/{clinicId}/plan
+# Descripción: Obtener el plan actualmente vigente de una clínica
+# ==============================================================================
 @router.get(
     "/{clinicId}/plan",
     summary="Obtener el plan actualmente vigente de una clínica",
@@ -44,7 +47,10 @@ async def get_clinic_plan(clinicId: str = Path(...), db: AsyncSession = Depends(
     }
 
 
-# ─── PUT /api/clinics/{clinicId}/plan ─────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #18 - PUT /api/clinics/{clinicId}/plan
+# Descripción: Asignar o cambiar el plan de una clínica (efecto inmediato)
+# ==============================================================================
 @router.put(
     "/{clinicId}/plan",
     summary="Asignar o cambiar el plan de una clínica (efecto inmediato)",
@@ -130,7 +136,10 @@ async def assign_clinic_plan(
     }
 
 
-# ─── GET /api/clinics/{clinicId}/plan/history ─────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #19 - GET /api/clinics/{clinicId}/plan/history
+# Descripción: Obtener historial completo de planes asignados a una clínica
+# ==============================================================================
 @router.get(
     "/{clinicId}/plan/history",
     summary="Obtener historial completo de planes asignados a una clínica",
@@ -180,7 +189,10 @@ async def get_clinic_plan_history(
     }
 
 
-# ─── POST /api/clinics/{clinicId}/plan/schedule ───────────────────────────────
+# ==============================================================================
+# ENDPOINT: #20 - POST /api/clinics/{clinicId}/plan/schedule
+# Descripción: Programar un cambio de plan a fecha futura
+# ==============================================================================
 @router.post(
     "/{clinicId}/plan/schedule",
     summary="Programar un cambio de plan a fecha futura",
@@ -226,7 +238,10 @@ async def schedule_clinic_plan(
     }
 
 
-# ─── GET /api/clinics/{clinicId}/plan/scheduled ───────────────────────────────
+# ==============================================================================
+# ENDPOINT: #22 - GET /api/clinics/{clinicId}/plan/scheduled
+# Descripción: Listar las programaciones de cambio pendientes de una clínica
+# ==============================================================================
 @router.get(
     "/{clinicId}/plan/scheduled",
     summary="Listar las programaciones de cambio pendientes de una clínica",
@@ -259,7 +274,10 @@ async def get_clinic_scheduled_changes(clinicId: str = Path(...), db: AsyncSessi
     }
 
 
-# ─── DELETE /api/clinics/{clinicId}/plan/schedule/{scheduleId} ────────────────
+# ==============================================================================
+# ENDPOINT: #21 - DELETE /api/clinics/{clinicId}/plan/schedule/{scheduleId}
+# Descripción: Cancelar una programación de cambio de plan
+# ==============================================================================
 @router.delete(
     "/{clinicId}/plan/schedule/{scheduleId}",
     summary="Cancelar una programación de cambio de plan",
@@ -299,7 +317,10 @@ async def cancel_scheduled_change(
     }
 
 
-# ─── GET /api/clinics/{clinicId}/plan/usage ───────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #23 - GET /api/clinics/{clinicId}/plan/usage
+# Descripción: Consultar uso vs. límites del plan vigente de una clínica
+# ==============================================================================
 @router.get(
     "/{clinicId}/plan/usage",
     summary="Consultar uso vs. límites del plan vigente de una clínica",

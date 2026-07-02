@@ -8,6 +8,10 @@ from app.models_db import Notification
  
 router = APIRouter(prefix="/api/notifications", tags=["Notificaciones"])
  
+# ==============================================================================
+# ENDPOINT: #64 - POST /api/notifications
+# Descripción: Enviar notificación a una o varias clínicas
+# ==============================================================================
 @router.post("", summary="Enviar notificación a una o varias clínicas", status_code=status.HTTP_202_ACCEPTED)
 async def send_notification(body: dict, db: AsyncSession = Depends(get_db)):
     new_id = f"notif-{uuid.uuid4().hex[:8]}"
@@ -35,6 +39,10 @@ async def send_notification(body: dict, db: AsyncSession = Depends(get_db)):
         "channel": channel
     }
  
+# ==============================================================================
+# ENDPOINT: #65 - GET /api/notifications
+# Descripción: Historial de notificaciones
+# ==============================================================================
 @router.get("", summary="Historial de notificaciones")
 async def list_notifications(page: int = 1, limit: int = 20, db: AsyncSession = Depends(get_db)):
     offset = (page - 1) * limit
@@ -71,6 +79,10 @@ async def list_notifications(page: int = 1, limit: int = 20, db: AsyncSession = 
         "hasNext": (offset + limit) < total
     }
  
+# ==============================================================================
+# ENDPOINT: #66 - GET /api/notifications/{notification_id}
+# Descripción: Detalle de una notificación
+# ==============================================================================
 @router.get("/{notification_id}", summary="Detalle de una notificación")
 async def get_notification(notification_id: str, db: AsyncSession = Depends(get_db)):
     try:
@@ -98,6 +110,10 @@ async def get_notification(notification_id: str, db: AsyncSession = Depends(get_
     }
  
  
+# ==============================================================================
+# ENDPOINT: #67 - DELETE /api/notifications/{notification_id}
+# Descripción: Eliminar una notificación
+# ==============================================================================
 @router.delete("/{notification_id}", summary="Eliminar una notificación", status_code=status.HTTP_200_OK)
 async def delete_notification(notification_id: str, db: AsyncSession = Depends(get_db)):
     try:

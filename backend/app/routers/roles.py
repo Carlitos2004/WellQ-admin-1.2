@@ -57,7 +57,10 @@ async def _get_role_or_404(role_id: int, db: AsyncSession) -> Role:
     return role
 
 
-# ── GET /api/roles ─────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #86 - GET /api/roles
+# Descripción: Listar todos los roles activos con sus permisos
+# ==============================================================================
 @router.get(
     "/roles",
     summary="Listar todos los roles activos con sus permisos",
@@ -78,7 +81,10 @@ async def list_roles(
     return {"status": "success", "data": data}
 
 
-# ── GET /api/roles/{role_id} ───────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #89 - GET /api/roles/{role_id}
+# Descripción: Obtener un rol por ID con sus permisos
+# ==============================================================================
 @router.get(
     "/roles/{role_id}",
     summary="Obtener un rol por ID con sus permisos",
@@ -92,7 +98,10 @@ async def get_role(
     return {"status": "success", "data": await _role_with_permissions(role, db)}
 
 
-# ── POST /api/roles ────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #87 - POST /api/roles
+# Descripción: Crear nuevo rol
+# ==============================================================================
 @router.post(
     "/roles",
     summary="Crear nuevo rol",
@@ -131,7 +140,10 @@ async def create_role(
     }
 
 
-# ── PUT /api/roles/{role_id} ───────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #90 - PUT /api/roles/{role_id}
+# Descripción: Actualizar nombre o descripción de un rol
+# ==============================================================================
 @router.put(
     "/roles/{role_id}",
     summary="Actualizar nombre o descripción de un rol",
@@ -183,7 +195,10 @@ async def update_role(
     }
 
 
-# ── DELETE /api/roles/{role_id} ────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #88 - DELETE /api/roles/{role_id}
+# Descripción: Eliminar rol (hard-delete; desasigna usuarios primero)
+# ==============================================================================
 @router.delete(
     "/roles/{role_id}",
     summary="Eliminar rol (hard-delete; desasigna usuarios primero)",
@@ -234,7 +249,10 @@ async def delete_role(
     }
 
 
-# ── GET /api/permissions ───────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #85 - GET /api/permissions
+# Descripción: Catálogo completo de permisos del sistema
+# ==============================================================================
 @router.get(
     "/permissions",
     summary="Catálogo completo de permisos del sistema (13 items)",
@@ -266,7 +284,10 @@ async def list_permissions(
     return {"status": "success", "data": data}
 
 
-# ── POST /api/roles/{role_id}/permissions ──────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #91 - POST /api/roles/{role_id}/permissions
+# Descripción: Reemplazar todos los permisos de un rol (operación atómica)
+# ==============================================================================
 @router.post(
     "/roles/{role_id}/permissions",
     summary="Reemplazar todos los permisos de un rol (operación atómica)",

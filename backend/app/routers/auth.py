@@ -143,7 +143,10 @@ async def _load_register_role(role_id, db: AsyncSession) -> tuple[int | None, st
     return role_id_int, _legacy_role_from_rbac(role), role.name
 
 
-# ── 1. POST /api/auth/register ─────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #11 - POST /api/auth/register
+# Descripción: Crear nuevo usuario administrador
+# ==============================================================================
 @router.post(
     "/register",
     summary="Crear nuevo usuario administrador",
@@ -190,7 +193,10 @@ async def register(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     }
 
 
-# ── 2. POST /api/auth/login ────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #12 - POST /api/auth/login
+# Descripción: Valida usuario y contraseña; entrega token JWT real
+# ==============================================================================
 @router.post(
     "/login",
     summary="Valida usuario y contraseña; entrega token JWT real",
@@ -250,7 +256,10 @@ async def login(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     }
 
 
-# ── 3. POST /api/auth/logout ───────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #13 - POST /api/auth/logout
+# Descripción: Registrar cierre de sesión
+# ==============================================================================
 @router.post(
     "/logout",
     summary="Registrar cierre de sesión",
@@ -266,7 +275,10 @@ async def logout():
     }
 
 
-# ── 4. POST /api/auth/refresh ──────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #14 - POST /api/auth/refresh
+# Descripción: Renueva el access token usando el refresh token
+# ==============================================================================
 @router.post(
     "/refresh",
     summary="Renueva el access token usando el refresh token",
@@ -304,7 +316,10 @@ async def refresh_token(body: dict = Body(...), db: AsyncSession = Depends(get_d
     }
 
 
-# ── 5. GET /api/auth/me ────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #15 - GET /api/auth/me
+# Descripción: Obtener perfil del usuario autenticado (requiere Bearer token)
+# ==============================================================================
 @router.get(
     "/me",
     summary="Obtener perfil del usuario autenticado (requiere Bearer token)",

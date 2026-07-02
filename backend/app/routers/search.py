@@ -6,7 +6,10 @@ from app.models_db import Clinic, Invoice, AdminUser
 
 router = APIRouter(prefix="/api/search", tags=["Búsqueda Global"])
 
-# 28. GET /search
+# ==============================================================================
+# ENDPOINT: #92 - GET /api/search
+# Descripción: Búsqueda universal de clínicas, facturas y usuarios
+# ==============================================================================
 @router.get(
     "",
     summary="Búsqueda universal de clínicas, facturas y usuarios",

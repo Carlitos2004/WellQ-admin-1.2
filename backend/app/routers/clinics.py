@@ -82,9 +82,10 @@ async def _log_action(
     ))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 14. GET /clinics — Listar clínicas con filtros y paginación
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #25 - GET /api/clinics
+# Descripción: Listar clínicas con filtros y paginación
+# ==============================================================================
 @router.get("", summary="Listar clínicas con filtros y paginación")
 async def list_clinics(
     search: str | None = None,
@@ -148,9 +149,10 @@ async def list_clinics(
     return {"total": total, "page": page, "page_size": page_size, "data": data}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 15. POST /clinics — Registro de una nueva clínica en el sistema
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #26 - POST /api/clinics
+# Descripción: Registro de una nueva clínica
+# ==============================================================================
 @router.post("", summary="Registro de una nueva clínica", status_code=status.HTTP_201_CREATED)
 async def create_clinic(
     body:         dict = Body(...),
@@ -217,9 +219,10 @@ async def create_clinic(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 24. POST /clinics/bulk/email — Envío de comunicaciones masivas
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #29 - POST /api/clinics/bulk/email
+# Descripción: Envío de comunicaciones masivas a clínicas
+# ==============================================================================
 @router.post("/bulk/email", summary="Envío de comunicaciones masivas a clínicas")
 async def bulk_email(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     clinic_ids = body.get('clinic_ids', [])
@@ -245,9 +248,10 @@ async def bulk_email(body: dict = Body(...), db: AsyncSession = Depends(get_db))
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 25. GET /clinics/export — Exportación real de clínicas como XLSX con estilos
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #28 - GET /api/clinics/export
+# Descripción: Exportación de lista de clínicas en XLSX con colores
+# ==============================================================================
 @router.get("/export", summary="Exportación de lista de clínicas en XLSX con colores")
 async def export_clinics(
     status_param: str | None = Query(None, alias="status"),
@@ -397,9 +401,10 @@ async def export_clinics(
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 16. GET /clinics/{clinic_id} — Obtener detalle de una clínica
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #30 - GET /api/clinics/{clinic_id}
+# Descripción: Obtener detalle de una clínica
+# ==============================================================================
 @router.get("/{clinic_id}", summary="Obtener detalle de una clínica")
 async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
@@ -425,9 +430,10 @@ async def get_clinic(clinic_id: str = Path(...), db: AsyncSession = Depends(get_
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 17. PATCH /clinics/{clinic_id} — Actualizar campos de una clínica
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #31 - PATCH /api/clinics/{clinic_id}
+# Descripción: Actualizar campos de una clínica
+# ==============================================================================
 @router.patch("/{clinic_id}", summary="Actualizar campos de una clínica")
 async def update_clinic(
     clinic_id:    str  = Path(...),
@@ -494,9 +500,10 @@ async def update_clinic(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 17b. DELETE /clinics/{clinic_id} — Eliminar clínica (Soft Delete o Hard Delete)
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #27 - DELETE /api/clinics/{clinic_id}
+# Descripción: Eliminar clínica del sistema (Soft/Hard Delete)
+# ==============================================================================
 @router.delete("/{clinic_id}", summary="Eliminar clínica del sistema (Soft/Hard Delete)")
 async def delete_clinic(
     clinic_id:    str  = Path(...),
@@ -541,9 +548,10 @@ async def delete_clinic(
     return {"status": "success", "message": msg}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 18. GET /clinics/{clinic_id}/contact — Info de contacto y facturación
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #32 - GET /api/clinics/{clinic_id}/contact
+# Descripción: Información de contacto y facturación
+# ==============================================================================
 @router.get("/{clinic_id}/contact", summary="Información de contacto y facturación")
 async def get_clinic_contact(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
@@ -568,9 +576,10 @@ async def get_clinic_contact(clinic_id: str = Path(...), db: AsyncSession = Depe
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 19. GET /clinics/{clinic_id}/subscription — Detalles del plan
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #33 - GET /api/clinics/{clinic_id}/subscription
+# Descripción: Detalles del plan de suscripción
+# ==============================================================================
 @router.get("/{clinic_id}/subscription", summary="Detalles del plan de suscripción")
 async def get_clinic_subscription(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -601,9 +610,10 @@ async def get_clinic_subscription(clinic_id: str = Path(...), db: AsyncSession =
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 20. GET /clinics/{clinic_id}/usage — Estadísticas de uso
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #34 - GET /api/clinics/{clinic_id}/usage
+# Descripción: Estadísticas de uso de la plataforma
+# ==============================================================================
 @router.get("/{clinic_id}/usage", summary="Estadísticas de uso de la plataforma")
 async def get_clinic_usage(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -629,9 +639,10 @@ async def get_clinic_usage(clinic_id: str = Path(...), db: AsyncSession = Depend
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 21. GET /clinics/{clinic_id}/license — Monitoreo de licencias
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #35 - GET /api/clinics/{clinic_id}/license
+# Descripción: Monitoreo de utilización de licencias
+# ==============================================================================
 @router.get("/{clinic_id}/license", summary="Monitoreo de utilización de licencias")
 async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Clinic).where(Clinic.clinic_id == clinic_id))
@@ -657,9 +668,10 @@ async def get_clinic_license(clinic_id: str = Path(...), db: AsyncSession = Depe
 
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 23. GET /clinics/{clinic_id}/invoices — Historial de facturas
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #36 - GET /api/clinics/{clinic_id}/invoices
+# Descripción: Historial de facturas emitidas
+# ==============================================================================
 @router.get("/{clinic_id}/invoices", summary="Historial de facturas emitidas")
 async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -689,9 +701,10 @@ async def get_clinic_invoices(clinic_id: str = Path(...), db: AsyncSession = Dep
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 23. POST /clinics/{clinic_id}/impersonate — Ingreso como soporte técnico
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #37 - POST /api/clinics/{clinic_id}/impersonate
+# Descripción: Ingreso como soporte técnico
+# ==============================================================================
 @router.post(
     "/{clinic_id}/impersonate",
     summary="Ingreso como soporte técnico",

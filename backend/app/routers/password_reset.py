@@ -99,6 +99,10 @@ async def get_latest_valid_reset(
 
     return result.scalars().first()
 
+# ==============================================================================
+# ENDPOINT: #68 - POST /api/password-reset/forgot-password
+# Descripción: Solicitar codigo de recuperacion de password
+# ==============================================================================
 @router.post(
     "/forgot-password",
     summary="Solicitar codigo de recuperacion de password",
@@ -133,6 +137,10 @@ async def forgot_password(
 
     return public_forgot_response()
 
+# ==============================================================================
+# ENDPOINT: #69 - POST /api/password-reset/verify-reset-code
+# Descripción: Verificar codigo de recuperacion
+# ==============================================================================
 @router.post(
     "/verify-reset-code",
     summary="Verificar codigo de recuperacion",
@@ -164,6 +172,10 @@ async def verify_reset_code(
         "message": "Codigo verificado correctamente.",
     }
 
+# ==============================================================================
+# ENDPOINT: #70 - POST /api/password-reset/reset-password
+# Descripción: Cambiar password usando codigo de recuperacion
+# ==============================================================================
 @router.post(
     "/reset-password",
     summary="Cambiar password usando codigo de recuperacion",

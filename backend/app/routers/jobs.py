@@ -8,6 +8,10 @@ from app.models_db import Job
 
 router = APIRouter(prefix="/api/jobs", tags=["Jobs Asíncronos"])
 
+# ==============================================================================
+# ENDPOINT: #62 - GET /api/jobs/{job_id}
+# Descripción: Consultar estado de un job asíncrono
+# ==============================================================================
 @router.get("/{job_id}", summary="Consultar estado de un job asíncrono")
 async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Job).where(Job.id == job_id))
@@ -30,6 +34,10 @@ async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
         "error": getattr(job, "error", None)
     }
 
+# ==============================================================================
+# ENDPOINT: #61 - POST /api/jobs/export-clinics
+# Descripción: Lanzar exportación de datos de clínicas
+# ==============================================================================
 @router.post("/export-clinics", summary="Lanzar exportación de datos de clínicas", status_code=status.HTTP_202_ACCEPTED)
 async def export_clinics(db: AsyncSession = Depends(get_db)):
     # Crear un nuevo registro en la tabla Job

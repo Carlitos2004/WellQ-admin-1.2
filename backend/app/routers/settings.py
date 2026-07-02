@@ -34,6 +34,10 @@ async def _get_or_create(db, key):
     return setting
 
 
+# ==============================================================================
+# ENDPOINT: #93 - GET /api/settings
+# Descripción: Obtener configuración global
+# ==============================================================================
 @router.get("", summary="Obtener configuración global")
 async def get_global_settings(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -50,6 +54,10 @@ async def get_global_settings(db: AsyncSession = Depends(get_db)):
     }
 
 
+# ==============================================================================
+# ENDPOINT: #94 - PATCH /api/settings
+# Descripción: Actualizar configuración global
+# ==============================================================================
 @router.patch("", summary="Actualizar configuración global")
 async def update_global_settings(updates: dict = Body(...), db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create(db, "global_config")
@@ -61,11 +69,19 @@ async def update_global_settings(updates: dict = Body(...), db: AsyncSession = D
     return {"status": "success", "updated_fields": list(updates.keys())}
 
 
+# ==============================================================================
+# ENDPOINT: #101 - GET /api/settings/preferences
+# Descripción: Obtener preferencias visuales
+# ==============================================================================
 @router.get("/preferences", summary="Obtener preferencias visuales")
 async def get_preferences(db: AsyncSession = Depends(get_db)):
     return {"language": "es", "theme": "dark", "sidebar_collapsed": False}
 
 
+# ==============================================================================
+# ENDPOINT: #102 - PUT /api/settings/preferences
+# Descripción: Guardar preferencias visuales
+# ==============================================================================
 @router.put("/preferences", summary="Guardar preferencias visuales")
 async def update_preferences(prefs: dict = Body(...), db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create(db, "user_preferences")
@@ -77,6 +93,10 @@ async def update_preferences(prefs: dict = Body(...), db: AsyncSession = Depends
     return {"status": "success"}
 
 
+# ==============================================================================
+# ENDPOINT: #97 - GET /api/settings/azure
+# Descripción: Estado de conexión con Azure
+# ==============================================================================
 @router.get("/azure", summary="Estado de conexión con Azure")
 async def get_azure_status(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -96,6 +116,10 @@ async def get_azure_status(db: AsyncSession = Depends(get_db)):
     }
 
 
+# ==============================================================================
+# ENDPOINT: #98 - POST /api/settings/azure
+# Descripción: Configurar credenciales Azure
+# ==============================================================================
 @router.post("/azure", summary="Configurar credenciales Azure")
 async def setup_azure(config: dict = Body(...), db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create(db, "azure_config")
@@ -107,6 +131,10 @@ async def setup_azure(config: dict = Body(...), db: AsyncSession = Depends(get_d
     return {"status": "success"}
 
 
+# ==============================================================================
+# ENDPOINT: #99 - GET /api/settings/database
+# Descripción: Estado real de la base de datos
+# ==============================================================================
 @router.get("/database", summary="Estado real de la base de datos")
 async def get_db_status(db: AsyncSession = Depends(get_db)):
     # ── Latencia real ────────────────────────────────────────────────────────
@@ -129,6 +157,10 @@ async def get_db_status(db: AsyncSession = Depends(get_db)):
     }
 
 
+# ==============================================================================
+# ENDPOINT: #100 - POST /api/settings/database
+# Descripción: Configuración de base de datos
+# ==============================================================================
 @router.post("/database", summary="Configuración de base de datos")
 async def setup_database(config: dict = Body(...), db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create(db, "db_config")
@@ -140,6 +172,10 @@ async def setup_database(config: dict = Body(...), db: AsyncSession = Depends(ge
     return {"status": "success"}
 
 
+# ==============================================================================
+# ENDPOINT: #95 - GET /api/settings/api-keys/gcp
+# Descripción: Obtener API Key GCP
+# ==============================================================================
 @router.get("/api-keys/gcp", summary="Obtener API Key GCP")
 async def get_gcp_key(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -150,6 +186,10 @@ async def get_gcp_key(db: AsyncSession = Depends(get_db)):
     return {"gcp_api_key": data.get("api_key", "")}
 
 
+# ==============================================================================
+# ENDPOINT: #96 - POST /api/settings/api-keys/gcp
+# Descripción: Guardar API Key GCP
+# ==============================================================================
 @router.post("/api-keys/gcp", summary="Guardar API Key GCP")
 async def set_gcp_key(payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
     api_key = payload.get("api_key", "")

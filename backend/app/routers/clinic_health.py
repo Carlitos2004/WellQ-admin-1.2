@@ -14,10 +14,10 @@ from app.db.neon import get_db
 router = APIRouter(prefix="/api/clinics", tags=["Salud de Pacientes"])
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /api/clinics/{clinic_id}/patient-health
-# Devuelve el último resumen de salud de pacientes de una clínica
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# ENDPOINT: #16 - GET /api/clinics/{clinic_id}/patient-health
+# Descripción: Resumen de salud de pacientes por clínica
+# ==============================================================================
 @router.get("/{clinic_id}/patient-health", summary="Resumen de salud de pacientes por clínica")
 async def get_patient_health(
     clinic_id: str = Path(...),
